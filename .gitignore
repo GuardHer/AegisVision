@@ -1,0 +1,32 @@
+# Environment & secrets
+.env
+deploy/docker/.env
+deploy/agent/.env
+
+# Go build & test artifacts
+backend/bin/
+backend/coverage.out
+*.test
+
+# Local agent buffer / data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+
+# Frontend
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
