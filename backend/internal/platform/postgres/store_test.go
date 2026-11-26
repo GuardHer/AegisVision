@@ -62,7 +62,7 @@ func TestActiveInferenceTaskUniqueness(t *testing.T) {
 
 	if _, err := q.CreateAlgorithm(ctx, sqlcgen.CreateAlgorithmParams{
 		ID:              algoID,
-		AlgorithmKey:    "test_algo_" + algoID.String()[:8],
+		AlgorithmKey:    "test_algo_" + algoID.String()[24:],
 		Name:            "Test Person Detect",
 		Description:     "test algorithm",
 		SupportedLabels: []byte(`["person"]`),
@@ -88,7 +88,7 @@ func TestActiveInferenceTaskUniqueness(t *testing.T) {
 		Location:     "Workshop A",
 		RtspUrl:      "rtsp://127.0.0.1:8554/test",
 		SubStreamUrl: "",
-		StreamPath:   "cam_" + camID.String()[:8],
+		StreamPath:   "cam_" + camID.String()[24:],
 		CodecHint:    "h264",
 		Status:       "offline",
 		Enabled:      true,
@@ -162,7 +162,7 @@ func TestStoreWithTxRollbackAndCommit(t *testing.T) {
 	err = store.WithTx(ctx, func(q *sqlcgen.Queries) error {
 		if _, err := q.CreateAlgorithm(ctx, sqlcgen.CreateAlgorithmParams{
 			ID:              rolledBackID,
-			AlgorithmKey:    "tx_rb_" + rolledBackID.String()[:8],
+			AlgorithmKey:    "tx_rb_" + rolledBackID.String()[24:],
 			Name:            "Rollback Algo",
 			Description:     "",
 			SupportedLabels: []byte(`[]`),
