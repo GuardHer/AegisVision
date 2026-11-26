@@ -5,6 +5,7 @@ SERVICES := aegis-api aegis-scheduler aegis-ingest aegis-ws aegis-dispatcher aeg
 
 proto:
 	cd api/proto && buf lint && buf generate
+	python -m grpc_tools.protoc -I api/proto/runtime/v1 --python_out=../runtime/python-sdk/aegis_runtime_sdk/pb --grpc_python_out=../runtime/python-sdk/aegis_runtime_sdk/pb api/proto/runtime/v1/runtime.proto
 
 sqlc:
 	sqlc generate -f sqlc.yaml

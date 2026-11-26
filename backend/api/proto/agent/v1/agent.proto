@@ -1,0 +1,160 @@
+syntax = "proto3";
+
+package aegis.agent.v1;
+
+option go_package = "github.com/GuardHer/AegisVision/backend/gen/go/agent/v1;agentv1";
+
+service AgentGateway {
+  // Bidirectional control stream: registration, heartbeats, task commands, and lease renewals.
+  rpc ControlStream(stream AgentUpstream) returns (stream PlatformDownstream);
+
+  // High-frequency transient live frames (in-memory only, drop-oldest on congestion).
+  rpc StreamLiveFrames(stream LiveFrameBatch) returns (StreamAck);
+
+  // Reliable offline-buffered abnormal events and snapshots with event_id idempotency.
+  rpc ReportBufferedEvents(stream BufferedEvent) returns (stream EventAck);
+}
+
+message Point {
+  float x = 1;
+  float y = 2;
+}
+
+message ROI {
+  string roi_id = 1;
+  string name = 2;
+  string roi_type = 3;
+  repeated Point points = 4;
+}
+
+message Detection {
+  repeated float bbox = 1;
+  string label = 2;
+  float confidence = 3;
+  string track_id = 4;
+  bool is_abnormal = 5;
+  map<string, string> attributes = 6;
+}
+
+message DetectionFrame {
+  string task_id = 1;
+  string camera_id = 2;
+  string algorithm_version_id = 3;
+  int64 timestamp_ms = 4;
+  int32 frame_width = 5;
+  int32 frame_height = 6;
+  bool is_heartbeat = 7;
+  repeated Detection detections = 8;
+  bytes snapshot_jpeg = 9;
+}
+
+message AgentUpstream {
+  oneof payload {
+    RegisterRequest register = 1;
+    Heartbeat heartbeat = 2;
+    TaskAck task_ack = 3;
+  }
+}
+
+message RegisterRequest {
+  string node_id = 1;
+  string hostname = 2;
+  string ip_addr = 3;
+  repeated string runtime_keys = 4;
+  int32 max_tasks = 5;
+  string agent_version = 6;
+}
+
+message RunningTaskStatus {
+  string task_id = 1;
+  string runtime_key = 2;
+  string actual_state = 3;
+  string error_message = 4;
+}
+
+message HostMetrics {
+  float cpu_percent = 1;
+  float memory_percent = 2;
+  float gpu_percent = 3;
+  float gpu_memory_percent = 4;
+}
+
+message Heartbeat {
+  string node_id = 1;
+  int64 timestamp_ms = 2;
+  repeated RunningTaskStatus running_tasks = 3;
+  HostMetrics host_metrics = 4;
+}
+
+message TaskAck {
+  string command_id = 1;
+  string task_id = 2;
+  bool accepted = 3;
+  string error_message = 4;
+}
+
+message PlatformDownstream {
+  oneof payload {
+    AssignTaskCommand assign_task = 1;
+    UpdateTaskCommand update_task = 2;
+    RevokeTaskCommand revoke_task = 3;
+    RenewLeaseCommand renew_lease = 4;
+  }
+}
+
+message AssignTaskCommand {
+  string command_id = 1;
+  string task_id = 2;
+  string camera_id = 3;
+  string algorithm_version_id = 4;
+  string runtime_key = 5;
+  string stream_url = 6;
+  string stream_protocol = 7;
+  repeated ROI rois = 8;
+  string algo_params_json = 9;
+  string lease_id = 10;
+  int32 lease_ttl_seconds = 11;
+  int64 config_version = 12;
+}
+
+message UpdateTaskCommand {
+  string command_id = 1;
+  string task_id = 2;
+  repeated ROI rois = 3;
+  string algo_params_json = 4;
+  int64 config_version = 5;
+}
+
+message RevokeTaskCommand {
+  string command_id = 1;
+  string task_id = 2;
+  string reason = 3;
+}
+
+message RenewLeaseCommand {
+  string task_id = 1;
+  string lease_id = 2;
+  int32 lease_ttl_seconds = 3;
+  string refreshed_stream_url = 4;
+}
+
+message LiveFrameBatch {
+  string node_id = 1;
+  repeated DetectionFrame frames = 2;
+}
+
+message StreamAck {
+  int64 received_frames = 1;
+}
+
+message BufferedEvent {
+  string event_id = 1;
+  DetectionFrame frame = 2;
+  int64 cached_at_ms = 3;
+}
+
+message EventAck {
+  string event_id = 1;
+  bool accepted = 2;
+  string error_message = 3;
+}
