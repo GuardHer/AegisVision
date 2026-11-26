@@ -1,0 +1,60 @@
+# AegisVision MediaMTX 配置模板
+# 环境变量 MTX_* 可在运行时按需覆盖（如 MTX_WEBRTCADDITIONALHOSTS、MTX_AUTHMETHOD）
+
+logLevel: info
+logDestinations: [stdout]
+
+# Control API（仅内网访问，供 aegis-scheduler 同步摄像头路径）
+api: yes
+apiAddress: :9997
+
+# 外部 HTTP 鉴权（生产环境由 aegis-api 提供；纯基础设施调试时可通过 MTX_AUTHMETHOD=internal 临时覆盖）
+authMethod: http
+authHTTPAddress: http://aegis-api:8081/internal/mediamtx/auth
+authHTTPExclude:
+  - action: api
+  - action: metrics
+  - action: pprof
+
+# 仅在 MTX_AUTHMETHOD=internal（纯基础设施开发调试）时生效
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+      - action: pprof
+
+# RTSP（摄像头接入与 Runtime 授权内部低延迟拉流）
+rtsp: yes
+rtspTransports: [tcp, udp]
+rtspAddress: :8554
+
+# WebRTC WHEP（前端浏览器低延迟原画预览）
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigin: "*"
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+webrtcAdditionalHosts: []
+
+# 关闭不需要的协议减少端口暴露
+rtmp: no
+srt: no
+hls: no
+
+# 路径默认配置（开启 record_video 时由 scheduler 按路径设为 record: yes）
+pathDefaults:
+  sourceOnDemand: no
+  record: no
+  recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  recordSegmentDuration: 5s
+  recordDeleteAfter: 2m
+
+paths:
+  all_others:

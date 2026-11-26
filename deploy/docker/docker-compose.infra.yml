@@ -1,0 +1,155 @@
+name: aegisvision
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aegis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aegisvision}
+      POSTGRES_USER: ${POSTGRES_USER:-aegis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegis_dev_change_me}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - aegis_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aegis} -d ${POSTGRES_DB:-aegisvision}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: aegis-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "${REDIS_PASSWORD:-aegis_redis_change_me}"
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - aegis_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-aegis_redis_change_me}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: aegis-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-aegis}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-aegis_mq_change_me}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - aegis_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: aegis-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - aegis_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    container_name: aegis-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      S3_IMAGES_RETENTION_DAYS: ${S3_IMAGES_RETENTION_DAYS:-90}
+      S3_VIDEOS_RETENTION_DAYS: ${S3_VIDEOS_RETENTION_DAYS:-30}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set none "local/$$S3_BUCKET"
+        EXISTING="$$(mc ilm rule ls "local/$$S3_BUCKET" 2>/dev/null || true)"
+        case "$$EXISTING" in
+          *"images/"*) ;;
+          *) mc ilm rule add --prefix "images/" --expire-days "$$S3_IMAGES_RETENTION_DAYS" "local/$$S3_BUCKET" ;;
+        esac
+        case "$$EXISTING" in
+          *"videos/"*) ;;
+          *) mc ilm rule add --prefix "videos/" --expire-days "$$S3_VIDEOS_RETENTION_DAYS" "local/$$S3_BUCKET" ;;
+        esac
+        mc ilm rule ls "local/$$S3_BUCKET"
+    restart: "no"
+    networks:
+      - aegis-net
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.12.2
+    container_name: aegis-mediamtx
+    restart: unless-stopped
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${MEDIAMTX_WEBRTC_ADDITIONAL_HOST:-127.0.0.1}
+      MTX_AUTHMETHOD: ${MEDIAMTX_AUTH_METHOD:-internal}
+      MTX_AUTHHTTPADDRESS: ${MEDIAMTX_AUTH_HTTP_ADDRESS:-http://aegis-api:8081/internal/mediamtx/auth}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MEDIAMTX_RTSP_PORT:-8554}:8554"
+      - "${MEDIAMTX_WHEP_PORT:-8889}:8889"
+      - "${MEDIAMTX_WEBRTC_MUX_PORT:-8189}:8189/udp"
+      - "${MEDIAMTX_WEBRTC_MUX_PORT:-8189}:8189/tcp"
+      - "${MEDIAMTX_API_PORT:-9997}:9997"
+    volumes:
+      - ../mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - aegis_mediamtx_recordings:/recordings
+    networks:
+      - aegis-net
+
+volumes:
+  aegis_postgres_data:
+  aegis_redis_data:
+  aegis_rabbitmq_data:
+  aegis_minio_data:
+  aegis_mediamtx_recordings:
+
+networks:
+  aegis-net:
+    name: aegis-net
+    driver: bridge

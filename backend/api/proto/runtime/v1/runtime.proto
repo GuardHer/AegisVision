@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package aegis.runtime.v1;
+
+option go_package = "github.com/GuardHer/AegisVision/backend/gen/go/runtime/v1;runtimev1";
+
+service AlgorithmRuntime {
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc AssignTask(RuntimeAssignTaskRequest) returns (RuntimeTaskReply);
+  rpc UpdateTask(RuntimeUpdateTaskRequest) returns (RuntimeTaskReply);
+  rpc RevokeTask(RuntimeRevokeTaskRequest) returns (RuntimeTaskReply);
+  rpc RenewLease(RuntimeRenewLeaseRequest) returns (RuntimeTaskReply);
+
+  // Runtime streams inference results and empty heartbeat frames for all active tasks.
+  rpc StreamResults(StreamResultsRequest) returns (stream RuntimeResult);
+}
+
+message RuntimePoint {
+  float x = 1;
+  float y = 2;
+}
+
+message RuntimeROI {
+  string roi_id = 1;
+  string name = 2;
+  string roi_type = 3;
+  repeated RuntimePoint points = 4;
+}
+
+message RuntimeDetection {
+  repeated float bbox = 1;
+  string label = 2;
+  float confidence = 3;
+  string track_id = 4;
+  bool is_abnormal = 5;
+  map<string, string> attributes = 6;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool ready = 1;
+  string runtime_key = 2;
+  string version = 3;
+  int32 active_tasks = 4;
+}
+
+message RuntimeAssignTaskRequest {
+  string task_id = 1;
+  string camera_id = 2;
+  string algorithm_version_id = 3;
+  string stream_url = 4;
+  string stream_protocol = 5;
+  repeated RuntimeROI rois = 6;
+  string algo_params_json = 7;
+  string lease_id = 8;
+  int32 lease_ttl_seconds = 9;
+  int64 config_version = 10;
+}
+
+message RuntimeUpdateTaskRequest {
+  string task_id = 1;
+  repeated RuntimeROI rois = 2;
+  string algo_params_json = 3;
+  int64 config_version = 4;
+}
+
+message RuntimeRevokeTaskRequest {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message RuntimeRenewLeaseRequest {
+  string task_id = 1;
+  string lease_id = 2;
+  int32 lease_ttl_seconds = 3;
+  string refreshed_stream_url = 4;
+}
+
+message RuntimeTaskReply {
+  bool accepted = 1;
+  string error_message = 2;
+}
+
+message StreamResultsRequest {
+  string runtime_key = 1;
+}
+
+message RuntimeResult {
+  string task_id = 1;
+  string camera_id = 2;
+  string algorithm_version_id = 3;
+  int64 timestamp_ms = 4;
+  int32 frame_width = 5;
+  int32 frame_height = 6;
+  bool is_heartbeat = 7;
+  repeated RuntimeDetection detections = 8;
+  bytes snapshot_jpeg = 9;
+}
