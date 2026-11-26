@@ -1,0 +1,48 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - revive
+    - gosec
+    - bodyclose
+    - sqlclosecheck
+    - errorlint
+    - exhaustive
+    - misspell
+  settings:
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-naming
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+    exhaustive:
+      default-signifies-exhaustive: true
+  exclusions:
+    generated: strict
+    paths:
+      - gen/go
+      - internal/platform/postgres/sqlcgen
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
