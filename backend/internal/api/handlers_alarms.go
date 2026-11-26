@@ -10,10 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/GuardHer/AegisVision/backend/internal/auth"
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/internal/auth"
+	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/postgres"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
 // AlarmsHandler serves the Alarm Center query, audit handling, and delivery retry endpoints.

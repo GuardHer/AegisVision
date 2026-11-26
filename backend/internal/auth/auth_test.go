@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/GuardHer/AegisVision/backend/internal/auth"
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
+	"aegisvision/backend/internal/auth"
+	"aegisvision/backend/internal/domain"
 )
 
 func init() {

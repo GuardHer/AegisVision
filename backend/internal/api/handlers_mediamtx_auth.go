@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	platformredis "github.com/GuardHer/AegisVision/backend/internal/platform/redis"
+	platformredis "aegisvision/backend/internal/platform/redis"
 )
 
 // StreamTokenReader looks up MediaMTX play/pull authorization tokens in Redis.

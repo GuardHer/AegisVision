@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/internal/platform/postgres"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
 func testPostgresDSN(t *testing.T) string {

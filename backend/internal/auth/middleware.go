@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
+	"aegisvision/backend/internal/domain"
 )
 
 const claimsContextKey = "aegis_auth_claims"

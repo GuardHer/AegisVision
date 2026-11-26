@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GuardHer/AegisVision/backend/internal/platform/rabbitmq"
+	"aegisvision/backend/internal/platform/rabbitmq"
 )
 
 func TestTopologySpecContainsDLXRetryLadder(t *testing.T) {

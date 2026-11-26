@@ -33,7 +33,7 @@
 
 ## 3. 各子目录工程约束
 
-### 3.1 `backend/`（Go 单一 Module：`github.com/GuardHer/AegisVision/backend`）
+### 3.1 `backend/`（Go 单一 Module：`aegisvision/backend`）
 - **6 个进程入口**：`cmd/aegis-api`、`cmd/aegis-scheduler`、`cmd/aegis-ingest`、`cmd/aegis-ws`、`cmd/aegis-dispatcher`、`cmd/aegis-agent`。
 - **包隔离规则**：
   - `cmd/*` 仅做配置加载、显式构造函数 DI 组装与优雅停机，严禁写业务逻辑；

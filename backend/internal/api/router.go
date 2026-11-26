@@ -10,13 +10,13 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/GuardHer/AegisVision/backend/internal/auth"
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/mediamtx"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres"
-	platformredis "github.com/GuardHer/AegisVision/backend/internal/platform/redis"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/storage"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/telemetry"
+	"aegisvision/backend/internal/auth"
+	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/mediamtx"
+	"aegisvision/backend/internal/platform/postgres"
+	platformredis "aegisvision/backend/internal/platform/redis"
+	"aegisvision/backend/internal/platform/storage"
+	"aegisvision/backend/internal/platform/telemetry"
 )
 
 // CacheStore combines Redis operations needed by aegis-api.

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/GuardHer/AegisVision/backend/internal/platform/logger"
+	"aegisvision/backend/internal/platform/logger"
 )
 
 func TestLoggerJSONAndRedaction(t *testing.T) {

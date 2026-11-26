@@ -1591,7 +1591,7 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\fAgentGateway\x12V\n" +
 	"\rControlStream\x12\x1d.aegis.agent.v1.AgentUpstream\x1a\".aegis.agent.v1.PlatformDownstream(\x010\x01\x12O\n" +
 	"\x10StreamLiveFrames\x12\x1e.aegis.agent.v1.LiveFrameBatch\x1a\x19.aegis.agent.v1.StreamAck(\x01\x12S\n" +
-	"\x14ReportBufferedEvents\x12\x1d.aegis.agent.v1.BufferedEvent\x1a\x18.aegis.agent.v1.EventAck(\x010\x01BAZ?github.com/GuardHer/AegisVision/backend/gen/go/agent/v1;agentv1b\x06proto3"
+	"\x14ReportBufferedEvents\x12\x1d.aegis.agent.v1.BufferedEvent\x1a\x18.aegis.agent.v1.EventAck(\x010\x01B-Z+aegisvision/backend/gen/go/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_agent_v1_agent_proto_rawDescOnce sync.Once

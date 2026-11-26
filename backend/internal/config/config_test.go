@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/GuardHer/AegisVision/backend/internal/config"
+	"aegisvision/backend/internal/config"
 )
 
 func TestConfigLoadEnvOverride(t *testing.T) {

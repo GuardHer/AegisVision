@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GuardHer/AegisVision/backend/internal/platform/mediamtx"
+	"aegisvision/backend/internal/platform/mediamtx"
 )
 
 func TestMediaMTXUpsertPathRecordingAndURLBuilders(t *testing.T) {

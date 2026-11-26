@@ -8,7 +8,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 
-	platformredis "github.com/GuardHer/AegisVision/backend/internal/platform/redis"
+	platformredis "aegisvision/backend/internal/platform/redis"
 )
 
 func newTestRedisClient(t *testing.T) *platformredis.Client {

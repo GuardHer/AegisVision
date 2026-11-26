@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/GuardHer/AegisVision/backend/internal/config"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/storage"
+	"aegisvision/backend/internal/config"
+	"aegisvision/backend/internal/platform/storage"
 )
 
 func TestLocalStoragePutGetRangeAndDelete(t *testing.T) {

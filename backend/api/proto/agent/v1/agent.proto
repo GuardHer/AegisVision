@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package aegis.agent.v1;
 
-option go_package = "github.com/GuardHer/AegisVision/backend/gen/go/agent/v1;agentv1";
+option go_package = "aegisvision/backend/gen/go/agent/v1;agentv1";
 
 service AgentGateway {
   // Bidirectional control stream: registration, heartbeats, task commands, and lease renewals.

@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/GuardHer/AegisVision/backend/internal/api"
-	platformredis "github.com/GuardHer/AegisVision/backend/internal/platform/redis"
+	"aegisvision/backend/internal/api"
+	platformredis "aegisvision/backend/internal/platform/redis"
 )
 
 type stubStreamTokenReader struct {

@@ -6,8 +6,8 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	agentv1 "github.com/GuardHer/AegisVision/backend/gen/go/agent/v1"
-	runtimev1 "github.com/GuardHer/AegisVision/backend/gen/go/runtime/v1"
+	agentv1 "aegisvision/backend/gen/go/agent/v1"
+	runtimev1 "aegisvision/backend/gen/go/runtime/v1"
 )
 
 func TestAgentAndRuntimeProtoRoundTrip(t *testing.T) {

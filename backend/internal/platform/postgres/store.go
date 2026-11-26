@@ -10,8 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
-	"github.com/GuardHer/AegisVision/backend/migrations"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/migrations"
 )
 
 // Store wraps a pgxpool.Pool and generated sqlc queries with transaction helpers.

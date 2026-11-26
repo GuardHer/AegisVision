@@ -1,4 +1,4 @@
-module github.com/GuardHer/AegisVision/backend
+module aegisvision/backend
 
 go 1.26.0
 
