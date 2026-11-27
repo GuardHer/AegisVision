@@ -77,6 +77,8 @@ message HostMetrics {
   float memory_percent = 2;
   float gpu_percent = 3;
   float gpu_memory_percent = 4;
+  bool has_gpu = 5;
+  float gpu_temp_c = 6;
 }
 
 message Heartbeat {

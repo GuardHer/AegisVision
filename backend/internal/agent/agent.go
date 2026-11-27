@@ -280,6 +280,7 @@ func (a *NodeAgent) runSession(ctx context.Context) error {
 							NodeId:       a.nodeID,
 							TimestampMs:  time.Now().UTC().UnixMilli(),
 							RunningTasks: statuses,
+							HostMetrics:  CollectHostMetrics(sessionCtx),
 						},
 					},
 				})
