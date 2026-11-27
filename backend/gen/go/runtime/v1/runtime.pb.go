@@ -928,7 +928,7 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"RevokeTask\x12*.aegis.runtime.v1.RuntimeRevokeTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n" +
 	"\n" +
 	"RenewLease\x12*.aegis.runtime.v1.RuntimeRenewLeaseRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12Z\n" +
-	"\rStreamResults\x12&.aegis.runtime.v1.StreamResultsRequest\x1a\x1f.aegis.runtime.v1.RuntimeResult0\x01BEZCgithub.com/GuardHer/AegisVision/backend/gen/go/runtime/v1;runtimev1b\x06proto3"
+	"\rStreamResults\x12&.aegis.runtime.v1.StreamResultsRequest\x1a\x1f.aegis.runtime.v1.RuntimeResult0\x01B1Z/aegisvision/backend/gen/go/runtime/v1;runtimev1b\x06proto3"
 
 var (
 	file_runtime_v1_runtime_proto_rawDescOnce sync.Once

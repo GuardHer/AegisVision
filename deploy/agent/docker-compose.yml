@@ -1,0 +1,28 @@
+name: aegisvision-agent
+
+services:
+  aegis-agent:
+    build:
+      context: ../..
+      dockerfile: deploy/agent/Dockerfile.agent
+    image: aegisvision/aegis-agent:latest
+    restart: unless-stopped
+    environment:
+      AEGIS_NODE_ID: ${AEGIS_NODE_ID:-gpu-node-01}
+      AEGIS_INGEST_ADDR: ${AEGIS_INGEST_ADDR:-192.168.0.114:9090}
+      AEGIS_AGENT_TOKEN: ${AEGIS_AGENT_TOKEN:-aegis-agent-cluster-token-change-me}
+      AEGIS_BUFFER_DB_PATH: /data/agent-buffer.sqlite
+    volumes:
+      - ./agent.yaml:/etc/aegis/agent.yaml:ro
+      - aegis_agent_data:/data
+    # Uncomment on NVIDIA GPU compute hosts with nvidia-container-toolkit installed:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  aegis_agent_data:

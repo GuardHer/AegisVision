@@ -1,0 +1,19 @@
+[Unit]
+Description=AegisVision Compute Node Agent Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegis
+Group=aegis
+WorkingDirectory=/opt/aegisvision-agent
+EnvironmentFile=-/etc/aegisvision/agent.env
+ExecStart=/opt/aegisvision-agent/bin/aegis-agent -config /etc/aegisvision/agent.yaml
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

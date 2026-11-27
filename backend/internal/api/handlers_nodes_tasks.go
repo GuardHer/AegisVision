@@ -6,9 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/postgres"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
 // NodesTasksHandler exposes compute node monitoring, draining, and inference task inspection.
@@ -83,14 +83,14 @@ func (h *NodesTasksHandler) ListTasks(c *gin.Context) {
 	respondOK(c, tasks)
 }
 
-// RescheduleTask signals aegis-scheduler to re-evaluate placement for a task.
+// RescheduleTask clears the current assignment and signals aegis-scheduler to re-evaluate placement.
 func (h *NodesTasksHandler) RescheduleTask(c *gin.Context) {
 	taskID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid task id", err))
 		return
 	}
-	if _, err := h.store.Queries().GetInferenceTaskByID(c.Request.Context(), taskID); err != nil {
+	if _, err := h.store.Queries().ResetInferenceTaskForReschedule(c.Request.Context(), taskID); err != nil {
 		respondErr(c, err)
 		return
 	}

@@ -7,10 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/GuardHer/AegisVision/backend/internal/auth"
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/internal/auth"
+	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/postgres"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
 // UsersHandler manages user accounts and RBAC roles (admin only).

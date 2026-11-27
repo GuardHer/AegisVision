@@ -1,0 +1,198 @@
+buttons:
+  pureLoginOut: LoginOut
+  pureLogin: Login
+  pureOpenSystemSet: Open System Configs
+  pureReload: Reload
+  pureCloseCurrentTab: Close CurrentTab
+  pureCloseLeftTabs: Close LeftTabs
+  pureCloseRightTabs: Close RightTabs
+  pureCloseOtherTabs: Close OtherTabs
+  pureCloseAllTabs: Close AllTabs
+  pureContentFullScreen: Content FullScreen
+  pureContentExitFullScreen: Content ExitFullScreen
+  pureClickCollapse: Collapse
+  pureClickExpand: Expand
+  pureConfirm: Confirm
+  pureSwitch: Switch
+  pureClose: Close
+  pureBackTop: BackTop
+  pureOpenText: Open
+  pureCloseText: Close
+search:
+  pureTotal: Total
+  pureHistory: History
+  pureCollect: Collect
+  pureDragSort: （Drag Sort）
+  pureEmpty: Empty
+  purePlaceholder: Search Menu
+panel:
+  pureSystemSet: System Configs
+  pureCloseSystemSet: Close System Configs
+  pureClearCacheAndToLogin: Clear cache and return to login page
+  pureClearCache: Clear Cache
+  pureOverallStyle: Overall Style
+  pureOverallStyleLight: Light
+  pureOverallStyleLightTip: Set sail freshly and light up the comfortable work interface
+  pureOverallStyleDark: Dark
+  pureOverallStyleDarkTip: Moonlight Overture, indulge in the tranquility and elegance of the night
+  pureOverallStyleSystem: Auto
+  pureOverallStyleSystemTip: Synchronize time, the interface naturally responds to morning and dusk
+  pureThemeColor: Theme Color
+  pureLayoutModel: Layout Model
+  pureVerticalTip: The menu on the left is familiar and friendly
+  pureHorizontalTip: Top menu, concise overview
+  pureMixTip: Mixed menu, flexible
+  pureStretch: Stretch Page
+  pureStretchFixed: Fixed
+  pureStretchFixedTip: Compact pages make it easy to find the information you need
+  pureStretchCustom: Custom
+  pureStretchCustomTip: Minimum 1280, maximum 1600
+  pureTagsStyle: Tags Style
+  pureTagsStyleSmart: Smart
+  pureTagsStyleSmartTip: Smart tags add fun and brilliance
+  pureTagsStyleCard: Card
+  pureTagsStyleCardTip: Card tags for efficient browsing
+  pureTagsStyleChrome: Chrome
+  pureTagsStyleChromeTip: Chrome style is classic and elegant
+  pureInterfaceDisplay: Interface Display
+  pureGreyModel: Grey Model
+  pureWeakModel: Weak Model
+  pureHiddenTags: Hidden Tags
+  pureHiddenFooter: Hidden Footer
+  pureMultiTagsCache: MultiTags Cache
+menus:
+  pureHome: Home
+  pureLogin: Login
+  pureAbnormal: Abnormal Page
+  purePageNotFound: "404"
+  pureAccessDenied: "403"
+  pureServerError: "500"
+  purePermission: Permission Manage
+  purePermissionPage: Page Permission
+  purePermissionButton: Button Permission
+  purePermissionButtonRouter: Route return button permission
+  purePermissionButtonLogin: Login interface return button permission
+  aegisMonitor: Live Monitor
+  aegisAlarms: Alarm Center
+  aegisCameras: Cameras
+  aegisCameraConfig: ROI & Rules Config
+  aegisAlgorithms: Algorithms
+  aegisNodes: Compute Nodes & Tasks
+  aegisChannels: Alarm Channels
+  aegisUsers: Users & Roles
+aegis:
+  common:
+    create: Create
+    edit: Edit
+    delete: Delete
+    save: Save
+    cancel: Cancel
+    refresh: Refresh
+    actions: Actions
+    status: Status
+    enabled: Enabled
+    disabled: Disabled
+    confirmDelete: Confirm deleting this item?
+  monitor:
+    grid1: 1-Grid
+    grid4: 4-Grid
+    grid9: 9-Grid
+    overlayOn: "Overlay: ON"
+    overlayOff: "Overlay: OFF"
+    mainStream: Main Stream
+    subStream: Sub Stream
+    realtimeAlarms: Realtime Alarms
+    noCameraSelected: No camera selected
+    selectCamera: Select camera
+    wsConnected: Realtime WS Connected
+    wsDisconnected: Realtime WS Disconnected
+  alarms:
+    title: Alarm Title
+    camera: Camera
+    ruleMode: Rule Mode
+    severity: Severity
+    triggeredAt: Triggered At
+    handleStatus: Handle Status
+    videoStatus: Video Evidence
+    detail: Alarm Details
+    handle: Handle Alarm
+    confirm: Confirm Alarm
+    falsePositive: Mark False Positive
+    handleNote: Audit Note
+    deliveries: Delivery Audit Logs
+    retry: Retry Delivery
+    snapshot: Trigger Snapshot (with Overlay)
+    videoClip: Video Evidence Clip
+  cameras:
+    name: Name
+    location: Location
+    rtspUrl: Main RTSP URL
+    subStreamUrl: Sub Stream RTSP URL
+    streamPath: MediaMTX Path
+    codecHint: Codec
+    configRoiRules: Configure ROI & Rules
+    roiSection: ROI Regions
+    addPolygonRoi: Add Polygon ROI
+    addFullFrameRoi: Add Full-Frame ROI
+    clearPoints: Clear Points
+    roiHint: Click on preview to add vertices, drag to move, right-click to remove
+    ruleSection: ROI Algorithm Rules
+    addRule: Add Rule
+    ruleName: Rule Name
+    roi: ROI Region
+    algorithmVersion: Algorithm Version
+    recordVideo: Record Video Evidence
+    scheduleMode: Schedule Mode
+    pinnedNode: Pinned Compute Node
+    channels: Alarm Channels
+  algorithms:
+    key: Algorithm Key
+    name: Name
+    labels: Supported Labels
+    versions: Versions
+    addVersion: Add Version
+    version: Version
+    runtimeKey: Runtime Key
+    defaultParams: Default Params (JSON)
+  nodes:
+    nodesTab: Compute Nodes (aegis-agent)
+    tasksTab: Inference Tasks & Leases
+    nodeId: Node ID
+    hostname: Hostname
+    ipAddr: IP Address
+    runtimeKeys: Runtime Keys
+    load: Load
+    lastHeartbeat: Last Heartbeat
+    drain: Drain Node
+    resume: Resume
+    reschedule: Reschedule
+  channels:
+    name: Channel Name
+    type: Type
+    url: Webhook URL
+    secret: HMAC Secret
+    timeoutMs: Timeout (ms)
+    test: Test Connection
+  users:
+    username: Username
+    displayName: Display Name
+    role: Role
+    password: Password
+    resetPassword: Reset Password
+status:
+  pureLoad: Loading...
+  pureMessage: Message
+  pureNotify: Notify
+  pureTodo: Todo
+  pureNoMessage: No Message
+  pureNoNotify: No Notify
+  pureNoTodo: No Todo
+login:
+  pureUsername: Username
+  purePassword: Password
+  pureLogin: Login
+  pureLoginSuccess: Login Success
+  pureLoginFail: Login Fail
+  pureUsernameReg: Please enter username
+  purePassWordReg: Please enter password
+  purePassWordRuleReg: The password format should be any combination of 8-18 digits

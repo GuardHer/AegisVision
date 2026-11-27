@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/GuardHer/AegisVision/backend/internal/config"
+	"aegisvision/backend/internal/config"
 )
 
 var (

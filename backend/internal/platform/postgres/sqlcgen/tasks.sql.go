@@ -230,6 +230,40 @@ func (q *Queries) ListRunningInferenceTasks(ctx context.Context) ([]InferenceTas
 	return items, nil
 }
 
+const resetInferenceTaskForReschedule = `-- name: ResetInferenceTaskForReschedule :one
+UPDATE inference_tasks
+SET assigned_node_id = NULL,
+    actual_state = 'pending',
+    lease_id = NULL,
+    lease_expires_at = NULL,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, camera_id, algorithm_version_id, runtime_key, assigned_node_id, ingest_instance_id, desired_state, actual_state, lease_id, lease_expires_at, config_version, last_frame_at, error_message, created_at, updated_at
+`
+
+func (q *Queries) ResetInferenceTaskForReschedule(ctx context.Context, id uuid.UUID) (InferenceTask, error) {
+	row := q.db.QueryRow(ctx, resetInferenceTaskForReschedule, id)
+	var i InferenceTask
+	err := row.Scan(
+		&i.ID,
+		&i.CameraID,
+		&i.AlgorithmVersionID,
+		&i.RuntimeKey,
+		&i.AssignedNodeID,
+		&i.IngestInstanceID,
+		&i.DesiredState,
+		&i.ActualState,
+		&i.LeaseID,
+		&i.LeaseExpiresAt,
+		&i.ConfigVersion,
+		&i.LastFrameAt,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const stopInferenceTask = `-- name: StopInferenceTask :exec
 UPDATE inference_tasks
 SET desired_state = 'stopped',
@@ -247,6 +281,7 @@ const updateAgentNodeHeartbeat = `-- name: UpdateAgentNodeHeartbeat :exec
 UPDATE agent_nodes
 SET running_tasks = $2,
     meta = $3,
+    status = CASE WHEN status = 'offline' THEN 'online' ELSE status END,
     last_heartbeat_at = NOW(),
     updated_at = NOW()
 WHERE node_id = $1

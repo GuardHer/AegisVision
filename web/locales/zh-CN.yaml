@@ -1,0 +1,198 @@
+buttons:
+  pureLoginOut: 退出系统
+  pureLogin: 登录
+  pureOpenSystemSet: 打开系统配置
+  pureReload: 重新加载
+  pureCloseCurrentTab: 关闭当前标签页
+  pureCloseLeftTabs: 关闭左侧标签页
+  pureCloseRightTabs: 关闭右侧标签页
+  pureCloseOtherTabs: 关闭其他标签页
+  pureCloseAllTabs: 关闭全部标签页
+  pureContentFullScreen: 内容区全屏
+  pureContentExitFullScreen: 内容区退出全屏
+  pureClickCollapse: 点击折叠
+  pureClickExpand: 点击展开
+  pureConfirm: 确认
+  pureSwitch: 切换
+  pureClose: 关闭
+  pureBackTop: 回到顶部
+  pureOpenText: 开
+  pureCloseText: 关
+search:
+  pureTotal: 共
+  pureHistory: 搜索历史
+  pureCollect: 收藏
+  pureDragSort: （可拖拽排序）
+  pureEmpty: 暂无搜索结果
+  purePlaceholder: 搜索菜单（支持拼音搜索）
+panel:
+  pureSystemSet: 系统配置
+  pureCloseSystemSet: 关闭配置
+  pureClearCacheAndToLogin: 清空缓存并返回登录页
+  pureClearCache: 清空缓存
+  pureOverallStyle: 整体风格
+  pureOverallStyleLight: 浅色
+  pureOverallStyleLightTip: 清新启航，点亮舒适的工作界面
+  pureOverallStyleDark: 深色
+  pureOverallStyleDarkTip: 月光序曲，沉醉于夜的静谧雅致
+  pureOverallStyleSystem: 自动
+  pureOverallStyleSystemTip: 同步时光，界面随晨昏自然呼应
+  pureThemeColor: 主题色
+  pureLayoutModel: 导航模式
+  pureVerticalTip: 左侧菜单，亲切熟悉
+  pureHorizontalTip: 顶部菜单，简洁概览
+  pureMixTip: 混合菜单，灵活多变
+  pureStretch: 页宽
+  pureStretchFixed: 固定
+  pureStretchFixedTip: 紧凑页面，轻松找到所需信息
+  pureStretchCustom: 自定义
+  pureStretchCustomTip: 最小1280、最大1600
+  pureTagsStyle: 页签风格
+  pureTagsStyleSmart: 灵动
+  pureTagsStyleSmartTip: 灵动标签，添趣生辉
+  pureTagsStyleCard: 卡片
+  pureTagsStyleCardTip: 卡片标签，高效浏览
+  pureTagsStyleChrome: 谷歌
+  pureTagsStyleChromeTip: 谷歌风格，经典美观
+  pureInterfaceDisplay: 界面显示
+  pureGreyModel: 灰色模式
+  pureWeakModel: 色弱模式
+  pureHiddenTags: 隐藏标签页
+  pureHiddenFooter: 隐藏页脚
+  pureMultiTagsCache: 页签持久化
+menus:
+  pureHome: 首页
+  pureLogin: 登录
+  pureAbnormal: 异常页面
+  purePageNotFound: "404"
+  pureAccessDenied: "403"
+  pureServerError: "500"
+  purePermission: 权限管理
+  purePermissionPage: 页面权限
+  purePermissionButton: 按钮权限
+  purePermissionButtonRouter: 路由返回按钮权限
+  purePermissionButtonLogin: 登录接口返回按钮权限
+  aegisMonitor: 实时监控
+  aegisAlarms: 报警中心
+  aegisCameras: 摄像头管理
+  aegisCameraConfig: 区域与规则配置
+  aegisAlgorithms: 算法与版本
+  aegisNodes: 算力节点与任务
+  aegisChannels: 报警通道
+  aegisUsers: 用户与权限
+aegis:
+  common:
+    create: 新增
+    edit: 编辑
+    delete: 删除
+    save: 保存
+    cancel: 取消
+    refresh: 刷新
+    actions: 操作
+    status: 状态
+    enabled: 启用
+    disabled: 停用
+    confirmDelete: 确认删除该记录？
+  monitor:
+    grid1: 单屏
+    grid4: 4 宫格
+    grid9: 9 宫格
+    overlayOn: 叠加层：开
+    overlayOff: 叠加层：关
+    mainStream: 主码流
+    subStream: 子码流
+    realtimeAlarms: 实时告警流
+    noCameraSelected: 未选择摄像头
+    selectCamera: 选择摄像头
+    wsConnected: 实时连接正常
+    wsDisconnected: 实时连接断开
+  alarms:
+    title: 报警标题
+    camera: 摄像头
+    ruleMode: 规则模式
+    severity: 级别
+    triggeredAt: 触发时间
+    handleStatus: 处理状态
+    videoStatus: 视频证据
+    detail: 报警详情
+    handle: 处理报警
+    confirm: 确认报警
+    falsePositive: 标记误报
+    handleNote: 处理备注
+    deliveries: 联动投递日志
+    retry: 手动重发
+    snapshot: 触发抓拍（含叠加还原）
+    videoClip: 短视频证据
+  cameras:
+    name: 名称
+    location: 点位/车间
+    rtspUrl: 主码流 RTSP
+    subStreamUrl: 子码流 RTSP
+    streamPath: MediaMTX 路径
+    codecHint: 编码格式
+    configRoiRules: 配置 ROI 与规则
+    roiSection: ROI 检测区域
+    addPolygonRoi: 新增多边形区域
+    addFullFrameRoi: 新增全画面区域
+    clearPoints: 清空顶点
+    roiHint: 在预览画面点击添加多边形顶点，拖拽调整，右键删除顶点
+    ruleSection: 区域算法规则
+    addRule: 新增规则
+    ruleName: 规则名称
+    roi: 所属区域
+    algorithmVersion: 算法版本
+    recordVideo: 录制短视频证据
+    scheduleMode: 调度模式
+    pinnedNode: 指定算力节点
+    channels: 关联报警通道
+  algorithms:
+    key: 算法标识
+    name: 算法名称
+    labels: 支持标签
+    versions: 版本管理
+    addVersion: 发布版本
+    version: 版本号
+    runtimeKey: Runtime 键
+    defaultParams: 默认参数 (JSON)
+  nodes:
+    nodesTab: 算力主机 (aegis-agent)
+    tasksTab: 推理任务与租约
+    nodeId: 节点 ID
+    hostname: 主机名
+    ipAddr: 内网 IP
+    runtimeKeys: 可用 Runtime
+    load: 负载
+    lastHeartbeat: 最近心跳
+    drain: 排水维护
+    resume: 恢复调度
+    reschedule: 重新调度
+  channels:
+    name: 通道名称
+    type: 通道类型
+    url: Webhook URL
+    secret: HMAC 密钥
+    timeoutMs: 超时 (ms)
+    test: 测试连通
+  users:
+    username: 账号
+    displayName: 显示名称
+    role: 角色
+    password: 密码
+    resetPassword: 重置密码
+status:
+  pureLoad: 加载中...
+  pureMessage: 消息
+  pureNotify: 通知
+  pureTodo: 待办
+  pureNoMessage: 暂无消息
+  pureNoNotify: 暂无通知
+  pureNoTodo: 暂无待办
+login:
+  pureUsername: 账号
+  purePassword: 密码
+  pureLogin: 登录
+  pureLoginSuccess: 登录成功
+  pureLoginFail: 登录失败
+  pureUsernameReg: 请输入账号
+  purePassWordReg: 请输入密码
+  purePassWordRuleReg: 密码格式应为8-18位数字、字母、符号的任意两种组合

@@ -1,0 +1,20 @@
+[Unit]
+Description=AegisVision Task Scheduler Service
+After=network-online.target postgresql.service redis-server.service rabbitmq-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegis
+Group=aegis
+WorkingDirectory=/opt/aegisvision
+EnvironmentFile=-/etc/aegisvision/env
+ExecStart=/opt/aegisvision/bin/aegis-scheduler -config /etc/aegisvision/config.yaml
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+LimitNOFILE=65536
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

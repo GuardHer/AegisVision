@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package aegis.runtime.v1;
 
-option go_package = "github.com/GuardHer/AegisVision/backend/gen/go/runtime/v1;runtimev1";
+option go_package = "aegisvision/backend/gen/go/runtime/v1;runtimev1";
 
 service AlgorithmRuntime {
   rpc Health(HealthRequest) returns (HealthResponse);

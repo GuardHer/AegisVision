@@ -1,0 +1,70 @@
+# AegisVision 平台统一配置文件模板（裸机 Linux / Windows 部署）
+# 全部 5 个平台进程（aegis-api / aegis-scheduler / aegis-ingest / aegis-ws / aegis-dispatcher）
+# 共用本文件，并通过 AEGIS_* 环境变量覆盖敏感密钥。
+
+service:
+  name: aegis-platform
+  instance_id: platform-node-01
+  env: production
+
+log:
+  level: info
+  format: json
+
+http:
+  api_addr: ":8081"
+  ws_addr: ":8082"
+  scheduler_addr: ":8083"
+  dispatcher_addr: ":8084"
+  # 对外可访问地址（经 Nginx 入口），用于生成 Webhook 证据签名链接
+  public_base_url: "http://192.168.1.10"
+
+grpc:
+  ingest_addr: ":9090"
+
+postgres:
+  dsn: "postgres://aegis:CHANGE_ME@127.0.0.1:5432/aegisvision?sslmode=disable"
+  max_conns: 20
+  min_conns: 2
+  max_conn_lifetime: 30m
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: "CHANGE_ME"
+  db: 0
+
+rabbitmq:
+  url: "amqp://aegis:CHANGE_ME@127.0.0.1:5672/"
+
+storage:
+  # 可选值: s3（推荐 MinIO/S3）或 local（单机裸机兜底）
+  driver: s3
+  s3:
+    endpoint: "http://127.0.0.1:9000"
+    bucket: "aegis-evidence"
+    access_key: "aegis"
+    secret_key: "CHANGE_ME"
+    region: "us-east-1"
+    use_path_style: true
+  local:
+    root_dir: "/var/lib/aegisvision/evidence"
+
+mediamtx:
+  api_url: "http://127.0.0.1:9997"
+  # 算力机访问 MediaMTX RTSP 的内网固定地址
+  rtsp_base_url: "rtsp://192.168.1.10:8554"
+  whep_base_url: "/whep"
+
+auth:
+  # 生产环境请务必替换为 >= 32 字符随机密钥，或通过环境变量覆盖
+  jwt_secret: "replace-with-random-jwt-secret-at-least-32-chars"
+  access_token_ttl: 2h
+  refresh_token_ttl: 168h
+  evidence_sign_secret: "replace-with-random-sign-secret-at-least-32-chars"
+  evidence_url_ttl: 24h
+  agent_token: "replace-with-shared-agent-cluster-token"
+
+scheduler:
+  lease_ttl_seconds: 30
+  node_timeout_seconds: 15
+  reconcile_interval_sec: 5

@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/GuardHer/AegisVision/backend/internal/config"
+	"aegisvision/backend/internal/config"
 )
 
 // S3Storage implements ObjectStorage against MinIO or any S3-compatible service.

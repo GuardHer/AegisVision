@@ -30,6 +30,7 @@ RETURNING *;
 UPDATE agent_nodes
 SET running_tasks = $2,
     meta = $3,
+    status = CASE WHEN status = 'offline' THEN 'online' ELSE status END,
     last_heartbeat_at = NOW(),
     updated_at = NOW()
 WHERE node_id = $1;
@@ -84,3 +85,13 @@ SET desired_state = 'stopped',
     actual_state = 'stopped',
     updated_at = NOW()
 WHERE id = $1;
+
+-- name: ResetInferenceTaskForReschedule :one
+UPDATE inference_tasks
+SET assigned_node_id = NULL,
+    actual_state = 'pending',
+    lease_id = NULL,
+    lease_expires_at = NULL,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;

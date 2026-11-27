@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
+	"aegisvision/backend/internal/domain"
 )
 
 // Envelope is the unified REST API response wrapper.

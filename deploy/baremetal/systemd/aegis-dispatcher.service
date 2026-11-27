@@ -1,0 +1,20 @@
+[Unit]
+Description=AegisVision Alarm Dispatcher & Async Video Evidence Service
+After=network-online.target postgresql.service rabbitmq-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegis
+Group=aegis
+WorkingDirectory=/opt/aegisvision
+EnvironmentFile=-/etc/aegisvision/env
+ExecStart=/opt/aegisvision/bin/aegis-dispatcher -config /etc/aegisvision/config.yaml
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+LimitNOFILE=65536
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

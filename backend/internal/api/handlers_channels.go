@@ -11,9 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/postgres"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
 // ChannelsHandler manages external notification channels (e.g., Webhook).

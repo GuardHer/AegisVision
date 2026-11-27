@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/GuardHer/AegisVision/backend/internal/platform/telemetry"
+	"aegisvision/backend/internal/platform/telemetry"
 )
 
 func TestHealthAndReadinessProbes(t *testing.T) {

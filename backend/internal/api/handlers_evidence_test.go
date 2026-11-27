@@ -12,11 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/GuardHer/AegisVision/backend/internal/api"
-	"github.com/GuardHer/AegisVision/backend/internal/auth"
-	"github.com/GuardHer/AegisVision/backend/internal/domain"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/postgres/sqlcgen"
-	"github.com/GuardHer/AegisVision/backend/internal/platform/storage"
+	"aegisvision/backend/internal/api"
+	"aegisvision/backend/internal/auth"
+	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/postgres/sqlcgen"
+	"aegisvision/backend/internal/platform/storage"
 )
 
 type stubAlarmEvidenceReader struct {
