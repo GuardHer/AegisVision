@@ -10,8 +10,17 @@ import {
 } from "./build/utils";
 
 export default ({ mode }: ConfigEnv): UserConfigExport => {
+  const rawEnv = loadEnv(mode, root);
   const { VITE_CDN, VITE_PORT, VITE_COMPRESSION, VITE_PUBLIC_PATH } =
-    wrapperEnv(loadEnv(mode, root));
+    wrapperEnv(rawEnv);
+  const whepProxyTarget =
+    rawEnv.VITE_WHEP_PROXY_TARGET ||
+    process.env.VITE_WHEP_PROXY_TARGET ||
+    "http://127.0.0.1:8889";
+  const hlsProxyTarget =
+    rawEnv.VITE_HLS_PROXY_TARGET ||
+    process.env.VITE_HLS_PROXY_TARGET ||
+    "http://127.0.0.1:8888";
   return {
     base: VITE_PUBLIC_PATH,
     root,
@@ -35,12 +44,12 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
           changeOrigin: true
         },
         "/whep": {
-          target: process.env.VITE_WHEP_PROXY_TARGET || "http://127.0.0.1:8889",
+          target: whepProxyTarget,
           changeOrigin: true,
           rewrite: path => path.replace(/^\/whep/, "")
         },
         "/hls": {
-          target: process.env.VITE_HLS_PROXY_TARGET || "http://127.0.0.1:8888",
+          target: hlsProxyTarget,
           changeOrigin: true,
           rewrite: path => path.replace(/^\/hls/, "")
         }
