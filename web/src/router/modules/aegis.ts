@@ -124,7 +124,7 @@ export default [
     meta: {
       icon: "ep/cpu",
       title: $t("menus.aegisAlgorithms"),
-      rank: 4
+      rank: 6
     },
     children: [
       {
@@ -145,7 +145,7 @@ export default [
     meta: {
       icon: "ep/monitor",
       title: $t("menus.aegisNodes"),
-      rank: 5
+      rank: 7
     },
     children: [
       {
@@ -166,7 +166,7 @@ export default [
     meta: {
       icon: "ep/connection",
       title: $t("menus.aegisChannels"),
-      rank: 6
+      rank: 8
     },
     children: [
       {
@@ -187,7 +187,7 @@ export default [
     meta: {
       icon: "ep/user",
       title: $t("menus.aegisUsers"),
-      rank: 7
+      rank: 9
     },
     children: [
       {

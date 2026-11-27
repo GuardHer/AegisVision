@@ -128,8 +128,12 @@ def test_mock_algorithm_sop_modes():
         config_version=1,
         algo_params={"mock_mode": "sop", "sop_script": "compliant"},
     )
-    labels_seq = [algo_ok.infer_task(ctx_ok).detections[0].label for _ in range(4)]
-    assert labels_seq == ["wear_esd_strap", "wear_esd_strap", "scan_barcode", "scan_barcode"]
+    algo_ok.on_task_start(ctx_ok)
+    labels_seq = [
+        out.detections[0].label if out.detections else None
+        for out in (algo_ok.infer_task(ctx_ok) for _ in range(6))
+    ]
+    assert labels_seq == ["wear_esd_strap", "wear_esd_strap", "scan_barcode", None, None, None]
 
     algo_viol = MockAlgorithm()
     ctx_viol = TaskContext(

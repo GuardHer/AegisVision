@@ -166,6 +166,17 @@ func (h *AnalyticsHandler) parseFilter(c *gin.Context) (analyticsFilter, error) 
 
 func (h *AnalyticsHandler) computeSummary(ctx context.Context, f analyticsFilter) (AnalyticsSummaryPayload, error) {
 	q := h.store.Queries()
+	kpiRow, err := q.GetAnalyticsAlarmKPIs(ctx, sqlcgen.GetAnalyticsAlarmKPIsParams{
+		Tz:        f.tzName,
+		StartTime: f.startTime,
+		EndTime:   f.endTime,
+		ZoneIds:   f.zoneIDs,
+		Shift:     f.shift,
+	})
+	if err != nil {
+		return AnalyticsSummaryPayload{}, err
+	}
+
 	trend := make([]AnalyticsTrendPoint, 0)
 	if f.granularity == "hour" {
 		rows, err := q.GetAnalyticsTrendByHour(ctx, sqlcgen.GetAnalyticsTrendByHourParams{
@@ -208,17 +219,12 @@ func (h *AnalyticsHandler) computeSummary(ctx context.Context, f analyticsFilter
 		return AnalyticsSummaryPayload{}, err
 	}
 	byZone := make([]AnalyticsZoneRow, 0, len(zoneRows))
-	var safetyTotal, sopTotal, confirmedTotal, fpTotal int64
 	for _, z := range zoneRows {
 		var zid *uuid.UUID
 		if z.ZoneID.Valid {
 			v := z.ZoneID.UUID
 			zid = &v
 		}
-		safetyTotal += z.SafetyCount
-		sopTotal += z.SopCount
-		confirmedTotal += z.ConfirmedCount
-		fpTotal += z.FalsePositiveCount
 		byZone = append(byZone, AnalyticsZoneRow{
 			ZoneID:             zid,
 			ZoneName:           z.ZoneName,
@@ -283,12 +289,12 @@ func (h *AnalyticsHandler) computeSummary(ctx context.Context, f analyticsFilter
 	}
 
 	kpis := AnalyticsKPIs{
-		TotalAlarms:        safetyTotal + sopTotal,
-		SafetyAlarms:       safetyTotal,
-		SOPAlarms:          sopTotal,
-		ConfirmedCount:     confirmedTotal,
-		FalsePositiveCount: fpTotal,
-		FalsePositiveRate:  safePercent(fpTotal, confirmedTotal+fpTotal),
+		TotalAlarms:        kpiRow.SafetyCount + kpiRow.SopCount,
+		SafetyAlarms:       kpiRow.SafetyCount,
+		SOPAlarms:          kpiRow.SopCount,
+		ConfirmedCount:     kpiRow.ConfirmedCount,
+		FalsePositiveCount: kpiRow.FalsePositiveCount,
+		FalsePositiveRate:  safePercent(kpiRow.FalsePositiveCount, kpiRow.HandledCount),
 		SOPCompliantCycles: sopRow.CompliantCount,
 		SOPViolatedCycles:  sopRow.ViolatedCount,
 		SOPComplianceRate:  safePercent(sopRow.CompliantCount, sopRow.CompliantCount+sopRow.ViolatedCount),
@@ -340,6 +346,14 @@ func (h *AnalyticsHandler) Export(c *gin.Context) {
 
 	w := csv.NewWriter(c.Writer)
 	_ = w.Write([]string{"section", "dimension", "metric_a", "metric_b", "metric_c", "rate_pct"})
+	_ = w.Write([]string{
+		"kpi",
+		"summary",
+		strconv.FormatInt(payload.KPIs.TotalAlarms, 10),
+		strconv.FormatInt(payload.KPIs.SOPCompliantCycles, 10),
+		strconv.FormatInt(payload.KPIs.AvgSOPDurationMs, 10),
+		fmt.Sprintf("%.1f", payload.KPIs.SOPComplianceRate),
+	})
 	for _, pt := range payload.Trend {
 		_ = w.Write([]string{"trend", sanitizeCSVCell(pt.Bucket), strconv.FormatInt(pt.SafetyCount, 10), strconv.FormatInt(pt.SOPCount, 10), "", ""})
 	}

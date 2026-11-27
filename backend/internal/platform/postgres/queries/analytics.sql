@@ -1,3 +1,20 @@
+-- name: GetAnalyticsAlarmKPIs :one
+SELECT
+    COUNT(*) FILTER (WHERE a.rule_mode <> 'sop_sequence')::bigint AS safety_count,
+    COUNT(*) FILTER (WHERE a.rule_mode = 'sop_sequence')::bigint AS sop_count,
+    COUNT(*) FILTER (WHERE a.handle_status = 'confirmed')::bigint AS confirmed_count,
+    COUNT(*) FILTER (WHERE a.handle_status = 'false_positive')::bigint AS false_positive_count,
+    COUNT(*) FILTER (WHERE a.handle_status IN ('confirmed', 'false_positive', 'ignored'))::bigint AS handled_count
+FROM alarms a
+WHERE a.triggered_at >= sqlc.arg('start_time')
+  AND a.triggered_at < sqlc.arg('end_time')
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR a.zone_id = ANY(sqlc.narg('zone_ids')::uuid[]))
+  AND (
+      sqlc.arg('shift')::text = 'all'
+      OR (sqlc.arg('shift')::text = 'day' AND EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE sqlc.arg('tz')::text)) >= 8 AND EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE sqlc.arg('tz')::text)) < 20)
+      OR (sqlc.arg('shift')::text = 'night' AND (EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE sqlc.arg('tz')::text)) >= 20 OR EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE sqlc.arg('tz')::text)) < 8))
+  );
+
 -- name: GetAnalyticsTrendByDay :many
 SELECT
     to_char((a.triggered_at AT TIME ZONE sqlc.arg('tz')::text)::date, 'YYYY-MM-DD')::text AS bucket,

@@ -790,6 +790,7 @@ onBeforeUnmount(() => {
               :src="evidenceImageURL(alert.alarm_id)"
               class="w-full h-24 object-cover rounded bg-black/80"
               loading="lazy"
+              @error="e => { (e.target as HTMLImageElement).style.display = 'none'; }"
             />
             <div class="flex items-center justify-between text-zinc-400">
               <span>{{ alert.triggered_at }}</span>

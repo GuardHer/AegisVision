@@ -92,6 +92,9 @@ const ruleForm = reactive({
   schedule_mode: "auto",
   pinned_node_id: "",
   record_video: false,
+  video_pre_seconds: 5,
+  video_post_seconds: 5,
+  algo_params_override: {} as Record<string, any>,
   enabled: true,
   channel_ids: [] as string[],
   // SOP sequence fields
@@ -131,28 +134,32 @@ function createDefaultSOPSteps(): SOPStepForm[] {
 }
 
 async function loadAll() {
-  const [camRes, roiRes, ruleRes, algoRes, chRes, schedRes] = await Promise.all([
-    getCamera(cameraId),
-    listROIs(cameraId),
-    listRules(cameraId),
-    listAlgorithms(),
-    listChannels(),
-    listSchedules().catch(() => ({ data: [] as ArmingScheduleItem[] }))
-  ]);
-  camera.value = camRes?.data ?? null;
-  rois.value = roiRes?.data ?? [];
-  rules.value = ruleRes?.data ?? [];
-  channels.value = chRes?.data ?? [];
-  schedules.value = schedRes?.data ?? [];
+  try {
+    const [camRes, roiRes, ruleRes, algoRes, chRes, schedRes] = await Promise.all([
+      getCamera(cameraId),
+      listROIs(cameraId),
+      listRules(cameraId),
+      listAlgorithms(),
+      listChannels(),
+      listSchedules().catch(() => ({ data: [] as ArmingScheduleItem[] }))
+    ]);
+    camera.value = camRes?.data ?? null;
+    rois.value = roiRes?.data ?? [];
+    rules.value = ruleRes?.data ?? [];
+    channels.value = chRes?.data ?? [];
+    schedules.value = schedRes?.data ?? [];
 
-  const allVers: (AlgorithmVersionItem & { algoName: string })[] = [];
-  for (const algo of algoRes?.data ?? []) {
-    const vRes = await listAlgorithmVersions(algo.id);
-    for (const v of vRes?.data ?? []) {
-      allVers.push({ ...v, algoName: `${algo.name} (${v.version})` });
+    const allVers: (AlgorithmVersionItem & { algoName: string })[] = [];
+    for (const algo of algoRes?.data ?? []) {
+      const vRes = await listAlgorithmVersions(algo.id);
+      for (const v of vRes?.data ?? []) {
+        allVers.push({ ...v, algoName: `${algo.name} (${v.version})` });
+      }
     }
+    versions.value = allVers;
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load camera config");
   }
-  versions.value = allVers;
 }
 
 function toggleFreezeFrame() {
@@ -242,6 +249,9 @@ function openCreateRule() {
     schedule_mode: "auto",
     pinned_node_id: "",
     record_video: false,
+    video_pre_seconds: 5,
+    video_post_seconds: 5,
+    algo_params_override: {},
     enabled: true,
     channel_ids: [],
     trigger_mode: "first_step",
@@ -275,6 +285,9 @@ function openEditRule(row: ROIAlgorithmRuleItem) {
     schedule_mode: row.schedule_mode || "auto",
     pinned_node_id: row.pinned_node_id || "",
     record_video: row.record_video,
+    video_pre_seconds: row.video_pre_seconds ?? 5,
+    video_post_seconds: row.video_post_seconds ?? 5,
+    algo_params_override: row.algo_params_override ?? {},
     enabled: row.enabled,
     channel_ids: [],
     trigger_mode: p.trigger_mode ?? "first_step",
@@ -383,10 +396,13 @@ async function saveRule() {
         name: ruleForm.name,
         rule_mode: ruleForm.rule_mode,
         params,
+        algo_params_override: ruleForm.algo_params_override,
         schedule_mode: ruleForm.schedule_mode,
         pinned_node_id: ruleForm.pinned_node_id,
         schedule_id: ruleForm.schedule_id,
         record_video: ruleForm.record_video,
+        video_pre_seconds: ruleForm.video_pre_seconds,
+        video_post_seconds: ruleForm.video_post_seconds,
         enabled: ruleForm.enabled,
         ...(ruleForm.channel_ids.length > 0 ? { channel_ids: ruleForm.channel_ids } : {})
       });
@@ -397,10 +413,13 @@ async function saveRule() {
         name: ruleForm.name,
         rule_mode: ruleForm.rule_mode,
         params,
+        algo_params_override: ruleForm.algo_params_override,
         schedule_mode: ruleForm.schedule_mode,
         pinned_node_id: ruleForm.pinned_node_id,
         schedule_id: ruleForm.schedule_id,
         record_video: ruleForm.record_video,
+        video_pre_seconds: ruleForm.video_pre_seconds,
+        video_post_seconds: ruleForm.video_post_seconds,
         enabled: ruleForm.enabled,
         channel_ids: ruleForm.channel_ids
       });

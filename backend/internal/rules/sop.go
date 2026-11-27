@@ -185,10 +185,18 @@ func evaluateSOPRule(rule Rule, st *ruleRuntimeState, frame DetectionFrame, ts t
 	stepConfirmed := make([]bool, len(steps))
 	for i, sp := range steps {
 		targetROI := rule.ROI
-		if sp.ROIID != "" && rule.CameraROIs != nil {
-			if customROI, ok := rule.CameraROIs[sp.ROIID]; ok {
-				targetROI = customROI
+		if sp.ROIID != "" {
+			if rule.CameraROIs == nil {
+				ss.dwellCounts[i] = 0
+				continue
 			}
+			customROI, ok := rule.CameraROIs[sp.ROIID]
+			if !ok {
+				// Secondary ROI disabled/missing: fail closed instead of evaluating against wrong primary ROI.
+				ss.dwellCounts[i] = 0
+				continue
+			}
+			targetROI = customROI
 		}
 		hp := sp.HitPoint
 		if hp == "" {
@@ -240,8 +248,12 @@ func evaluateSOPRule(rule Rule, st *ruleRuntimeState, frame DetectionFrame, ts t
 			if missingReqIdx >= 0 {
 				// Operator jumped straight to a later step, skipping a required earlier step.
 				vType := pickOrderViolationType(violationEnabled, "missing_step")
+				if vType == "" {
+					// Order checks disabled: stay idle without aborting or firing.
+					return nil, nil, buildSOPProgress(rule, ss)
+				}
 				var alarm *TriggeredAlarm
-				if vType != "" && !inCooldown {
+				if !inCooldown {
 					st.lastAlarmAt = ts
 					trace := buildViolationTrace(triggerMode, vType, steps, ss, missingReqIdx, hitIdx, ts, ts)
 					a := buildSOPAlarm(rule, severity, ts, stepMatched[hitIdx], trace)
@@ -309,15 +321,17 @@ func evaluateSOPRule(rule Rule, st *ruleRuntimeState, frame DetectionFrame, ts t
 					ss.currentStepIdx = hitIdx + 1
 				} else {
 					vType := pickOrderViolationType(violationEnabled, "out_of_order")
-					var alarm *TriggeredAlarm
-					if vType != "" && !inCooldown {
-						st.lastAlarmAt = ts
-						trace := buildViolationTrace(triggerMode, vType, steps, ss, missingReqIdx, hitIdx, ss.cycleStartedAt, ts)
-						a := buildSOPAlarm(rule, severity, ts, stepMatched[hitIdx], trace)
-						alarm = &a
+					if vType != "" {
+						var alarm *TriggeredAlarm
+						if !inCooldown {
+							st.lastAlarmAt = ts
+							trace := buildViolationTrace(triggerMode, vType, steps, ss, missingReqIdx, hitIdx, ss.cycleStartedAt, ts)
+							a := buildSOPAlarm(rule, severity, ts, stepMatched[hitIdx], trace)
+							alarm = &a
+						}
+						finishReset()
+						return alarm, nil, buildSOPProgress(rule, ss)
 					}
-					finishReset()
-					return alarm, nil, buildSOPProgress(rule, ss)
 				}
 			}
 		}

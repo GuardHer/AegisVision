@@ -189,26 +189,17 @@ func (e *Engine) Evaluate(frame DetectionFrame) EvalOutput {
 			continue
 		}
 
-		matched := filterMatchingDetections(frame.Detections, rule)
-		count := len(matched)
-		if prev, exists := out.ROICounts[rule.ROI.ID]; !exists || count > prev {
-			out.ROICounts[rule.ROI.ID] = count
-		}
-
 		st := b.states[rule.ID]
 		if st == nil {
 			st = &ruleRuntimeState{}
 			b.states[rule.ID] = st
 		}
 
-		// When disarmed by arming schedule, clear transient counters so re-entry starts cleanly
-		// while preserving live ROICounts for monitor wall visualization.
-		if rule.Schedule != nil && !rule.Schedule.IsArmed(ts) {
-			st.resetTransient()
-			continue
-		}
-
 		if rule.RuleMode == domain.RuleModeSOPSequence {
+			if rule.Schedule != nil && !rule.Schedule.IsArmed(ts) {
+				st.resetTransient()
+				continue
+			}
 			alarm, completed, progress := evaluateSOPRule(rule, st, frame, ts)
 			out.SOPProgress = append(out.SOPProgress, progress)
 			if completed != nil {
@@ -217,6 +208,19 @@ func (e *Engine) Evaluate(frame DetectionFrame) EvalOutput {
 			if alarm != nil {
 				out.TriggeredAlarms = append(out.TriggeredAlarms, *alarm)
 			}
+			continue
+		}
+
+		matched := filterMatchingDetections(frame.Detections, rule)
+		count := len(matched)
+		if prev, exists := out.ROICounts[rule.ROI.ID]; !exists || count > prev {
+			out.ROICounts[rule.ROI.ID] = count
+		}
+
+		// When disarmed by arming schedule, clear transient counters so re-entry starts cleanly
+		// while preserving live ROICounts for monitor wall visualization.
+		if rule.Schedule != nil && !rule.Schedule.IsArmed(ts) {
+			st.resetTransient()
 			continue
 		}
 

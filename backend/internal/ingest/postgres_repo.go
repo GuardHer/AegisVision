@@ -253,9 +253,12 @@ func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error
 	schedByID := make(map[uuid.UUID]*rules.ArmingSchedule, len(dbSchedules))
 	for _, s := range dbSchedules {
 		parsed, pErr := rules.ParseArmingSchedule(s.ID.String(), s.Name, s.Timezone, s.Enabled, s.WeeklyWindows, s.ExcludeDates, s.IncludeDates)
-		if pErr == nil {
-			schedByID[s.ID] = parsed
+		if pErr != nil {
+			// Fail closed (disarmed) instead of failing open to 24x7 if a schedule template is corrupt.
+			schedByID[s.ID] = &rules.ArmingSchedule{ID: s.ID.String(), Name: s.Name, Enabled: false}
+			continue
 		}
+		schedByID[s.ID] = parsed
 	}
 
 	roiByID := make(map[uuid.UUID]rules.ROI)

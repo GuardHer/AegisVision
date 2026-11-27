@@ -19,7 +19,8 @@ const exporting = ref(false);
 const zonesTree = ref<ZoneTreeNode[]>([]);
 
 const filters = reactive({
-  rangePreset: "7d" as "today" | "7d" | "30d",
+  rangePreset: "7d" as "today" | "7d" | "30d" | "custom",
+  customRange: null as [Date, Date] | null,
   zone_id: "",
   shift: "all" as "all" | "day" | "night",
   granularity: "day" as "day" | "hour"
@@ -67,16 +68,24 @@ let resizeObserver: ResizeObserver | null = null;
 
 function buildQueryParams() {
   const now = new Date();
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const daysBack = filters.rangePreset === "today" ? 0 : filters.rangePreset === "7d" ? 6 : 29;
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+  let start: Date;
+  let end: Date;
+  if (filters.rangePreset === "custom" && filters.customRange && filters.customRange.length === 2) {
+    start = new Date(filters.customRange[0]);
+    end = new Date(filters.customRange[1]);
+    end.setDate(end.getDate() + 1);
+  } else {
+    end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const daysBack = filters.rangePreset === "today" ? 0 : filters.rangePreset === "7d" ? 6 : 29;
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+  }
   return {
     start_time: start.toISOString(),
     end_time: end.toISOString(),
     zone_id: filters.zone_id || undefined,
     shift: filters.shift,
     granularity: filters.granularity,
-    tz: "Asia/Shanghai"
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai"
   };
 }
 
@@ -226,7 +235,16 @@ onBeforeUnmount(() => {
             <el-radio-button value="today">{{ t("aegis.analytics.today") }}</el-radio-button>
             <el-radio-button value="7d">{{ t("aegis.analytics.last7d") }}</el-radio-button>
             <el-radio-button value="30d">{{ t("aegis.analytics.last30d") }}</el-radio-button>
+            <el-radio-button value="custom">Custom</el-radio-button>
           </el-radio-group>
+          <el-date-picker
+            v-if="filters.rangePreset === 'custom'"
+            v-model="filters.customRange"
+            type="daterange"
+            size="small"
+            class="w-56"
+            @change="loadData"
+          />
           <el-select v-model="filters.zone_id" clearable size="small" class="w-44" :placeholder="t('aegis.alarms.zone')" @change="loadData">
             <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
           </el-select>

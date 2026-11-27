@@ -47,6 +47,8 @@ async function loadData() {
   try {
     const res = await listSchedules();
     schedules.value = res?.data ?? [];
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load schedules");
   } finally {
     loading.value = false;
   }

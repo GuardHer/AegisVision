@@ -67,11 +67,15 @@ func isValidRuleMode(mode string) bool {
 }
 
 type sopStepValidationSpec struct {
-	StepID        string   `json:"step_id"`
-	Name          string   `json:"name"`
-	Labels        []string `json:"labels"`
-	MinConfidence float64  `json:"min_confidence"`
-	Required      *bool    `json:"required"`
+	StepID         string   `json:"step_id"`
+	Name           string   `json:"name"`
+	Labels         []string `json:"labels"`
+	ROIID          string   `json:"roi_id"`
+	MinConfidence  float64  `json:"min_confidence"`
+	HitPoint       string   `json:"hit_point"`
+	MinDwellFrames int      `json:"min_dwell_frames"`
+	MaxWaitSeconds int      `json:"max_wait_seconds"`
+	Required       *bool    `json:"required"`
 }
 
 type sopParamsValidationSpec struct {
@@ -80,7 +84,7 @@ type sopParamsValidationSpec struct {
 	Steps          []sopStepValidationSpec `json:"steps"`
 }
 
-func validateSOPSequenceParams(raw json.RawMessage) error {
+func validateSOPSequenceParams(raw json.RawMessage, validCameraROIIDs map[uuid.UUID]struct{}) error {
 	var spec sopParamsValidationSpec
 	if err := json.Unmarshal(raw, &spec); err != nil {
 		return domain.NewInvalidArgumentError("invalid sop_sequence params json", err)
@@ -115,6 +119,26 @@ func validateSOPSequenceParams(raw json.RawMessage) error {
 		}
 		if s.MinConfidence < 0 || s.MinConfidence > 1 {
 			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].min_confidence must be within [0, 1]", i), nil)
+		}
+		if s.HitPoint != "" &&
+			s.HitPoint != domain.HitPointCenter &&
+			s.HitPoint != domain.HitPointBottomCenter &&
+			s.HitPoint != domain.HitPointBBoxIntersect {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].hit_point is invalid", i), nil)
+		}
+		if s.MinDwellFrames < 0 || s.MaxWaitSeconds < 0 {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d] dwell/wait values must be >= 0", i), nil)
+		}
+		if rawROI := strings.TrimSpace(s.ROIID); rawROI != "" {
+			rid, err := uuid.Parse(rawROI)
+			if err != nil {
+				return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].roi_id is invalid uuid", i), err)
+			}
+			if validCameraROIIDs != nil {
+				if _, ok := validCameraROIIDs[rid]; !ok {
+					return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].roi_id does not belong to this camera", i), nil)
+				}
+			}
 		}
 		if s.Required == nil || *s.Required {
 			requiredCount++
@@ -190,7 +214,16 @@ func (h *RulesHandler) Create(c *gin.Context) {
 		return
 	}
 	if req.RuleMode == domain.RuleModeSOPSequence {
-		if valErr := validateSOPSequenceParams(req.Params); valErr != nil {
+		camROIs, roiErr := h.store.Queries().ListCameraROIsByCamera(c.Request.Context(), camID)
+		if roiErr != nil {
+			respondErr(c, roiErr)
+			return
+		}
+		roiSet := make(map[uuid.UUID]struct{}, len(camROIs))
+		for _, r := range camROIs {
+			roiSet[r.ID] = struct{}{}
+		}
+		if valErr := validateSOPSequenceParams(req.Params, roiSet); valErr != nil {
 			respondErr(c, valErr)
 			return
 		}
@@ -300,8 +333,23 @@ func (h *RulesHandler) Update(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid rule_mode", nil))
 		return
 	}
+	ctx := c.Request.Context()
+	existingRule, err := h.store.Queries().GetROIAlgorithmRuleByID(ctx, ruleID)
+	if err != nil {
+		respondErr(c, err)
+		return
+	}
 	if req.RuleMode == domain.RuleModeSOPSequence {
-		if valErr := validateSOPSequenceParams(req.Params); valErr != nil {
+		camROIs, roiErr := h.store.Queries().ListCameraROIsByCamera(ctx, existingRule.CameraID)
+		if roiErr != nil {
+			respondErr(c, roiErr)
+			return
+		}
+		roiSet := make(map[uuid.UUID]struct{}, len(camROIs))
+		for _, r := range camROIs {
+			roiSet[r.ID] = struct{}{}
+		}
+		if valErr := validateSOPSequenceParams(req.Params, roiSet); valErr != nil {
 			respondErr(c, valErr)
 			return
 		}
@@ -329,16 +377,19 @@ func (h *RulesHandler) Update(c *gin.Context) {
 		return
 	}
 
-	preSec := int32(5)
+	preSec := existingRule.VideoPreSeconds
 	if req.VideoPreSeconds != nil && *req.VideoPreSeconds >= 0 {
 		preSec = *req.VideoPreSeconds
 	}
-	postSec := int32(5)
+	postSec := existingRule.VideoPostSeconds
 	if req.VideoPostSeconds != nil && *req.VideoPostSeconds >= 0 {
 		postSec = *req.VideoPostSeconds
 	}
+	algoOverride := existingRule.AlgoParamsOverride
+	if len(req.AlgoParamsOverride) > 0 {
+		algoOverride = defaultJSONObject(req.AlgoParamsOverride)
+	}
 
-	ctx := c.Request.Context()
 	var updated sqlcgen.RoiAlgorithmRule
 	if err := h.store.WithTx(ctx, func(q *sqlcgen.Queries) error {
 		var txErr error
@@ -347,7 +398,7 @@ func (h *RulesHandler) Update(c *gin.Context) {
 			Name:               req.Name,
 			RuleMode:           req.RuleMode,
 			Params:             req.Params,
-			AlgoParamsOverride: defaultJSONObject(req.AlgoParamsOverride),
+			AlgoParamsOverride: algoOverride,
 			ScheduleMode:       schedMode,
 			PinnedNodeID:       toNullableText(req.PinnedNodeID),
 			RecordVideo:        req.RecordVideo,

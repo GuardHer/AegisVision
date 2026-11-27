@@ -56,6 +56,7 @@ type Querier interface {
 	GetAlgorithmByID(ctx context.Context, id uuid.UUID) (Algorithm, error)
 	GetAlgorithmByKey(ctx context.Context, algorithmKey string) (Algorithm, error)
 	GetAlgorithmVersionByID(ctx context.Context, id uuid.UUID) (AlgorithmVersion, error)
+	GetAnalyticsAlarmKPIs(ctx context.Context, arg GetAnalyticsAlarmKPIsParams) (GetAnalyticsAlarmKPIsRow, error)
 	GetAnalyticsAlgoPrecision(ctx context.Context, arg GetAnalyticsAlgoPrecisionParams) ([]GetAnalyticsAlgoPrecisionRow, error)
 	GetAnalyticsByZone(ctx context.Context, arg GetAnalyticsByZoneParams) ([]GetAnalyticsByZoneRow, error)
 	GetAnalyticsSOPSummary(ctx context.Context, arg GetAnalyticsSOPSummaryParams) (GetAnalyticsSOPSummaryRow, error)

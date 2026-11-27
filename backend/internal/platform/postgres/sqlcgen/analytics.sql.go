@@ -12,6 +12,59 @@ import (
 	"github.com/google/uuid"
 )
 
+const getAnalyticsAlarmKPIs = `-- name: GetAnalyticsAlarmKPIs :one
+SELECT
+    COUNT(*) FILTER (WHERE a.rule_mode <> 'sop_sequence')::bigint AS safety_count,
+    COUNT(*) FILTER (WHERE a.rule_mode = 'sop_sequence')::bigint AS sop_count,
+    COUNT(*) FILTER (WHERE a.handle_status = 'confirmed')::bigint AS confirmed_count,
+    COUNT(*) FILTER (WHERE a.handle_status = 'false_positive')::bigint AS false_positive_count,
+    COUNT(*) FILTER (WHERE a.handle_status IN ('confirmed', 'false_positive', 'ignored'))::bigint AS handled_count
+FROM alarms a
+WHERE a.triggered_at >= $1
+  AND a.triggered_at < $2
+  AND ($3::uuid[] IS NULL OR a.zone_id = ANY($3::uuid[]))
+  AND (
+      $4::text = 'all'
+      OR ($4::text = 'day' AND EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE $5::text)) >= 8 AND EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE $5::text)) < 20)
+      OR ($4::text = 'night' AND (EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE $5::text)) >= 20 OR EXTRACT(HOUR FROM (a.triggered_at AT TIME ZONE $5::text)) < 8))
+  )
+`
+
+type GetAnalyticsAlarmKPIsParams struct {
+	StartTime time.Time   `json:"start_time"`
+	EndTime   time.Time   `json:"end_time"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
+	Shift     string      `json:"shift"`
+	Tz        string      `json:"tz"`
+}
+
+type GetAnalyticsAlarmKPIsRow struct {
+	SafetyCount        int64 `json:"safety_count"`
+	SopCount           int64 `json:"sop_count"`
+	ConfirmedCount     int64 `json:"confirmed_count"`
+	FalsePositiveCount int64 `json:"false_positive_count"`
+	HandledCount       int64 `json:"handled_count"`
+}
+
+func (q *Queries) GetAnalyticsAlarmKPIs(ctx context.Context, arg GetAnalyticsAlarmKPIsParams) (GetAnalyticsAlarmKPIsRow, error) {
+	row := q.db.QueryRow(ctx, getAnalyticsAlarmKPIs,
+		arg.StartTime,
+		arg.EndTime,
+		arg.ZoneIds,
+		arg.Shift,
+		arg.Tz,
+	)
+	var i GetAnalyticsAlarmKPIsRow
+	err := row.Scan(
+		&i.SafetyCount,
+		&i.SopCount,
+		&i.ConfirmedCount,
+		&i.FalsePositiveCount,
+		&i.HandledCount,
+	)
+	return i, err
+}
+
 const getAnalyticsAlgoPrecision = `-- name: GetAnalyticsAlgoPrecision :many
 SELECT
     v.id AS algorithm_version_id,

@@ -236,3 +236,59 @@ func TestSOPZoneEntryRearmProtection(t *testing.T) {
 		t.Fatalf("expected in_progress upon person re-entry, got %s", outReenter.SOPProgress[0].State)
 	}
 }
+
+func TestSOPDoesNotPolluteROICountsAndMissingSecondaryROIFailsClosed(t *testing.T) {
+	roiMain := rules.ROI{ID: "roi-shared", Name: "Shared", ROIType: domain.ROITypeFullFrame}
+	eng := rules.NewEngine()
+	eng.SetCameraRules("cam-1", []rules.Rule{
+		{
+			ID:       "cnt-1",
+			CameraID: "cam-1",
+			ROI:      roiMain,
+			Name:     "PersonOnly",
+			RuleMode: domain.RuleModeCountThreshold,
+			Params:   rules.RuleParams{Labels: []string{"person"}, MinConfidence: 0.8},
+			Enabled:  true,
+		},
+		{
+			ID:         "sop-1",
+			CameraID:   "cam-1",
+			ROI:        roiMain,
+			CameraROIs: map[string]rules.ROI{roiMain.ID: roiMain},
+			Name:       "SOP-Missing-ROI",
+			RuleMode:   domain.RuleModeSOPSequence,
+			Params: rules.RuleParams{
+				TriggerMode:    "first_step",
+				ViolationTypes: []string{"step_timeout"}, // order checks disabled
+				Steps: []rules.SOPStepSpec{
+					{StepID: "s1", Name: "S1", Labels: []string{"step1"}, MinConfidence: 0.5, Required: boolPtr(true)},
+					{StepID: "s2", Name: "S2", Labels: []string{"step2"}, ROIID: "deleted-roi-id", MinConfidence: 0.5, Required: boolPtr(true)},
+				},
+			},
+			Enabled: true,
+		},
+	})
+
+	t0 := time.Date(2026, 11, 27, 10, 0, 0, 0, time.UTC)
+	// Low-confidence unrelated detection + step1 -> ROICounts[roi-shared] MUST remain 0 (person count only)!
+	out := eng.Evaluate(rules.DetectionFrame{
+		CameraID:  "cam-1",
+		Timestamp: t0,
+		Detections: []rules.Detection{
+			{BBox: [4]float64{0.2, 0.2, 0.4, 0.4}, Label: "step1", Confidence: 0.9},
+			{BBox: [4]float64{0.2, 0.2, 0.4, 0.4}, Label: "person", Confidence: 0.2},
+		},
+	})
+	if out.ROICounts["roi-shared"] != 0 {
+		t.Fatalf("sop_sequence must not pollute shared ROICounts, got %d", out.ROICounts["roi-shared"])
+	}
+	// Missing secondary ROI ("deleted-roi-id") must NOT fall back to primary ROI and complete s2!
+	out2 := eng.Evaluate(rules.DetectionFrame{
+		CameraID:   "cam-1",
+		Timestamp:  t0.Add(time.Second),
+		Detections: detAt("step2", 0.2, 0.2, 0.4, 0.4),
+	})
+	if len(out2.CompletedSOPCycles) != 0 {
+		t.Fatalf("step with missing/disabled secondary roi_id must fail closed, not fall back to primary ROI")
+	}
+}
