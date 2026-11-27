@@ -97,6 +97,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
 	usersH := NewUsersHandler(deps.Store)
 	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
+	presetsH := NewPresetsHandler(deps.Store)
+	dashboardH := NewDashboardHandler(deps.Store)
 	algosH := NewAlgorithmsHandler(deps.Store, deps.Publisher, deps.Logger)
 	camsH := NewCamerasHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Publisher, deps.Logger)
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
@@ -142,6 +144,13 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.GET("/algorithms/:id/versions", allRoles, algosH.ListVersions)
 	authed.POST("/algorithms/:id/versions", adminOnly, algosH.CreateVersion)
 	authed.PUT("/algorithm-versions/:version_id", adminOnly, algosH.UpdateVersion)
+
+	// Operations dashboard & monitor tour presets
+	authed.GET("/dashboard/overview", allRoles, dashboardH.Overview)
+	authed.GET("/monitor/presets", allRoles, presetsH.List)
+	authed.POST("/monitor/presets", allRoles, presetsH.Create)
+	authed.PUT("/monitor/presets/:id", allRoles, presetsH.Update)
+	authed.DELETE("/monitor/presets/:id", allRoles, presetsH.Delete)
 
 	// Spatial zones tree
 	authed.GET("/zones/tree", allRoles, zonesH.GetTree)
