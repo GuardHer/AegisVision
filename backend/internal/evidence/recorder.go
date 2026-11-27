@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -56,12 +57,13 @@ type StreamTokenMinter interface {
 
 // RecorderDeps holds explicit dependencies for asynchronous MP4 evidence recording.
 type RecorderDeps struct {
-	Repo        VideoRepo
-	Storage     storage.ObjectStorage
-	Tokens      StreamTokenMinter
-	Generator   ClipGenerator
-	RTSPBaseURL string
-	Logger      *slog.Logger
+	Repo          VideoRepo
+	Storage       storage.ObjectStorage
+	Tokens        StreamTokenMinter
+	Generator     ClipGenerator
+	RTSPBaseURL   string
+	RecordingsDir string
+	Logger        *slog.Logger
 }
 
 // Recorder consumes evidence.record jobs, captures MP4 clips, uploads to S3, and backfills alarms.
@@ -80,7 +82,10 @@ func NewRecorder(deps RecorderDeps) *Recorder {
 		deps.Logger = slog.Default()
 	}
 	if deps.Generator == nil {
-		deps.Generator = &FFmpegClipGenerator{Binary: "ffmpeg"}
+		deps.Generator = &FFmpegClipGenerator{
+			Binary:        "ffmpeg",
+			RecordingsDir: deps.RecordingsDir,
+		}
 	}
 	return &Recorder{
 		repo:        deps.Repo,
@@ -206,8 +211,68 @@ func (r *Recorder) RecordAndUpload(ctx context.Context, req RecordRequest) (stri
 }
 
 // FFmpegClipGenerator captures an MP4 clip via external ffmpeg CLI with stream copy and +faststart (zero CGO).
+// When RecordingsDir is configured and matching MediaMTX fMP4 segments exist, it stitches pre+post alarm segments
+// losslessly via ffmpeg concat demuxer; otherwise it falls back to authorized live RTSP capture.
 type FFmpegClipGenerator struct {
-	Binary string
+	Binary        string
+	RecordingsDir string
+}
+
+// FindRecordingSegments returns chronologically ordered MediaMTX recording segments overlapping
+// [triggeredAt - preSec - 10s, triggeredAt + postSec + 10s] under recordingsDir/<streamPath>.
+func FindRecordingSegments(recordingsDir, streamPath string, triggeredAt time.Time, preSec, postSec int) []string {
+	if strings.TrimSpace(recordingsDir) == "" || strings.TrimSpace(streamPath) == "" {
+		return nil
+	}
+	cleanPath := filepath.Clean(strings.TrimLeft(streamPath, "/\\"))
+	if cleanPath == "." || strings.Contains(cleanPath, "..") {
+		return nil
+	}
+	dir := filepath.Join(recordingsDir, cleanPath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	windowStart := triggeredAt.Add(-time.Duration(preSec+10) * time.Second)
+	windowEnd := triggeredAt.Add(time.Duration(postSec+10) * time.Second)
+
+	type segEntry struct {
+		path    string
+		modTime time.Time
+	}
+	var matched []segEntry
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		lower := strings.ToLower(entry.Name())
+		if !strings.HasSuffix(lower, ".mp4") && !strings.HasSuffix(lower, ".fmp4") {
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil || info.Size() == 0 {
+			continue
+		}
+		mt := info.ModTime()
+		if !mt.Before(windowStart) && !mt.After(windowEnd) {
+			matched = append(matched, segEntry{
+				path:    filepath.Join(dir, entry.Name()),
+				modTime: mt,
+			})
+		}
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if matched[i].modTime.Equal(matched[j].modTime) {
+			return matched[i].path < matched[j].path
+		}
+		return matched[i].modTime.Before(matched[j].modTime)
+	})
+	out := make([]string, 0, len(matched))
+	for _, m := range matched {
+		out = append(out, m.path)
+	}
+	return out
 }
 
 // GenerateClip invokes external ffmpeg CLI under ctx timeout.
@@ -220,6 +285,37 @@ func (g *FFmpegClipGenerator) GenerateClip(ctx context.Context, input ClipInput,
 	if duration <= 0 {
 		duration = 10
 	}
+
+	// Prefer lossless MediaMTX fMP4 ring-buffer stitching when recordings are available.
+	if segments := FindRecordingSegments(g.RecordingsDir, input.StreamPath, input.TriggeredAt, input.PreSeconds, input.PostSeconds); len(segments) > 0 {
+		listPath := outputPath + ".concat.txt"
+		var b strings.Builder
+		for _, seg := range segments {
+			escaped := strings.ReplaceAll(seg, "'", "'\\''")
+			b.WriteString("file '")
+			b.WriteString(escaped)
+			b.WriteString("'\n")
+		}
+		if writeErr := os.WriteFile(listPath, []byte(b.String()), 0o600); writeErr == nil {
+			defer func() { _ = os.Remove(listPath) }()
+			concatArgs := []string{
+				"-y",
+				"-f", "concat",
+				"-safe", "0",
+				"-i", listPath,
+				"-t", strconv.Itoa(duration),
+				"-c", "copy",
+				"-movflags", "+faststart",
+				outputPath,
+			}
+			// #nosec G204 -- ffmpeg binary and args are constructed from controlled recording dir and bounded ints
+			cmd := exec.CommandContext(ctx, bin, concatArgs...)
+			if _, concatErr := cmd.CombinedOutput(); concatErr == nil {
+				return nil
+			}
+		}
+	}
+
 	args := []string{
 		"-y",
 		"-rtsp_transport", "tcp",

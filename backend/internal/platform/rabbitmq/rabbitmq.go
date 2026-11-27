@@ -153,6 +153,14 @@ func (c *Client) Consume(ctx context.Context, queue string, prefetch int, handle
 		return fmt.Errorf("consume queue %q: %w", queue, err)
 	}
 
+	workers := prefetch
+	if workers <= 0 {
+		workers = 1
+	}
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -161,11 +169,23 @@ func (c *Client) Consume(ctx context.Context, queue string, prefetch int, handle
 			if !ok {
 				return errors.New("rabbitmq delivery channel closed")
 			}
-			if err := handler(ctx, d.Body); err != nil {
-				_ = d.Nack(false, false)
-				continue
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return ctx.Err()
 			}
-			_ = d.Ack(false)
+			wg.Add(1)
+			go func(del amqp.Delivery) {
+				defer func() {
+					<-sem
+					wg.Done()
+				}()
+				if err := handler(ctx, del.Body); err != nil {
+					_ = del.Nack(false, false)
+					return
+				}
+				_ = del.Ack(false)
+			}(d)
 		}
 	}
 }

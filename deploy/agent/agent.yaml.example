@@ -1,7 +1,7 @@
 # Compute-host aegis-agent configuration template
 node_id: gpu-node-01
-ip_addr: 192.168.0.50
-ingest_addr: 192.168.0.114:9090
+ip_addr: 127.0.0.1
+ingest_addr: 127.0.0.1:9090
 agent_token: aegis-agent-cluster-token-change-me
 max_tasks: 8
 buffer_db_path: /data/agent-buffer.sqlite

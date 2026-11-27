@@ -2,9 +2,14 @@ package api
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +56,7 @@ type webhookChannelConfig struct {
 	URL     string            `json:"url"`
 	Method  string            `json:"method"`
 	Headers map[string]string `json:"headers"`
+	Secret  string            `json:"secret"`
 }
 
 // List returns all configured alarm channels.
@@ -152,6 +158,11 @@ func (h *ChannelsHandler) Test(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("webhook channel missing valid url", err))
 		return
 	}
+	parsedURL, parseErr := url.Parse(strings.TrimSpace(whCfg.URL))
+	if parseErr != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+		respondErr(c, domain.NewInvalidArgumentError("webhook url must use http or https scheme", parseErr))
+		return
+	}
 	method := whCfg.Method
 	if method == "" {
 		method = http.MethodPost
@@ -163,13 +174,22 @@ func (h *ChannelsHandler) Test(c *gin.Context) {
 		"timestamp":  time.Now().UTC().Format(time.RFC3339),
 	})
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), method, whCfg.URL, bytes.NewReader(payload))
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, parsedURL.String(), bytes.NewReader(payload))
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid webhook url", err))
 		return
 	}
+	tsStr := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Aegis-Event", "channel.test")
+	req.Header.Set("X-Aegis-Timestamp", tsStr)
+	if whCfg.Secret != "" {
+		mac := hmac.New(sha256.New, []byte(whCfg.Secret))
+		_, _ = mac.Write([]byte(tsStr))
+		_, _ = mac.Write([]byte("."))
+		_, _ = mac.Write(payload)
+		req.Header.Set("X-Aegis-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	}
 	for k, v := range whCfg.Headers {
 		req.Header.Set(k, v)
 	}

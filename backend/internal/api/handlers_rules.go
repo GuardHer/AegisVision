@@ -220,6 +220,10 @@ func (h *RulesHandler) Update(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("schedule_mode must be auto or pinned", nil))
 		return
 	}
+	if schedMode == "pinned" && strings.TrimSpace(req.PinnedNodeID) == "" {
+		respondErr(c, domain.NewInvalidArgumentError("pinned_node_id is required when schedule_mode=pinned", nil))
+		return
+	}
 	channelIDs, err := parseUUIDSlice(req.ChannelIDs)
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid channel_ids", err))

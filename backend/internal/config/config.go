@@ -97,9 +97,10 @@ type LocalStorage struct {
 
 // MediaMTXConfig holds MediaMTX Control API and stream URL settings.
 type MediaMTXConfig struct {
-	APIURL      string `yaml:"api_url"`
-	RTSPBaseURL string `yaml:"rtsp_base_url"`
-	WHEPBaseURL string `yaml:"whep_base_url"`
+	APIURL        string `yaml:"api_url"`
+	RTSPBaseURL   string `yaml:"rtsp_base_url"`
+	WHEPBaseURL   string `yaml:"whep_base_url"`
+	RecordingsDir string `yaml:"recordings_dir"`
 }
 
 // AuthConfig configures JWT, HMAC evidence signing, and Agent cluster auth.
@@ -247,6 +248,7 @@ func applyEnvOverrides(cfg *Config) {
 	overrideString("AEGIS_MEDIAMTX_API_URL", &cfg.MediaMTX.APIURL)
 	overrideString("AEGIS_MEDIAMTX_RTSP_BASE_URL", &cfg.MediaMTX.RTSPBaseURL)
 	overrideString("AEGIS_MEDIAMTX_WHEP_BASE_URL", &cfg.MediaMTX.WHEPBaseURL)
+	overrideString("AEGIS_MEDIAMTX_RECORDINGS_DIR", &cfg.MediaMTX.RecordingsDir)
 
 	overrideString("AEGIS_JWT_SECRET", &cfg.Auth.JWTSecret)
 	overrideString("AEGIS_EVIDENCE_SIGN_SECRET", &cfg.Auth.EvidenceSignSecret)

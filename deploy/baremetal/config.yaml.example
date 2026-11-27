@@ -54,6 +54,8 @@ mediamtx:
   # 算力机访问 MediaMTX RTSP 的内网固定地址
   rtsp_base_url: "rtsp://192.168.1.10:8554"
   whep_base_url: "/whep"
+  # 可选：MediaMTX 短期环形录像目录（存在匹配分段时优先无损拼接报警前+报警后视频）
+  recordings_dir: "/var/lib/aegisvision/recordings"
 
 auth:
   # 生产环境请务必替换为 >= 32 字符随机密钥，或通过环境变量覆盖

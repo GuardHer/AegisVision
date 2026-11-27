@@ -141,3 +141,34 @@ func TestEvidenceRecorderUpdatesAlarmVideoKey(t *testing.T) {
 		t.Fatalf("expected failed video_status with empty key, got (%q, %q)", failRepo.status, failRepo.key)
 	}
 }
+
+func TestFindRecordingSegmentsWindowAndOrder(t *testing.T) {
+	root := t.TempDir()
+	camDir := root + string(os.PathSeparator) + "cam_ring_1"
+	if err := os.MkdirAll(camDir, 0o750); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	triggeredAt := time.Date(2026, 11, 27, 10, 0, 30, 0, time.UTC)
+	mkSeg := func(name string, mt time.Time) string {
+		p := camDir + string(os.PathSeparator) + name
+		if err := os.WriteFile(p, []byte("fmp4-segment"), 0o600); err != nil {
+			t.Fatalf("write seg %s: %v", name, err)
+		}
+		if err := os.Chtimes(p, mt, mt); err != nil {
+			t.Fatalf("chtimes %s: %v", name, err)
+		}
+		return p
+	}
+
+	_ = mkSeg("00_too_old.mp4", triggeredAt.Add(-60*time.Second))
+	seg1 := mkSeg("01_pre.mp4", triggeredAt.Add(-5*time.Second))
+	seg2 := mkSeg("02_post.fmp4", triggeredAt.Add(4*time.Second))
+	_ = mkSeg("03_too_new.mp4", triggeredAt.Add(60*time.Second))
+	_ = mkSeg("ignore.txt", triggeredAt)
+
+	got := evidence.FindRecordingSegments(root, "cam_ring_1", triggeredAt, 5, 5)
+	if len(got) != 2 || got[0] != seg1 || got[1] != seg2 {
+		t.Fatalf("FindRecordingSegments() = %v, want [%s, %s]", got, seg1, seg2)
+	}
+}

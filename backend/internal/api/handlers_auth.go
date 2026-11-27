@@ -140,7 +140,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
-// Refresh rotates a valid refresh token and issues a fresh access token.
+// Refresh rotates a valid refresh token and issues a fresh access token atomically inside a transaction.
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req refreshRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -150,44 +150,46 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	tokenHash := auth.HashRefreshToken(req.RefreshToken)
-	rt, err := h.store.Queries().GetRefreshTokenByHash(ctx, tokenHash)
-	if err != nil {
-		respondErr(c, domain.NewUnauthorizedError("invalid refresh token", err))
-		return
-	}
-	if rt.RevokedAt != nil || rt.ExpiresAt.Before(time.Now().UTC()) {
-		respondErr(c, domain.NewUnauthorizedError("refresh token expired or revoked", nil))
-		return
-	}
-
-	u, err := h.store.Queries().GetUserByID(ctx, rt.UserID)
-	if err != nil || !u.Enabled {
-		respondErr(c, domain.NewUnauthorizedError("user disabled or missing", err))
-		return
-	}
-
-	accessTok, _, expAt, err := h.tokens.IssueAccessToken(u.ID.String(), u.Username, u.Role)
-	if err != nil {
-		respondErr(c, domain.NewInternalError("failed to issue access token", err))
-		return
-	}
 	newRawRefresh, err := auth.GenerateOpaqueToken()
 	if err != nil {
 		respondErr(c, domain.NewInternalError("failed to issue refresh token", err))
 		return
 	}
 
+	var (
+		u         sqlcgen.User
+		accessTok string
+		expAt     time.Time
+	)
 	if err := h.store.WithTx(ctx, func(q *sqlcgen.Queries) error {
-		if err := q.RevokeRefreshToken(ctx, tokenHash); err != nil {
-			return err
+		rt, txErr := q.GetRefreshTokenByHash(ctx, tokenHash)
+		if txErr != nil {
+			return domain.NewUnauthorizedError("invalid refresh token", txErr)
 		}
-		_, err := q.CreateRefreshToken(ctx, sqlcgen.CreateRefreshTokenParams{
+		if rt.RevokedAt != nil || rt.ExpiresAt.Before(time.Now().UTC()) {
+			return domain.NewUnauthorizedError("refresh token expired or revoked", nil)
+		}
+
+		u, txErr = q.GetUserByID(ctx, rt.UserID)
+		if txErr != nil || !u.Enabled {
+			return domain.NewUnauthorizedError("user disabled or missing", txErr)
+		}
+
+		accessTok, _, expAt, txErr = h.tokens.IssueAccessToken(u.ID.String(), u.Username, u.Role)
+		if txErr != nil {
+			return domain.NewInternalError("failed to issue access token", txErr)
+		}
+
+		if txErr = q.RevokeRefreshToken(ctx, tokenHash); txErr != nil {
+			return txErr
+		}
+		_, txErr = q.CreateRefreshToken(ctx, sqlcgen.CreateRefreshTokenParams{
 			ID:        uuid.Must(uuid.NewV7()),
 			UserID:    u.ID,
 			TokenHash: auth.HashRefreshToken(newRawRefresh),
 			ExpiresAt: time.Now().UTC().Add(h.refreshTokenTTL),
 		})
-		return err
+		return txErr
 	}); err != nil {
 		respondErr(c, err)
 		return

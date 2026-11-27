@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -75,22 +76,25 @@ type RedisPublisher interface {
 
 // ProcessorDeps holds explicit dependencies for frame & buffered event processing.
 type ProcessorDeps struct {
-	Engine  *rules.Engine
-	Repo    Repository
-	Redis   RedisPublisher
-	MQ      MQPublisher
-	Storage storage.ObjectStorage
-	Logger  *slog.Logger
+	Engine                  *rules.Engine
+	Repo                    Repository
+	Redis                   RedisPublisher
+	MQ                      MQPublisher
+	Storage                 storage.ObjectStorage
+	Logger                  *slog.Logger
+	LastFrameUpdateInterval time.Duration
 }
 
 // Processor evaluates incoming detection frames and persists/dispatches alarms.
 type Processor struct {
-	engine  *rules.Engine
-	repo    Repository
-	redis   RedisPublisher
-	mq      MQPublisher
-	storage storage.ObjectStorage
-	log     *slog.Logger
+	engine                  *rules.Engine
+	repo                    Repository
+	redis                   RedisPublisher
+	mq                      MQPublisher
+	storage                 storage.ObjectStorage
+	log                     *slog.Logger
+	lastFrameUpdateInterval time.Duration
+	lastFrameUpdated        sync.Map // map[taskID string]time.Time
 }
 
 // NewProcessor constructs a frame Processor.
@@ -98,13 +102,18 @@ func NewProcessor(deps ProcessorDeps) *Processor {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
+	interval := deps.LastFrameUpdateInterval
+	if interval == 0 {
+		interval = 5 * time.Second
+	}
 	return &Processor{
-		engine:  deps.Engine,
-		repo:    deps.Repo,
-		redis:   deps.Redis,
-		mq:      deps.MQ,
-		storage: deps.Storage,
-		log:     deps.Logger,
+		engine:                  deps.Engine,
+		repo:                    deps.Repo,
+		redis:                   deps.Redis,
+		mq:                      deps.MQ,
+		storage:                 deps.Storage,
+		log:                     deps.Logger,
+		lastFrameUpdateInterval: interval,
 	}
 }
 
@@ -148,7 +157,7 @@ func (p *Processor) ProcessLiveFrame(ctx context.Context, pbFrame *agentv1.Detec
 		return nil
 	}
 	frame := toRulesFrame(pbFrame)
-	if p.repo != nil && frame.TaskID != "" {
+	if p.repo != nil && frame.TaskID != "" && p.shouldUpdateLastFrame(frame.TaskID, frame.Timestamp) {
 		_ = p.repo.UpdateTaskLastFrame(ctx, frame.TaskID, frame.Timestamp)
 	}
 
@@ -381,4 +390,17 @@ func parseNullUUID(raw string) uuid.NullUUID {
 		return uuid.NullUUID{}
 	}
 	return uuid.NullUUID{UUID: id, Valid: true}
+}
+
+func (p *Processor) shouldUpdateLastFrame(taskID string, ts time.Time) bool {
+	if p.lastFrameUpdateInterval < 0 {
+		return true
+	}
+	if prev, ok := p.lastFrameUpdated.Load(taskID); ok {
+		if prevTS, valid := prev.(time.Time); valid && ts.Sub(prevTS) < p.lastFrameUpdateInterval && ts.After(prevTS) {
+			return false
+		}
+	}
+	p.lastFrameUpdated.Store(taskID, ts)
+	return true
 }

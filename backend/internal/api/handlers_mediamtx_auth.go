@@ -80,7 +80,7 @@ func tokenKindsForProtocol(protocol string) []string {
 	case "webrtc":
 		return []string{platformredis.StreamTokenKindPlay}
 	case "rtsp":
-		return []string{platformredis.StreamTokenKindPull, platformredis.StreamTokenKindPlay}
+		return []string{platformredis.StreamTokenKindPull}
 	default:
 		return []string{platformredis.StreamTokenKindPlay, platformredis.StreamTokenKindPull}
 	}

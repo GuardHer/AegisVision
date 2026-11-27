@@ -54,6 +54,11 @@ func TestMediaMTXAuthCallback(t *testing.T) {
 			want: http.StatusOK,
 		},
 		{
+			name: "play_token_rejected_on_rtsp",
+			body: map[string]any{"action": "read", "path": "cam_001", "protocol": "rtsp", "query": "token=play-ok"},
+			want: http.StatusUnauthorized,
+		},
+		{
 			name: "mismatched_stream_path_rejected",
 			body: map[string]any{"action": "read", "path": "cam_002", "protocol": "webrtc", "query": "token=play-ok"},
 			want: http.StatusUnauthorized,
