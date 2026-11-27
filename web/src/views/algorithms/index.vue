@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -18,6 +18,12 @@ defineOptions({ name: "AegisAlgorithms" });
 const { t } = useI18n();
 const loading = ref(false);
 const algorithms = ref<AlgorithmItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedAlgorithms = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return algorithms.value.slice(start, start + pageSize.value);
+});
 const versionsByAlgo = reactive<Record<string, AlgorithmVersionItem[]>>({});
 
 const algoDialog = ref(false);
@@ -36,6 +42,12 @@ const verForm = reactive({
   default_params: '{"target_fps":5}',
   status: "active"
 });
+
+function versionStatusType(status: string): "success" | "warning" | "info" {
+  if (status === "active") return "success";
+  if (status === "deprecated") return "warning";
+  return "info";
+}
 
 async function loadData() {
   loading.value = true;
@@ -133,83 +145,133 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="p-4">
-    <el-card shadow="never">
-      <div class="flex justify-between mb-4">
-        <el-button type="primary" @click="algoDialog = true">
-          {{ t("aegis.common.create") }}
-        </el-button>
-        <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h1 class="aegis-page-title">{{ t("menus.aegisAlgorithms") }}</h1>
+        </div>
+        <div class="aegis-header-actions">
+          <el-button type="primary" @click="algoDialog = true">
+            {{ t("aegis.common.create") }}
+          </el-button>
+          <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
+        </div>
+      </header>
+
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedAlgorithms" height="100%" border stripe row-key="id">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <div class="p-3 bg-[var(--el-fill-color-lighter)]">
+                <div class="flex justify-between items-center mb-2">
+                  <span class="font-medium text-sm">{{ t("aegis.algorithms.versions") }}</span>
+                  <el-button size="small" type="primary" @click="openAddVersion(row.id)">
+                    {{ t("aegis.algorithms.addVersion") }}
+                  </el-button>
+                </div>
+                <div class="aegis-table-wrap">
+                  <el-table :data="versionsByAlgo[row.id] ?? []" size="small" border>
+                    <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="110" />
+                    <el-table-column prop="runtime_key" :label="t('aegis.algorithms.runtimeKey')" min-width="160" show-overflow-tooltip>
+                      <template #default="{ row: ver }">
+                        <span class="aegis-mono-id">{{ ver.runtime_key }}</span>
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('aegis.common.status')" width="106">
+                      <template #default="{ row: ver }">
+                        <el-tag size="small" :type="versionStatusType(ver.status)">
+                          {{ ver.status }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('aegis.algorithms.hits30d')" width="96" align="right">
+                      <template #default="{ row: ver }">
+                        {{ ver.stats_30d?.total_alarms ?? 0 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('aegis.algorithms.confirmed30d')" width="96" align="right">
+                      <template #default="{ row: ver }">
+                        {{ ver.stats_30d?.confirmed_count ?? 0 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('aegis.algorithms.fp30d')" width="86" align="right">
+                      <template #default="{ row: ver }">
+                        {{ ver.stats_30d?.false_positive_count ?? 0 }}
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('aegis.algorithms.fpRate30d')" width="116">
+                      <template #default="{ row: ver }">
+                        <el-tag
+                          size="small"
+                          :type="(ver.stats_30d?.false_positive_rate ?? 0) > 25 ? 'danger' : (ver.stats_30d?.false_positive_rate ?? 0) > 10 ? 'warning' : 'success'"
+                        >
+                          {{ (ver.stats_30d?.false_positive_rate ?? 0).toFixed(1) }}%
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column :label="t('aegis.common.actions')" width="116" fixed="right">
+                      <template #default="{ row: ver }">
+                        <el-button link type="primary" @click="toggleVersionStatus(ver)">
+                          {{ ver.status === "active" ? "Deprecate" : "Activate" }}
+                        </el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="algorithm_key" :label="t('aegis.algorithms.key')" width="175" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="aegis-mono-id">{{ row.algorithm_key }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" :label="t('aegis.algorithms.name')" min-width="155" show-overflow-tooltip />
+          <el-table-column :label="t('aegis.algorithms.labels')" min-width="200">
+            <template #default="{ row }">
+              <div class="flex flex-wrap gap-1">
+                <el-tag
+                  v-for="label in (row.supported_labels ?? []).slice(0, 5)"
+                  :key="label"
+                  size="small"
+                  type="info"
+                  effect="plain"
+                >
+                  {{ label }}
+                </el-tag>
+                <span v-if="!row.supported_labels?.length" class="text-xs text-zinc-400">—</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="Description" min-width="180" show-overflow-tooltip />
+          <el-table-column :label="t('aegis.common.actions')" width="165" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openAddVersion(row.id)">
+                {{ t("aegis.algorithms.addVersion") }}
+              </el-button>
+              <el-button link type="danger" @click="removeAlgo(row.id)">
+                {{ t("aegis.common.delete") }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
-      <el-table v-loading="loading" :data="algorithms" border row-key="id">
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div class="p-3">
-              <div class="flex justify-between items-center mb-2">
-                <span class="font-medium text-sm">{{ t("aegis.algorithms.versions") }}</span>
-                <el-button size="small" type="primary" @click="openAddVersion(row.id)">
-                  {{ t("aegis.algorithms.addVersion") }}
-                </el-button>
-              </div>
-              <el-table :data="versionsByAlgo[row.id] ?? []" size="small" border>
-                <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="110" />
-                <el-table-column prop="runtime_key" :label="t('aegis.algorithms.runtimeKey')" width="170" />
-                <el-table-column prop="status" :label="t('aegis.common.status')" width="100" />
-                <el-table-column :label="t('aegis.algorithms.hits30d')" width="100">
-                  <template #default="{ row: ver }">
-                    {{ ver.stats_30d?.total_alarms ?? 0 }}
-                  </template>
-                </el-table-column>
-                <el-table-column :label="t('aegis.algorithms.confirmed30d')" width="100">
-                  <template #default="{ row: ver }">
-                    {{ ver.stats_30d?.confirmed_count ?? 0 }}
-                  </template>
-                </el-table-column>
-                <el-table-column :label="t('aegis.algorithms.fp30d')" width="90">
-                  <template #default="{ row: ver }">
-                    {{ ver.stats_30d?.false_positive_count ?? 0 }}
-                  </template>
-                </el-table-column>
-                <el-table-column :label="t('aegis.algorithms.fpRate30d')" width="120">
-                  <template #default="{ row: ver }">
-                    <el-tag
-                      size="small"
-                      :type="(ver.stats_30d?.false_positive_rate ?? 0) > 25 ? 'danger' : (ver.stats_30d?.false_positive_rate ?? 0) > 10 ? 'warning' : 'success'"
-                    >
-                      {{ (ver.stats_30d?.false_positive_rate ?? 0).toFixed(1) }}%
-                    </el-tag>
-                  </template>
-                </el-table-column>
-                <el-table-column :label="t('aegis.common.actions')" width="120">
-                  <template #default="{ row: ver }">
-                    <el-button link type="primary" @click="toggleVersionStatus(ver)">
-                      {{ ver.status === "active" ? "Deprecate" : "Activate" }}
-                    </el-button>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="algorithm_key" :label="t('aegis.algorithms.key')" width="180" />
-        <el-table-column prop="name" :label="t('aegis.algorithms.name')" min-width="160" />
-        <el-table-column prop="description" label="Description" min-width="200" />
-        <el-table-column :label="t('aegis.common.actions')" width="160">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openAddVersion(row.id)">
-              {{ t("aegis.algorithms.addVersion") }}
-            </el-button>
-            <el-button link type="danger" @click="removeAlgo(row.id)">
-              {{ t("aegis.common.delete") }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="algorithms.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
+      </div>
+    </section>
 
     <el-dialog v-model="algoDialog" :title="t('aegis.common.create')" width="500px">
-      <el-form label-width="130px">
+      <el-form label-width="130px" size="small">
         <el-form-item :label="t('aegis.algorithms.key')">
           <el-input v-model="algoForm.algorithm_key" placeholder="person_detect" />
         </el-form-item>
@@ -230,7 +292,7 @@ onMounted(loadData);
     </el-dialog>
 
     <el-dialog v-model="verDialog" :title="t('aegis.algorithms.addVersion')" width="500px">
-      <el-form label-width="140px">
+      <el-form label-width="140px" size="small">
         <el-form-item :label="t('aegis.algorithms.version')">
           <el-input v-model="verForm.version" />
         </el-form-item>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -14,12 +14,19 @@ import {
   type UserItem,
   type ZoneTreeNode
 } from "@/api/aegis";
+import { formatDateTime } from "@/utils/format";
 
 defineOptions({ name: "AegisUsers" });
 
 const { t } = useI18n();
 const loading = ref(false);
 const users = ref<UserItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedUsers = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return users.value.slice(start, start + pageSize.value);
+});
 const zones = ref<ZoneTreeNode[]>([]);
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
@@ -37,6 +44,12 @@ const form = reactive({
   role: "viewer" as "admin" | "operator" | "viewer",
   enabled: true
 });
+
+function roleTagType(role: string): "danger" | "warning" | "info" {
+  if (role === "admin") return "danger";
+  if (role === "operator") return "warning";
+  return "info";
+}
 
 async function loadData() {
   loading.value = true;
@@ -163,55 +176,94 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="p-4">
-    <el-card shadow="never">
-      <div class="flex justify-between mb-4">
-        <el-button type="primary" @click="openCreate">{{ t("aegis.common.create") }}</el-button>
-        <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h1 class="aegis-page-title">{{ t("menus.aegisUsers") }}</h1>
+        </div>
+        <div class="aegis-header-actions">
+          <el-button type="primary" @click="openCreate">{{ t("aegis.common.create") }}</el-button>
+          <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
+        </div>
+      </header>
+
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedUsers" height="100%" border stripe>
+          <el-table-column prop="username" :label="t('aegis.users.username')" width="145" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="aegis-mono-id font-medium">{{ row.username }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="display_name" :label="t('aegis.users.displayName')" min-width="145" show-overflow-tooltip />
+          <el-table-column :label="t('aegis.users.role')" width="108">
+            <template #default="{ row }">
+              <el-tag size="small" :type="roleTagType(row.role)">
+                {{ row.role }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.users.workshopScope')" width="148">
+            <template #default="{ row }">
+              <el-tag
+                size="small"
+                :type="row.role === 'admin' || row.all_zones_access !== false ? 'success' : 'warning'"
+                effect="plain"
+              >
+                {{ row.role === "admin" || row.all_zones_access !== false ? t("aegis.users.allZonesAccess") : t("aegis.users.assignedZones") }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.enabled')" width="88">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.enabled ? 'success' : 'danger'">
+                {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.users.lastLogin')" width="168">
+            <template #default="{ row }">
+              <span class="aegis-tabular">{{ formatDateTime(row.last_login_at) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.actions')" width="295" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEdit(row)">
+                {{ t("aegis.common.edit") }}
+              </el-button>
+              <el-button
+                v-if="row.role !== 'admin'"
+                link
+                type="success"
+                @click="openScopeDialog(row)"
+              >
+                {{ t("aegis.users.workshopScope") }}
+              </el-button>
+              <el-button link type="warning" @click="onResetPassword(row)">
+                {{ t("aegis.users.resetPassword") }}
+              </el-button>
+              <el-button link type="danger" @click="onDelete(row.id)">
+                {{ t("aegis.common.delete") }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
-      <el-table v-loading="loading" :data="users" border stripe>
-        <el-table-column prop="username" :label="t('aegis.users.username')" width="150" />
-        <el-table-column prop="display_name" :label="t('aegis.users.displayName')" min-width="150" />
-        <el-table-column prop="role" :label="t('aegis.users.role')" width="110" />
-        <el-table-column :label="t('aegis.users.workshopScope')" width="140">
-          <template #default="{ row }">
-            <el-tag
-              size="small"
-              :type="row.role === 'admin' || row.all_zones_access !== false ? 'success' : 'warning'"
-            >
-              {{ row.role === "admin" || row.all_zones_access !== false ? t("aegis.users.allZonesAccess") : t("aegis.users.assignedZones") }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="enabled" :label="t('aegis.common.enabled')" width="90" />
-        <el-table-column prop="last_login_at" label="Last Login" width="180" />
-        <el-table-column :label="t('aegis.common.actions')" width="310">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">
-              {{ t("aegis.common.edit") }}
-            </el-button>
-            <el-button
-              v-if="row.role !== 'admin'"
-              link
-              type="success"
-              @click="openScopeDialog(row)"
-            >
-              {{ t("aegis.users.workshopScope") }}
-            </el-button>
-            <el-button link type="warning" @click="onResetPassword(row)">
-              {{ t("aegis.users.resetPassword") }}
-            </el-button>
-            <el-button link type="danger" @click="onDelete(row.id)">
-              {{ t("aegis.common.delete") }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="users.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
+      </div>
+    </section>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? t('aegis.common.edit') : t('aegis.common.create')" width="480px">
-      <el-form label-width="120px">
+      <el-form label-width="120px" size="small">
         <el-form-item :label="t('aegis.users.username')">
           <el-input v-model="form.username" :disabled="Boolean(editingId)" />
         </el-form-item>
@@ -248,18 +300,20 @@ onMounted(loadData);
           <el-switch v-model="scopeAllZones" :active-text="t('aegis.users.allZonesAccess')" />
           <div class="text-xs text-slate-400 mt-1">{{ t("aegis.users.allZonesHint") }}</div>
         </div>
-        <div v-show="!scopeAllZones" class="border rounded p-3 max-h-80 overflow-auto">
+        <div v-show="!scopeAllZones" class="border rounded p-3">
           <div class="text-xs font-medium mb-2 text-slate-600">{{ t("aegis.users.assignedZones") }}</div>
-          <el-tree
-            ref="zoneTreeRef"
-            :data="zones"
-            node-key="id"
-            :default-checked-keys="scopeCheckedIds"
-            :props="{ label: 'name', children: 'children' }"
-            show-checkbox
-            check-strictly
-            default-expand-all
-          />
+          <el-scrollbar max-height="280px">
+            <el-tree
+              ref="zoneTreeRef"
+              :data="zones"
+              node-key="id"
+              :default-checked-keys="scopeCheckedIds"
+              :props="{ label: 'name', children: 'children' }"
+              show-checkbox
+              check-strictly
+              default-expand-all
+            />
+          </el-scrollbar>
         </div>
       </div>
       <template #footer>

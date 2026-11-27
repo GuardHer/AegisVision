@@ -116,6 +116,7 @@ export interface StreamTokenResponse {
   token: string;
   stream_path: string;
   whep_url: string;
+  hls_url?: string;
   expires_in: number;
 }
 

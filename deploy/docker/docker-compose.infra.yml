@@ -132,6 +132,7 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${MEDIAMTX_RTSP_PORT:-8554}:8554"
+      - "${MEDIAMTX_HLS_PORT:-8888}:8888"
       - "${MEDIAMTX_WHEP_PORT:-8889}:8889"
       - "${MEDIAMTX_WEBRTC_MUX_PORT:-8189}:8189/udp"
       - "${MEDIAMTX_WEBRTC_MUX_PORT:-8189}:8189/tcp"

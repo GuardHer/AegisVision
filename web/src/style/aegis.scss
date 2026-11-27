@@ -1,0 +1,230 @@
+/* AegisVision page layout helpers
+ * Visual tokens follow Element Plus / pure-admin (el-card, el-table, el-scrollbar) so
+ * every page fits cleanly inside Pure Admin's .main-content without double margins or
+ * permanently visible native scrollbars.
+ */
+
+.aegis-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Viewport-fitted page: keeps tables, trees and lists inside screen height */
+.aegis-page--fixed {
+  height: calc(100vh - 166px);
+  min-height: 480px;
+  overflow: hidden;
+}
+
+/* Same look as <el-card shadow="never"> */
+.aegis-panel {
+  min-width: 0;
+  padding: var(--el-card-padding, 20px);
+  color: var(--el-text-color-primary);
+  background: var(--el-card-bg-color, var(--el-bg-color-overlay));
+  border: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+  border-radius: var(--el-card-border-radius, 4px);
+}
+
+.aegis-panel--fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.aegis-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--el-border-color-extra-light);
+}
+
+.aegis-page-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aegis-page-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--el-text-color-primary);
+}
+
+.aegis-page-subtitle {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
+}
+
+.aegis-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.aegis-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-extra-light);
+  border-radius: 4px;
+}
+
+.aegis-filter-bar__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Table wrapper: header colors match pure-admin's PureTable header-cell-style */
+.aegis-table-wrap {
+  width: 100%;
+  min-width: 0;
+
+  .el-table {
+    font-variant-numeric: tabular-nums;
+
+    th.el-table__cell {
+      background-color: var(--el-fill-color-light);
+      color: var(--el-text-color-primary);
+    }
+  }
+}
+
+.aegis-table-wrap--fill {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Full-height tabs container so el-table height="100%" inside each tab fits viewport */
+.aegis-tabs--fill {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+
+  .el-tabs__header {
+    flex-shrink: 0;
+  }
+
+  .el-tabs__content {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .el-tab-pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
+.aegis-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.aegis-mono-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--el-text-color-regular);
+}
+
+.aegis-pagination {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+/* Responsive two-column split (e.g. left zone tree + right asset table) */
+.aegis-split-layout {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@media (max-width: 1024px) {
+  .aegis-page--fixed {
+    height: auto;
+    overflow: visible;
+  }
+
+  .aegis-split-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Dataset card grid */
+.aegis-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
+  gap: 14px;
+}
+
+.aegis-sample-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--el-card-bg-color, var(--el-bg-color-overlay));
+  border: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+  border-radius: var(--el-card-border-radius, 4px);
+  overflow: hidden;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+
+  &:hover {
+    border-color: var(--el-color-primary-light-5);
+    box-shadow: 0 4px 14px rgb(15 23 42 / 7%);
+  }
+}
+
+.aegis-sample-card__media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: #0b1120;
+  overflow: hidden;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+}
+
+.aegis-sample-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 6px;
+  padding: 12px;
+  min-width: 0;
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -17,6 +17,12 @@ defineOptions({ name: "AegisSchedules" });
 const { t } = useI18n();
 const loading = ref(false);
 const schedules = ref<ArmingScheduleItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedSchedules = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return schedules.value.slice(start, start + pageSize.value);
+});
 
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
@@ -154,55 +160,71 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="p-4 flex flex-col gap-4">
-    <el-card shadow="never">
-      <div class="flex items-center justify-between mb-4">
-        <span class="font-semibold text-base">{{ t("aegis.schedules.title") }}</span>
-        <div class="flex gap-2">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h1 class="aegis-page-title">{{ t("aegis.schedules.title") }}</h1>
+        </div>
+        <div class="aegis-header-actions">
           <el-button type="primary" data-test="create-schedule-btn" @click="openCreate">
             {{ t("aegis.common.create") }}
           </el-button>
           <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
         </div>
+      </header>
+
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedSchedules" height="100%" border stripe>
+          <el-table-column prop="name" :label="t('aegis.schedules.name')" min-width="165" show-overflow-tooltip />
+          <el-table-column prop="timezone" :label="t('aegis.schedules.timezone')" width="145" />
+          <el-table-column :label="t('aegis.schedules.weeklyWindows')" min-width="240">
+            <template #default="{ row }">
+              <div class="flex flex-wrap gap-1">
+                <el-tag
+                  v-for="(w, idx) in row.weekly_windows || []"
+                  :key="idx"
+                  size="small"
+                  :type="w.end < w.start ? 'warning' : 'info'"
+                  effect="plain"
+                >
+                  D{{ (w.days || []).join(",") }} {{ w.start }}-{{ w.end }}
+                </el-tag>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.schedules.ruleCount')" width="108" align="center">
+            <template #default="{ row }">
+              <el-tag size="small" type="primary">{{ row.rule_count ?? 0 }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.status')" width="96">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
+                {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.actions')" width="145" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEdit(row)">{{ t("aegis.common.edit") }}</el-button>
+              <el-button link type="danger" @click="onDelete(row)">{{ t("aegis.common.delete") }}</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
-      <el-table v-loading="loading" :data="schedules" border stripe>
-        <el-table-column prop="name" :label="t('aegis.schedules.name')" min-width="160" />
-        <el-table-column prop="timezone" :label="t('aegis.schedules.timezone')" width="140" />
-        <el-table-column :label="t('aegis.schedules.weeklyWindows')" min-width="240">
-          <template #default="{ row }">
-            <div class="flex flex-wrap gap-1">
-              <el-tag
-                v-for="(w, idx) in row.weekly_windows || []"
-                :key="idx"
-                size="small"
-                :type="w.end < w.start ? 'warning' : 'info'"
-              >
-                D{{ (w.days || []).join(",") }} {{ w.start }}-{{ w.end }}
-              </el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.schedules.ruleCount')" width="110">
-          <template #default="{ row }">
-            <el-tag size="small" type="primary">{{ row.rule_count ?? 0 }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.common.status')" width="95">
-          <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'info'" size="small">
-              {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.common.actions')" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEdit(row)">{{ t("aegis.common.edit") }}</el-button>
-            <el-button link type="danger" @click="onDelete(row)">{{ t("aegis.common.delete") }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="schedules.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
+      </div>
+    </section>
 
     <el-dialog
       v-model="dialogVisible"

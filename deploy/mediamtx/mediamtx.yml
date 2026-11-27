@@ -42,14 +42,25 @@ webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8189
 webrtcAdditionalHosts: []
 
+# LL-HLS (Low-Latency fMP4，纯内存零转码，用于含 B 帧或 H.265 摄像头的兼容防抖预览)
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: "*"
+hlsAlwaysRemux: no
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 1s
+hlsPartDuration: 200ms
+hlsSegmentMaxSize: 50M
+
 # 关闭不需要的协议减少端口暴露
 rtmp: no
 srt: no
-hls: no
 
-# 路径默认配置（开启 record_video 时由 scheduler 按路径设为 record: yes）
+# 路径默认配置（强制 RTSP TCP 拉流防丢包；开启 record_video 时由 scheduler 按路径设为 record: yes）
 pathDefaults:
   sourceOnDemand: no
+  rtspTransport: tcp
   record: no
   recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S-%f
   recordFormat: fmp4

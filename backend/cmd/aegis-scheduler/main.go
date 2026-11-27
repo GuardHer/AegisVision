@@ -77,7 +77,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	mtxClient := mediamtx.New(cfg.MediaMTX.APIURL, cfg.MediaMTX.RTSPBaseURL, cfg.MediaMTX.WHEPBaseURL, nil)
+	mtxClient := mediamtx.New(cfg.MediaMTX.APIURL, cfg.MediaMTX.RTSPBaseURL, cfg.MediaMTX.WHEPBaseURL, nil).
+		WithHLSBaseURL(cfg.MediaMTX.HLSBaseURL)
 	rec := scheduler.NewReconciler(scheduler.ReconcilerDeps{
 		InstanceID:        cfg.Service.InstanceID,
 		State:             scheduler.NewPostgresStateStore(pgStore),

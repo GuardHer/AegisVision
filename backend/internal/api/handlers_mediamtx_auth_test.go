@@ -49,6 +49,16 @@ func TestMediaMTXAuthCallback(t *testing.T) {
 			want: http.StatusOK,
 		},
 		{
+			name: "valid_hls_play_token",
+			body: map[string]any{"action": "read", "path": "cam_001", "protocol": "hls", "query": "token=play-ok"},
+			want: http.StatusOK,
+		},
+		{
+			name: "pull_token_rejected_on_hls",
+			body: map[string]any{"action": "read", "path": "cam_001", "protocol": "hls", "query": "token=pull-ok"},
+			want: http.StatusUnauthorized,
+		},
+		{
 			name: "valid_rtsp_pull_token",
 			body: map[string]any{"action": "read", "path": "cam_001", "protocol": "rtsp", "query": "token=pull-ok"},
 			want: http.StatusOK,

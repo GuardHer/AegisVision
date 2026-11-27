@@ -11,6 +11,7 @@ import {
 } from "@/api/aegis";
 import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
+import { formatDateTime } from "@/utils/format";
 
 defineOptions({ name: "AegisDashboard" });
 
@@ -181,10 +182,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-4 flex flex-col gap-4">
-    <div class="flex items-center justify-between">
-      <div class="text-lg font-semibold">{{ t("aegis.dashboard.title") }}</div>
-      <div class="flex gap-2">
+  <div class="aegis-page">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h1 class="aegis-page-title text-lg">{{ t("aegis.dashboard.title") }}</h1>
+      <div class="aegis-header-actions">
         <el-button size="small" @click="router.push('/monitor/index')">
           {{ t("menus.aegisMonitor") }}
         </el-button>
@@ -195,7 +196,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 6 Enterprise KPI Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 aegis-tabular">
       <el-card shadow="hover">
         <div class="text-xs text-zinc-500">{{ t("aegis.dashboard.todayAlarms") }}</div>
         <div class="text-2xl font-bold mt-1" data-test="kpi-today-alarms">
@@ -297,33 +298,35 @@ onBeforeUnmount(() => {
           :description="t('aegis.dashboard.noRecentAlerts')"
           :image-size="60"
         />
-        <div v-else class="flex flex-col gap-2 max-h-72 overflow-y-auto">
-          <div
-            v-for="alert in overview.recent_alerts"
-            :key="alert.id"
-            class="flex items-center justify-between gap-2 p-2.5 rounded border text-xs"
-          >
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 font-medium truncate">
-                <el-tag :type="alert.severity === 'critical' ? 'danger' : 'warning'" size="small">
-                  {{ alert.severity }}
-                </el-tag>
-                <span class="truncate">{{ alert.title }}</span>
+        <el-scrollbar v-else max-height="288px">
+          <div class="flex flex-col gap-2 pr-1">
+            <div
+              v-for="alert in overview.recent_alerts"
+              :key="alert.id"
+              class="flex items-center justify-between gap-2 p-2.5 rounded border text-xs"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 font-medium truncate">
+                  <el-tag :type="alert.severity === 'critical' ? 'danger' : 'warning'" size="small">
+                    {{ alert.severity }}
+                  </el-tag>
+                  <span class="truncate">{{ alert.title }}</span>
+                </div>
+                <div class="text-zinc-500 mt-1 aegis-tabular truncate">
+                  {{ alert.zone_name || "—" }} · {{ alert.camera_name }} · {{ formatDateTime(alert.triggered_at) }}
+                </div>
               </div>
-              <div class="text-zinc-500 mt-1">
-                {{ alert.zone_name || "-" }} · {{ alert.camera_name }} · {{ alert.triggered_at }}
+              <div v-if="allowHandle" class="flex gap-1 shrink-0">
+                <el-button size="small" type="success" plain @click="quickHandle(alert.id, 'confirmed')">
+                  {{ t("aegis.alarms.confirm") }}
+                </el-button>
+                <el-button size="small" type="warning" plain @click="quickHandle(alert.id, 'false_positive')">
+                  {{ t("aegis.alarms.falsePositive") }}
+                </el-button>
               </div>
-            </div>
-            <div v-if="allowHandle" class="flex gap-1 shrink-0">
-              <el-button size="small" type="success" plain @click="quickHandle(alert.id, 'confirmed')">
-                {{ t("aegis.alarms.confirm") }}
-              </el-button>
-              <el-button size="small" type="warning" plain @click="quickHandle(alert.id, 'false_positive')">
-                {{ t("aegis.alarms.falsePositive") }}
-              </el-button>
             </div>
           </div>
-        </div>
+        </el-scrollbar>
       </el-card>
     </div>
   </div>

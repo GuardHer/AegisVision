@@ -43,6 +43,9 @@ func TestMediaMTXUpsertPathRecordingAndURLBuilders(t *testing.T) {
 	if receivedBody["source"] != "rtsp://192.168.0.200:554/stream1" {
 		t.Errorf("source = %v, want rtsp source url", receivedBody["source"])
 	}
+	if receivedBody["rtspTransport"] != "tcp" {
+		t.Errorf("rtspTransport = %v, want tcp", receivedBody["rtspTransport"])
+	}
 	if rec, ok := receivedBody["record"].(bool); !ok || !rec {
 		t.Errorf("record = %v, want true when RecordVideo=true", receivedBody["record"])
 	}
@@ -57,6 +60,10 @@ func TestMediaMTXUpsertPathRecordingAndURLBuilders(t *testing.T) {
 	whepPath := client.BuildWHEPPath("cam_001", "play-tok-abc")
 	if whepPath != "/whep/cam_001/whep?token=play-tok-abc" {
 		t.Errorf("BuildWHEPPath() = %q", whepPath)
+	}
+	hlsPath := client.BuildHLSPath("cam_001", "play-tok-abc")
+	if hlsPath != "/hls/cam_001/index.m3u8?token=play-tok-abc" {
+		t.Errorf("BuildHLSPath() = %q", hlsPath)
 	}
 }
 

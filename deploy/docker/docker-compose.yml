@@ -41,6 +41,7 @@ services:
       AEGIS_MEDIAMTX_API_URL: http://mediamtx:9997
       AEGIS_MEDIAMTX_RTSP_BASE_URL: rtsp://${MEDIAMTX_WEBRTC_ADDITIONAL_HOST:-mediamtx}:8554
       AEGIS_MEDIAMTX_WHEP_BASE_URL: /whep
+      AEGIS_MEDIAMTX_HLS_BASE_URL: /hls
       AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
       AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
       AEGIS_AGENT_TOKEN: ${AEGIS_AGENT_TOKEN:-aegis-agent-cluster-token-change-me}

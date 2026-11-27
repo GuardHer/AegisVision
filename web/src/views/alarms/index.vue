@@ -21,6 +21,7 @@ import {
 } from "@/api/aegis";
 import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
+import { formatDateTime, formatDurationMs } from "@/utils/format";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
 defineOptions({ name: "AegisAlarms" });
@@ -63,6 +64,48 @@ const flatZones = computed(() => {
   return out;
 });
 
+const zoneNameMap = computed(() => {
+  const m = new Map<string, string>();
+  for (const z of flatZones.value) m.set(z.id, z.name);
+  return m;
+});
+
+const cameraMap = computed(() => {
+  const m = new Map<string, CameraItem>();
+  for (const c of cameras.value) m.set(c.id, c);
+  return m;
+});
+
+function resolveCameraName(row: AlarmItem): string {
+  return cameraMap.value.get(row.camera_id)?.name || row.camera_id || "—";
+}
+
+function resolveZoneName(row: AlarmItem): string {
+  const cam = cameraMap.value.get(row.camera_id);
+  if (!cam?.zone_id) return "";
+  return zoneNameMap.value.get(cam.zone_id) || "";
+}
+
+function severityTagType(severity: string): "danger" | "warning" | "info" {
+  if (severity === "critical") return "danger";
+  if (severity === "warning") return "warning";
+  return "info";
+}
+
+function handleStatusTagType(status: string): "danger" | "success" | "warning" | "info" {
+  if (status === "unhandled") return "danger";
+  if (status === "confirmed") return "success";
+  if (status === "false_positive") return "warning";
+  return "info";
+}
+
+function videoStatusTagType(status: string): "success" | "warning" | "danger" | "info" {
+  if (status === "ready") return "success";
+  if (status === "recording" || status === "pending") return "warning";
+  if (status === "failed") return "danger";
+  return "info";
+}
+
 const fpReasonOptions = computed(() => [
   { value: "lighting", label: t("aegis.alarms.fpLighting") },
   { value: "occlusion", label: t("aegis.alarms.fpOcclusion") },
@@ -84,7 +127,7 @@ const drawerVisible = ref(false);
 const selectedAlarm = ref<AlarmItem | null>(null);
 const deliveries = ref<AlarmDeliveryItem[]>([]);
 const snapshotContainerRef = ref<HTMLElement | null>(null);
-const snapshotContainerSize = reactive({ width: 640, height: 288 });
+const snapshotContainerSize = reactive({ width: 640, height: 360 });
 const snapshotNaturalSize = reactive({ width: 1920, height: 1080 });
 let snapshotResizeObserver: ResizeObserver | null = null;
 
@@ -141,6 +184,22 @@ async function loadData() {
   } finally {
     loading.value = false;
   }
+}
+
+function searchNow() {
+  query.page = 1;
+  void loadData();
+}
+
+function resetFilters() {
+  query.zone_id = "";
+  query.camera_id = "";
+  query.rule_mode = "";
+  query.severity = "";
+  query.handle_status = "";
+  query.keyword = "";
+  query.page = 1;
+  void loadData();
 }
 
 function onSelectionChange(rows: AlarmItem[]) {
@@ -272,46 +331,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="p-4 flex flex-col gap-4">
-    <el-card shadow="never">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div class="flex flex-wrap items-center gap-2">
-          <el-select v-model="query.zone_id" clearable :placeholder="t('aegis.alarms.zone')" class="w-44">
-            <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
-          </el-select>
-          <el-select v-model="query.camera_id" clearable :placeholder="t('aegis.alarms.camera')" class="w-44">
-            <el-option v-for="c in cameras" :key="c.id" :label="c.name" :value="c.id" />
-          </el-select>
-          <el-select v-model="query.rule_mode" clearable :placeholder="t('aegis.alarms.ruleMode')" class="w-40">
-            <el-option label="anomaly_detect" value="anomaly_detect" />
-            <el-option label="count_threshold" value="count_threshold" />
-            <el-option label="absence_detect" value="absence_detect" />
-            <el-option label="sop_sequence" value="sop_sequence" />
-          </el-select>
-          <el-select v-model="query.severity" clearable :placeholder="t('aegis.alarms.severity')" class="w-32">
-            <el-option label="critical" value="critical" />
-            <el-option label="warning" value="warning" />
-            <el-option label="info" value="info" />
-          </el-select>
-          <el-select v-model="query.handle_status" clearable :placeholder="t('aegis.alarms.handleStatus')" class="w-36">
-            <el-option label="unhandled" value="unhandled" />
-            <el-option label="confirmed" value="confirmed" />
-            <el-option label="false_positive" value="false_positive" />
-            <el-option label="ignored" value="ignored" />
-          </el-select>
-          <el-input
-            v-model="query.keyword"
-            clearable
-            :placeholder="t('aegis.alarms.keyword')"
-            class="w-44"
-            @keyup.enter="query.page = 1; loadData()"
-          />
-          <el-button type="primary" @click="query.page = 1; loadData()">
-            {{ t("aegis.common.refresh") }}
-          </el-button>
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h1 class="aegis-page-title">{{ t("menus.aegisAlarms") }}</h1>
         </div>
-
-        <div class="flex flex-wrap gap-2">
+        <div class="aegis-header-actions">
           <el-button
             v-if="allowHandle"
             type="warning"
@@ -328,54 +354,166 @@ onMounted(async () => {
             {{ t("aegis.alarms.exportZip") }}
           </el-button>
         </div>
+      </header>
+
+      <div class="aegis-filter-bar">
+        <el-select
+          v-model="query.zone_id"
+          clearable
+          :placeholder="t('aegis.alarms.zone')"
+          style="width: 175px"
+          @change="searchNow"
+        >
+          <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
+        </el-select>
+        <el-select
+          v-model="query.camera_id"
+          clearable
+          filterable
+          :placeholder="t('aegis.alarms.camera')"
+          style="width: 175px"
+          @change="searchNow"
+        >
+          <el-option v-for="c in cameras" :key="c.id" :label="c.name" :value="c.id" />
+        </el-select>
+        <el-select
+          v-model="query.rule_mode"
+          clearable
+          :placeholder="t('aegis.alarms.ruleMode')"
+          style="width: 155px"
+          @change="searchNow"
+        >
+          <el-option label="anomaly_detect" value="anomaly_detect" />
+          <el-option label="count_threshold" value="count_threshold" />
+          <el-option label="absence_detect" value="absence_detect" />
+          <el-option label="sop_sequence" value="sop_sequence" />
+        </el-select>
+        <el-select
+          v-model="query.severity"
+          clearable
+          :placeholder="t('aegis.alarms.severity')"
+          style="width: 120px"
+          @change="searchNow"
+        >
+          <el-option label="critical" value="critical" />
+          <el-option label="warning" value="warning" />
+          <el-option label="info" value="info" />
+        </el-select>
+        <el-select
+          v-model="query.handle_status"
+          clearable
+          :placeholder="t('aegis.alarms.handleStatus')"
+          style="width: 140px"
+          @change="searchNow"
+        >
+          <el-option label="unhandled" value="unhandled" />
+          <el-option label="confirmed" value="confirmed" />
+          <el-option label="false_positive" value="false_positive" />
+          <el-option label="ignored" value="ignored" />
+        </el-select>
+        <el-input
+          v-model="query.keyword"
+          clearable
+          :placeholder="t('aegis.alarms.keyword')"
+          style="width: 185px"
+          @keyup.enter="searchNow"
+        />
+        <div class="aegis-filter-bar__end">
+          <el-button @click="resetFilters">{{ t("aegis.common.reset") }}</el-button>
+          <el-button type="primary" @click="searchNow">
+            {{ t("aegis.common.refresh") }}
+          </el-button>
+        </div>
       </div>
 
-      <el-table
-        v-loading="loading"
-        :data="alarms"
-        border
-        stripe
-        @selection-change="onSelectionChange"
-      >
-        <el-table-column type="selection" width="46" />
-        <el-table-column prop="title" :label="t('aegis.alarms.title')" min-width="200" />
-        <el-table-column prop="rule_mode" :label="t('aegis.alarms.ruleMode')" width="135" />
-        <el-table-column prop="severity" :label="t('aegis.alarms.severity')" width="95">
-          <template #default="{ row }">
-            <el-tag :type="row.severity === 'critical' ? 'danger' : row.severity === 'warning' ? 'warning' : 'info'" size="small">
-              {{ row.severity }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.alarms.handleStatus')" width="150">
-          <template #default="{ row }">
-            <div>{{ row.handle_status }}</div>
-            <div v-if="row.false_positive_reason" class="text-[11px] text-zinc-400">
-              {{ row.false_positive_reason }}
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="video_status" :label="t('aegis.alarms.videoStatus')" width="110" />
-        <el-table-column prop="triggered_at" :label="t('aegis.alarms.triggeredAt')" width="190" />
-        <el-table-column :label="t('aegis.common.actions')" width="110" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openDetail(row)">
-              {{ t("aegis.alarms.detail") }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table
+          v-loading="loading"
+          :data="alarms"
+          height="100%"
+          border
+          stripe
+          @selection-change="onSelectionChange"
+        >
+          <el-table-column type="selection" width="46" />
+          <el-table-column
+            prop="title"
+            :label="t('aegis.alarms.title')"
+            min-width="200"
+            show-overflow-tooltip
+          />
+          <el-table-column :label="t('aegis.alarms.camera')" min-width="165" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div class="truncate font-medium">{{ resolveCameraName(row) }}</div>
+              <div v-if="resolveZoneName(row)" class="text-[11px] text-zinc-400 truncate">
+                {{ resolveZoneName(row) }}
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="rule_mode" :label="t('aegis.alarms.ruleMode')" width="142">
+            <template #default="{ row }">
+              <el-tag
+                size="small"
+                :type="row.rule_mode === 'sop_sequence' ? 'warning' : 'info'"
+                effect="plain"
+              >
+                {{ row.rule_mode }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="severity" :label="t('aegis.alarms.severity')" width="96">
+            <template #default="{ row }">
+              <el-tag :type="severityTagType(row.severity)" size="small">
+                {{ row.severity }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.alarms.handleStatus')" width="150">
+            <template #default="{ row }">
+              <div class="flex flex-col items-start gap-0.5">
+                <el-tag :type="handleStatusTagType(row.handle_status)" size="small">
+                  {{ row.handle_status }}
+                </el-tag>
+                <span v-if="row.false_positive_reason" class="text-[11px] text-zinc-400">
+                  {{ row.false_positive_reason }}
+                </span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.alarms.videoStatus')" width="110">
+            <template #default="{ row }">
+              <el-tag :type="videoStatusTagType(row.video_status)" size="small" effect="plain">
+                {{ row.video_status || "none" }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.alarms.triggeredAt')" width="170">
+            <template #default="{ row }">
+              <span class="aegis-tabular">{{ formatDateTime(row.triggered_at) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.actions')" width="96" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openDetail(row)">
+                {{ t("aegis.alarms.detail") }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
-      <div class="mt-4 flex justify-end">
+      <div class="aegis-pagination">
         <el-pagination
           v-model:current-page="query.page"
           v-model:page-size="query.page_size"
+          :page-sizes="[20, 50, 100]"
           :total="total"
-          layout="total, prev, pager, next"
+          layout="total, sizes, prev, pager, next"
           @current-change="loadData"
+          @size-change="searchNow"
         />
       </div>
-    </el-card>
+    </section>
 
     <!-- Batch Handle Modal -->
     <el-dialog v-model="batchDialogVisible" :title="t('aegis.alarms.batchHandle')" width="460px">
@@ -403,22 +541,56 @@ onMounted(async () => {
     </el-dialog>
 
     <!-- Detail Drawer -->
-    <el-drawer v-model="drawerVisible" :title="t('aegis.alarms.detail')" size="50%">
+    <el-drawer v-model="drawerVisible" :title="t('aegis.alarms.detail')" size="52%">
       <template v-if="selectedAlarm">
         <div class="flex flex-col gap-4">
-          <div class="font-semibold">{{ selectedAlarm.title }}</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="font-semibold text-base">{{ selectedAlarm.title }}</div>
+            <el-tag :type="severityTagType(selectedAlarm.severity)" size="small">
+              {{ selectedAlarm.severity }}
+            </el-tag>
+          </div>
+
+          <el-descriptions :column="2" size="small" border>
+            <el-descriptions-item :label="t('aegis.alarms.camera')">
+              {{ resolveCameraName(selectedAlarm) }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('aegis.alarms.zone')">
+              {{ resolveZoneName(selectedAlarm) || "—" }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('aegis.alarms.ruleMode')">
+              {{ selectedAlarm.rule_mode }}
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('aegis.alarms.triggeredAt')">
+              <span class="aegis-tabular">{{ formatDateTime(selectedAlarm.triggered_at) }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('aegis.alarms.handleStatus')">
+              <el-tag :type="handleStatusTagType(selectedAlarm.handle_status)" size="small">
+                {{ selectedAlarm.handle_status }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('aegis.alarms.videoStatus')">
+              <el-tag :type="videoStatusTagType(selectedAlarm.video_status)" size="small" effect="plain">
+                {{ selectedAlarm.video_status || "none" }}
+              </el-tag>
+            </el-descriptions-item>
+          </el-descriptions>
 
           <div v-if="selectedAlarm.image_object_key">
-            <div class="text-xs text-zinc-500 mb-1">{{ t("aegis.alarms.snapshot") }}</div>
-            <div ref="snapshotContainerRef" class="relative w-full h-72 bg-black rounded overflow-hidden">
+            <div class="text-xs text-zinc-500 mb-1.5 font-medium">{{ t("aegis.alarms.snapshot") }}</div>
+            <div
+              ref="snapshotContainerRef"
+              class="relative w-full aspect-video bg-[#0b1120] rounded-md overflow-hidden"
+            >
               <img
                 :src="evidenceImageURL(selectedAlarm.id)"
+                :alt="selectedAlarm.title"
                 class="w-full h-full object-contain"
                 @load="onSnapshotLoad"
               />
               <CanvasOverlay
                 :container-width="snapshotContainerSize.width || 640"
-                :container-height="snapshotContainerSize.height || 288"
+                :container-height="snapshotContainerSize.height || 360"
                 :video-width="snapshotNaturalSize.width"
                 :video-height="snapshotNaturalSize.height"
                 :visible="true"
@@ -443,10 +615,12 @@ onMounted(async () => {
           </div>
 
           <div v-if="selectedAlarm.video_status === 'ready'">
-            <div class="text-xs text-zinc-500 mb-1">{{ t("aegis.alarms.videoClip") }}</div>
+            <div class="text-xs text-zinc-500 mb-1.5 font-medium">{{ t("aegis.alarms.videoClip") }}</div>
             <video
               controls
-              class="w-full max-h-72 bg-black rounded"
+              preload="metadata"
+              playsinline
+              class="w-full aspect-video bg-[#0b1120] rounded-md"
               :src="evidenceVideoURL(selectedAlarm.id)"
             />
           </div>
@@ -454,7 +628,7 @@ onMounted(async () => {
           <!-- SOP Violation Step Timeline -->
           <div
             v-if="selectedAlarm.rule_mode === 'sop_sequence' && selectedAlarm.sop_trace"
-            class="border rounded p-3 bg-amber-50/40 dark:bg-amber-950/20"
+            class="border rounded-md p-3 bg-amber-50/40 dark:bg-amber-950/20"
             data-test="sop-violation-timeline"
           >
             <div class="flex items-center justify-between mb-2">
@@ -463,8 +637,8 @@ onMounted(async () => {
                 <el-tag size="small" type="danger">
                   {{ selectedAlarm.sop_trace.violation_type }}
                 </el-tag>
-                <span class="text-zinc-500">
-                  {{ (selectedAlarm.sop_trace.duration_ms / 1000).toFixed(1) }}s
+                <span class="text-zinc-500 aegis-tabular">
+                  {{ formatDurationMs(selectedAlarm.sop_trace.duration_ms) }}
                 </span>
               </div>
             </div>
@@ -481,7 +655,13 @@ onMounted(async () => {
                         ? 'info'
                         : 'primary'
                 "
-                :timestamp="step.completed_at || (step.elapsed_ms ? `${(step.elapsed_ms / 1000).toFixed(1)}s` : '')"
+                :timestamp="
+                  step.completed_at
+                    ? formatDateTime(step.completed_at)
+                    : step.elapsed_ms
+                      ? formatDurationMs(step.elapsed_ms)
+                      : ''
+                "
               >
                 <div class="flex items-center gap-2 text-xs">
                   <span class="font-medium">#{{ idx + 1 }} {{ step.name }}</span>
@@ -502,7 +682,7 @@ onMounted(async () => {
             </el-timeline>
           </div>
 
-          <div v-if="allowHandle" class="border rounded p-3">
+          <div v-if="allowHandle" class="border rounded-md p-3">
             <div class="font-medium text-sm mb-2">{{ t("aegis.alarms.handle") }}</div>
             <el-form label-width="110px" size="small">
               <el-form-item :label="t('aegis.alarms.handleStatus')">
@@ -530,25 +710,36 @@ onMounted(async () => {
 
           <div>
             <div class="font-medium text-sm mb-2">{{ t("aegis.alarms.deliveries") }}</div>
-            <el-table :data="deliveries" size="small" border>
-              <el-table-column prop="channel_type" label="Type" width="90" />
-              <el-table-column prop="status" :label="t('aegis.common.status')" width="100" />
-              <el-table-column prop="attempts" label="Attempts" width="85" />
-              <el-table-column prop="last_status_code" label="HTTP" width="75" />
-              <el-table-column prop="last_error" label="Error" min-width="140" />
-              <el-table-column v-if="allowHandle" :label="t('aegis.common.actions')" width="110">
-                <template #default="{ row }">
-                  <el-button
-                    v-if="row.status !== 'success'"
-                    link
-                    type="primary"
-                    @click="onRetryDelivery(row.id)"
-                  >
-                    {{ t("aegis.alarms.retry") }}
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="aegis-table-wrap">
+              <el-table :data="deliveries" size="small" border>
+                <el-table-column prop="channel_type" label="Type" width="100" />
+                <el-table-column :label="t('aegis.common.status')" width="100">
+                  <template #default="{ row }">
+                    <el-tag
+                      size="small"
+                      :type="row.status === 'success' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'"
+                    >
+                      {{ row.status }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="attempts" label="Attempts" width="85" />
+                <el-table-column prop="last_status_code" label="HTTP" width="75" />
+                <el-table-column prop="last_error" label="Error" min-width="140" show-overflow-tooltip />
+                <el-table-column v-if="allowHandle" :label="t('aegis.common.actions')" width="100" fixed="right">
+                  <template #default="{ row }">
+                    <el-button
+                      v-if="row.status !== 'success'"
+                      link
+                      type="primary"
+                      @click="onRetryDelivery(row.id)"
+                    >
+                      {{ t("aegis.alarms.retry") }}
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
         </div>
       </template>

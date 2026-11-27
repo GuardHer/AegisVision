@@ -83,107 +83,117 @@ function healthTagType(status: string): "success" | "danger" | "info" {
 }
 
 onMounted(() => {
-  loadSettings();
-  loadHealth();
+  void loadSettings();
+  void loadHealth();
 });
 </script>
 
 <template>
-  <div class="p-4 space-y-4">
-    <el-row :gutter="16">
-      <el-col :xs="24" :lg="12">
-        <el-card shadow="never" v-loading="loadingSettings">
-          <template #header>
-            <div class="font-semibold">{{ t("aegis.settings.platformConfig") }}</div>
-          </template>
-          <el-form label-width="190px">
-            <el-form-item :label="t('aegis.settings.platformTitle')">
-              <el-input v-model="form.platform_title" />
-            </el-form-item>
-            <el-form-item :label="t('aegis.settings.defaultAlarmChime')">
-              <el-switch v-model="form.default_alarm_chime" />
-            </el-form-item>
-            <el-form-item :label="t('aegis.settings.popupMinSeverity')">
-              <el-select v-model="form.popup_min_severity" class="w-full">
-                <el-option label="info" value="info" />
-                <el-option label="warning" value="warning" />
-                <el-option label="critical" value="critical" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('aegis.settings.maxExportRows')">
-              <el-input-number v-model="form.max_export_rows" :min="10" :max="2000" :step="50" />
-            </el-form-item>
-            <el-form-item :label="t('aegis.settings.defaultTimezone')">
-              <el-select v-model="form.default_timezone" filterable allow-create class="w-full">
-                <el-option v-for="tz in commonTimezones" :key="tz" :label="tz" :value="tz" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button
-                type="primary"
-                :loading="savingSettings"
-                data-testid="save-settings-btn"
-                @click="saveSettings"
-              >
-                {{ t("aegis.common.save") }}
-              </el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
-      </el-col>
+  <div class="aegis-page">
+    <div class="settings-grid">
+      <section v-loading="loadingSettings" class="aegis-panel">
+        <header class="aegis-page-header">
+          <div class="aegis-page-title-group">
+            <h1 class="aegis-page-title">{{ t("aegis.settings.platformConfig") }}</h1>
+          </div>
+        </header>
 
-      <el-col :xs="24" :lg="12">
-        <el-card shadow="never" v-loading="loadingHealth">
-          <template #header>
-            <div class="flex items-center justify-between">
-              <span class="font-semibold">{{ t("aegis.settings.systemHealth") }}</span>
-              <el-button size="small" @click="loadHealth">{{ t("aegis.common.refresh") }}</el-button>
+        <el-form label-width="190px" size="default">
+          <el-form-item :label="t('aegis.settings.platformTitle')">
+            <el-input v-model="form.platform_title" />
+          </el-form-item>
+          <el-form-item :label="t('aegis.settings.defaultAlarmChime')">
+            <el-switch v-model="form.default_alarm_chime" />
+          </el-form-item>
+          <el-form-item :label="t('aegis.settings.popupMinSeverity')">
+            <el-select v-model="form.popup_min_severity" class="w-full">
+              <el-option label="info" value="info" />
+              <el-option label="warning" value="warning" />
+              <el-option label="critical" value="critical" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('aegis.settings.maxExportRows')">
+            <el-input-number v-model="form.max_export_rows" :min="10" :max="2000" :step="50" />
+          </el-form-item>
+          <el-form-item :label="t('aegis.settings.defaultTimezone')">
+            <el-select v-model="form.default_timezone" filterable allow-create class="w-full">
+              <el-option v-for="tz in commonTimezones" :key="tz" :label="tz" :value="tz" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-button
+              type="primary"
+              :loading="savingSettings"
+              data-testid="save-settings-btn"
+              @click="saveSettings"
+            >
+              {{ t("aegis.common.save") }}
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </section>
+
+      <section v-loading="loadingHealth" class="aegis-panel">
+        <header class="aegis-page-header">
+          <div class="aegis-page-title-group">
+            <h2 class="aegis-page-title">{{ t("aegis.settings.systemHealth") }}</h2>
+          </div>
+          <div class="aegis-header-actions">
+            <el-button size="small" @click="loadHealth">{{ t("aegis.common.refresh") }}</el-button>
+          </div>
+        </header>
+
+        <div v-if="health" class="space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div
+              v-for="comp in health.components"
+              :key="comp.name"
+              class="border border-[var(--el-border-color-lighter)] rounded-md p-3 flex items-center justify-between gap-2"
+            >
+              <div class="min-w-0">
+                <div class="font-medium text-sm uppercase truncate">{{ comp.name }}</div>
+                <div class="text-xs text-slate-400 truncate aegis-tabular">
+                  {{ comp.detail || "—" }} · {{ comp.latency_ms }}ms
+                </div>
+              </div>
+              <el-tag size="small" :type="healthTagType(comp.status)" class="shrink-0">
+                {{ comp.status }}
+              </el-tag>
             </div>
-          </template>
+          </div>
 
-          <div v-if="health" class="space-y-4">
-            <div class="grid grid-cols-2 gap-3">
-              <div
-                v-for="comp in health.components"
-                :key="comp.name"
-                class="border rounded p-3 flex items-center justify-between"
-              >
-                <div>
-                  <div class="font-medium text-sm uppercase">{{ comp.name }}</div>
-                  <div class="text-xs text-slate-400">
-                    {{ comp.detail || "-" }} · {{ comp.latency_ms }}ms
-                  </div>
-                </div>
-                <el-tag size="small" :type="healthTagType(comp.status)">
-                  {{ comp.status }}
-                </el-tag>
+          <el-divider content-position="left">{{ t("aegis.settings.clusterSummary") }}</el-divider>
+          <div class="grid grid-cols-3 gap-3 text-center">
+            <div class="border border-[var(--el-border-color-lighter)] rounded-md p-3">
+              <div class="text-xs text-slate-400">{{ t("aegis.dashboard.camerasOnline") }}</div>
+              <div class="text-xl font-bold mt-1 aegis-tabular">
+                {{ health.cluster.cameras_online }} / {{ health.cluster.cameras_total }}
               </div>
             </div>
-
-            <el-divider content-position="left">{{ t("aegis.settings.clusterSummary") }}</el-divider>
-            <div class="grid grid-cols-3 gap-3 text-center">
-              <div class="border rounded p-3">
-                <div class="text-xs text-slate-400">{{ t("aegis.dashboard.camerasOnline") }}</div>
-                <div class="text-xl font-bold mt-1">
-                  {{ health.cluster.cameras_online }} / {{ health.cluster.cameras_total }}
-                </div>
+            <div class="border border-[var(--el-border-color-lighter)] rounded-md p-3">
+              <div class="text-xs text-slate-400">{{ t("aegis.nodes.nodesTab") }}</div>
+              <div class="text-xl font-bold mt-1 aegis-tabular">
+                {{ health.cluster.nodes_online }} / {{ health.cluster.nodes_total }}
               </div>
-              <div class="border rounded p-3">
-                <div class="text-xs text-slate-400">{{ t("aegis.nodes.nodesTab") }}</div>
-                <div class="text-xl font-bold mt-1">
-                  {{ health.cluster.nodes_online }} / {{ health.cluster.nodes_total }}
-                </div>
-              </div>
-              <div class="border rounded p-3">
-                <div class="text-xs text-slate-400">{{ t("aegis.nodes.tasksTab") }}</div>
-                <div class="text-xl font-bold mt-1">
-                  {{ health.cluster.running_tasks }}
-                </div>
+            </div>
+            <div class="border border-[var(--el-border-color-lighter)] rounded-md p-3">
+              <div class="text-xs text-slate-400">{{ t("aegis.nodes.tasksTab") }}</div>
+              <div class="text-xl font-bold mt-1 aegis-tabular">
+                {{ health.cluster.running_tasks }}
               </div>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
+
+<style scoped lang="scss">
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 14px;
+  align-items: start;
+}
+</style>

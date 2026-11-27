@@ -121,7 +121,7 @@ service AlgorithmRuntime {
   - `GET/POST /api/v1/algorithms/:id/versions`、`PUT /api/v1/algorithm-versions/:version_id`（发布/弃用/修改默认参数）
 - **摄像头、流 Token、ROI 与规则**：
   - `GET/POST /api/v1/cameras`、`GET/PUT/DELETE /api/v1/cameras/:id`
-  - `POST /api/v1/cameras/:id/stream-token`（签发短期 WebRTC WHEP 播放 Token，写 Redis TTL 60s）
+  - `POST /api/v1/cameras/:id/stream-token`（签发短期播放 Token，写 Redis TTL 60s，同时返回 WebRTC `whep_url` 与 LL-HLS `hls_url` 供前端双模式预览，复用 `/internal/mediamtx/auth` 对 `webrtc` / `hls` 协议鉴权）
   - `GET/POST /api/v1/cameras/:id/rois`、`PUT/DELETE /api/v1/rois/:roi_id`
   - `GET/POST /api/v1/cameras/:id/rules`、`PUT/DELETE /api/v1/rules/:rule_id`
 - **算力节点与任务监控**：

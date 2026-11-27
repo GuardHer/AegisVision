@@ -108,7 +108,8 @@ func main() {
 		log.Warn("bootstrapped default admin account; change password immediately", "username", "admin")
 	}
 
-	mtxClient := mediamtx.New(cfg.MediaMTX.APIURL, cfg.MediaMTX.RTSPBaseURL, cfg.MediaMTX.WHEPBaseURL, nil)
+	mtxClient := mediamtx.New(cfg.MediaMTX.APIURL, cfg.MediaMTX.RTSPBaseURL, cfg.MediaMTX.WHEPBaseURL, nil).
+		WithHLSBaseURL(cfg.MediaMTX.HLSBaseURL)
 	tokenMgr := auth.NewTokenManager(cfg.Auth.JWTSecret, cfg.Auth.AccessTokenTTL)
 	signer := auth.NewEvidenceSigner(cfg.Auth.EvidenceSignSecret)
 
