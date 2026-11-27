@@ -22,6 +22,11 @@ describe("WhepPlayer industrial control", () => {
         stream: "main",
         showOverlay: true,
         closable: true
+      },
+      global: {
+        stubs: {
+          "el-button": { template: "<button><slot /></button>" }
+        }
       }
     });
 

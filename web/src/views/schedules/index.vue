@@ -168,12 +168,7 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('aegis.schedules.title')"
-      >
+      <div class="aegis-table-wrap">
         <el-table v-loading="loading" :data="schedules" border stripe>
           <el-table-column prop="name" :label="t('aegis.schedules.name')" min-width="165" show-overflow-tooltip />
           <el-table-column prop="timezone" :label="t('aegis.schedules.timezone')" width="145" />

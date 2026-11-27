@@ -153,12 +153,7 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('menus.aegisAlgorithms')"
-      >
+      <div class="aegis-table-wrap">
         <el-table v-loading="loading" :data="algorithms" border stripe row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
@@ -169,7 +164,7 @@ onMounted(loadData);
                     {{ t("aegis.algorithms.addVersion") }}
                   </el-button>
                 </div>
-                <div class="aegis-table-wrap" tabindex="0" role="region" :aria-label="t('aegis.algorithms.versions')">
+                <div class="aegis-table-wrap">
                   <el-table :data="versionsByAlgo[row.id] ?? []" size="small" border>
                     <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="110" />
                     <el-table-column prop="runtime_key" :label="t('aegis.algorithms.runtimeKey')" min-width="160" show-overflow-tooltip>

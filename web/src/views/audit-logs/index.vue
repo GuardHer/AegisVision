@@ -132,12 +132,7 @@ onMounted(loadData);
         </div>
       </div>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('aegis.auditLogs.title')"
-      >
+      <div class="aegis-table-wrap">
         <el-table v-loading="loading" :data="items" border stripe row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">

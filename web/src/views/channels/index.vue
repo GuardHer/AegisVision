@@ -250,12 +250,7 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('menus.aegisChannels')"
-      >
+      <div class="aegis-table-wrap">
         <el-table v-loading="loading" :data="channels" border stripe>
           <el-table-column prop="name" :label="t('aegis.channels.name')" min-width="150" show-overflow-tooltip />
           <el-table-column :label="t('aegis.channels.type')" width="150">

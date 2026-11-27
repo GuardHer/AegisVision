@@ -330,7 +330,7 @@ onBeforeUnmount(() => {
 
       <el-card shadow="never">
         <template #header><span class="font-medium text-sm">{{ t("aegis.analytics.algoPrecision") }}</span></template>
-        <div class="aegis-table-wrap" tabindex="0" role="region" :aria-label="t('aegis.analytics.algoPrecision')">
+        <div class="aegis-table-wrap">
           <el-table :data="summary.algo_precision" size="small" border stripe max-height="288">
             <el-table-column prop="algorithm_name" :label="t('aegis.algorithms.name')" min-width="130" show-overflow-tooltip />
             <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="85" />

@@ -1,21 +1,24 @@
-/* AegisVision Operate-Mode Enterprise Layout & Table System
- * Follows Impeccable Operate Mode + Modern Web Guidance (css-layout, responsive-table, accessibility)
+/* AegisVision page layout helpers
+ * Visual tokens follow Element Plus / pure-admin (el-card, el-table) so custom
+ * containers stay consistent with the rest of the admin template.
  */
 
 .aegis-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   padding: 16px;
-  min-inline-size: 0;
+  min-width: 0;
 }
 
+/* Same look as <el-card shadow="never"> */
 .aegis-panel {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
-  padding: 16px;
-  min-inline-size: 0;
+  min-width: 0;
+  padding: var(--el-card-padding, 20px);
+  color: var(--el-text-color-primary);
+  background: var(--el-card-bg-color, var(--el-bg-color-overlay));
+  border: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+  border-radius: var(--el-card-border-radius, 4px);
 }
 
 .aegis-page-header {
@@ -78,27 +81,17 @@
   margin-inline-start: auto;
 }
 
-/* Container-aware responsive table wrapper with stable scrollbar gutter & tabular numerals */
+/* Table wrapper: header colors match pure-admin's PureTable header-cell-style */
 .aegis-table-wrap {
-  container-type: inline-size;
-  inline-size: 100%;
-  min-inline-size: 0;
-  overflow-x: auto;
-  scrollbar-gutter: stable;
-  overscroll-behavior: contain;
+  width: 100%;
+  min-width: 0;
 
   .el-table {
     font-variant-numeric: tabular-nums;
 
     th.el-table__cell {
-      background-color: var(--el-fill-color-light) !important;
+      background-color: var(--el-fill-color-light);
       color: var(--el-text-color-primary);
-      font-weight: 600;
-      font-size: 12.5px;
-    }
-
-    td.el-table__cell {
-      font-size: 13px;
     }
   }
 }
@@ -180,15 +173,6 @@
   min-inline-size: 0;
 }
 
-/* Accessible focus-visible indicator for native controls inside AegisVision surfaces */
-.aegis-page :where(button, a, [tabindex="0"]):focus-visible,
-.aegis-whep-player :where(button, select, input):focus-visible {
-  outline: 2px solid var(--el-color-primary);
-  outline-offset: 2px;
-}
-
 .aegis-scroll-region {
   overflow-y: auto;
-  scrollbar-gutter: stable;
-  overscroll-behavior: contain;
 }

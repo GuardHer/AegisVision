@@ -426,12 +426,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('menus.aegisAlarms')"
-      >
+      <div class="aegis-table-wrap">
         <el-table
           v-loading="loading"
           :data="alarms"
@@ -714,7 +709,7 @@ onMounted(async () => {
 
           <div>
             <div class="font-medium text-sm mb-2">{{ t("aegis.alarms.deliveries") }}</div>
-            <div class="aegis-table-wrap" tabindex="0" role="region" :aria-label="t('aegis.alarms.deliveries')">
+            <div class="aegis-table-wrap">
               <el-table :data="deliveries" size="small" border>
                 <el-table-column prop="channel_type" label="Type" width="100" />
                 <el-table-column :label="t('aegis.common.status')" width="100">

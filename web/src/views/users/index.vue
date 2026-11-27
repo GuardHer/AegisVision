@@ -182,12 +182,7 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('menus.aegisUsers')"
-      >
+      <div class="aegis-table-wrap">
         <el-table v-loading="loading" :data="users" border stripe>
           <el-table-column prop="username" :label="t('aegis.users.username')" width="145" show-overflow-tooltip>
             <template #default="{ row }">

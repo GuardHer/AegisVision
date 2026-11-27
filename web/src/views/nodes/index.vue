@@ -97,7 +97,7 @@ onMounted(loadData);
 
       <el-tabs v-model="activeTab">
         <el-tab-pane :label="`${t('aegis.nodes.nodesTab')} (${nodes.length})`" name="nodes">
-          <div class="aegis-table-wrap" tabindex="0" role="region" :aria-label="t('aegis.nodes.nodesTab')">
+          <div class="aegis-table-wrap">
             <el-table v-loading="loading" :data="nodes" border stripe>
               <el-table-column prop="node_id" :label="t('aegis.nodes.nodeId')" min-width="150" show-overflow-tooltip>
                 <template #default="{ row }">
@@ -198,7 +198,7 @@ onMounted(loadData);
         </el-tab-pane>
 
         <el-tab-pane :label="`${t('aegis.nodes.tasksTab')} (${tasks.length})`" name="tasks">
-          <div class="aegis-table-wrap" tabindex="0" role="region" :aria-label="t('aegis.nodes.tasksTab')">
+          <div class="aegis-table-wrap">
             <el-table v-loading="loading" :data="tasks" border stripe>
               <el-table-column label="Task ID" width="140">
                 <template #default="{ row }">

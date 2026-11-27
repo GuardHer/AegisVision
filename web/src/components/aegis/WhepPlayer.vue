@@ -2,6 +2,20 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { createStreamToken } from "@/api/aegis";
+import { useRenderIcon } from "@/components/ReIcon/src/hooks";
+import Close from "~icons/ep/close";
+import Refresh from "~icons/ep/refresh";
+import ZoomIn from "~icons/ep/zoom-in";
+import Camera from "~icons/ep/camera";
+import DataLine from "~icons/ep/data-line";
+import PauseLine from "~icons/ri/pause-line";
+import PlayLine from "~icons/ri/play-line";
+import VolumeMuteLine from "~icons/ri/volume-mute-line";
+import VolumeUpLine from "~icons/ri/volume-up-line";
+import Focus3Line from "~icons/ri/focus-3-line";
+import PictureInPicture from "~icons/ri/picture-in-picture-2-line";
+import FullscreenFill from "~icons/ri/fullscreen-fill";
+import FullscreenExitFill from "~icons/ri/fullscreen-exit-fill";
 
 export type PlayerState = "connecting" | "playing" | "reconnecting" | "paused" | "error";
 
@@ -450,19 +464,16 @@ defineExpose({
       </div>
 
       <div class="aegis-whep-top-actions">
-        <button
+        <el-button
           v-if="closable"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn"
-          :aria-label="t('aegis.player.closeSlot')"
+          :icon="useRenderIcon(Close)"
           :title="t('aegis.player.closeSlot')"
           data-test="player-close"
           @click.stop="emit('close')"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
-          </svg>
-        </button>
+        />
       </div>
     </div>
 
@@ -502,15 +513,16 @@ defineExpose({
         <div v-if="lastError" class="text-[11px] text-slate-300 max-w-[220px] truncate" :title="lastError">
           {{ lastError }}
         </div>
-        <button
+        <el-button
           v-if="status === 'error' || status === 'reconnecting'"
-          type="button"
-          class="aegis-retry-btn"
+          type="primary"
+          size="small"
+          :icon="useRenderIcon(Refresh)"
           data-test="player-reconnect"
           @click.stop="manualReconnect"
         >
           {{ t("aegis.player.retryNow") }}
-        </button>
+        </el-button>
       </div>
     </div>
 
@@ -523,178 +535,136 @@ defineExpose({
     >
       <div class="aegis-whep-controls__group">
         <!-- Pause / Resume -->
-        <button
-          type="button"
+        <el-button
+          size="small"
+          circle
           class="aegis-hud-btn"
-          :aria-label="isPaused ? t('aegis.player.resume') : t('aegis.player.pause')"
+          :icon="useRenderIcon(isPaused ? PlayLine : PauseLine)"
           :title="isPaused ? t('aegis.player.resume') : t('aegis.player.pause')"
-          :aria-pressed="isPaused"
           data-test="player-pause"
           @click="togglePause"
-        >
-          <svg v-if="isPaused" aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="currentColor" d="M8 5v14l11-7z" />
-          </svg>
-          <svg v-else aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="currentColor" d="M6 5h4v14H6zm8 0h4v14h-4z" />
-          </svg>
-        </button>
+        />
 
         <!-- Mute / Unmute -->
-        <button
+        <el-button
           v-if="controls === 'full'"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn"
-          :aria-label="isMuted ? t('aegis.player.unmute') : t('aegis.player.mute')"
+          :icon="useRenderIcon(isMuted ? VolumeMuteLine : VolumeUpLine)"
           :title="isMuted ? t('aegis.player.unmute') : t('aegis.player.mute')"
-          :aria-pressed="!isMuted"
           data-test="player-mute"
           @click="toggleMute"
-        >
-          <svg v-if="isMuted" aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6" />
-          </svg>
-          <svg v-else aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" />
-          </svg>
-        </button>
+        />
 
         <!-- Manual Reconnect -->
-        <button
-          type="button"
+        <el-button
+          size="small"
+          circle
           class="aegis-hud-btn"
-          :aria-label="t('aegis.player.retryNow')"
+          :icon="useRenderIcon(Refresh)"
           :title="t('aegis.player.retryNow')"
           @click="manualReconnect"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-          </svg>
-        </button>
+        />
 
         <!-- Stream Quality Switch (HD / SD) -->
-        <button
+        <el-button
           v-if="controls === 'full'"
-          type="button"
-          class="aegis-hud-pill"
-          :aria-label="stream === 'main' ? t('aegis.player.mainStream') : t('aegis.player.subStream')"
+          size="small"
+          round
+          class="aegis-hud-btn aegis-hud-pill"
           :title="stream === 'main' ? t('aegis.player.mainStream') : t('aegis.player.subStream')"
           data-test="player-stream-toggle"
           @click="toggleStream"
         >
           {{ stream === "main" ? "HD" : "SD" }}
-        </button>
+        </el-button>
       </div>
 
       <div class="aegis-whep-controls__group">
         <!-- Digital Zoom -->
-        <button
+        <el-button
           v-if="controls === 'full'"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn aegis-hud-secondary"
           :class="{ 'is-active': zoom > 1 }"
-          :aria-label="t('aegis.player.zoomIn')"
+          :icon="useRenderIcon(ZoomIn)"
           :title="t('aegis.player.zoomIn')"
           data-test="player-zoom"
           @click="cycleZoom"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.35-4.35M11 8v6M8 11h6" />
-          </svg>
-        </button>
+        />
 
-        <button
+        <el-button
           v-if="controls === 'full' && zoom > 1"
-          type="button"
-          class="aegis-hud-pill"
-          :aria-label="t('aegis.player.zoomReset')"
+          size="small"
+          round
+          class="aegis-hud-btn aegis-hud-pill"
           :title="t('aegis.player.zoomReset')"
           @click="resetZoom"
         >
           1×
-        </button>
+        </el-button>
 
         <!-- AI Overlay Toggle -->
-        <button
+        <el-button
           v-if="controls === 'full'"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn"
           :class="{ 'is-active': showOverlay }"
-          :aria-label="t('aegis.player.overlayToggle')"
+          :icon="useRenderIcon(Focus3Line)"
           :title="t('aegis.player.overlayToggle')"
-          :aria-pressed="showOverlay"
           data-test="player-overlay-toggle"
           @click="emit('update:showOverlay', !showOverlay)"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4M9 9h6v6H9z" />
-          </svg>
-        </button>
+        />
 
         <!-- Snapshot -->
-        <button
+        <el-button
           v-if="controls === 'full'"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn"
-          :aria-label="t('aegis.player.snapshot')"
+          :icon="useRenderIcon(Camera)"
           :title="t('aegis.player.snapshot')"
           data-test="player-snapshot"
           @click="emit('snapshot', videoRef)"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-            <circle cx="12" cy="13" r="4" fill="none" stroke="currentColor" stroke-width="2" />
-          </svg>
-        </button>
+        />
 
         <!-- Stream Stats HUD Toggle -->
-        <button
-          type="button"
+        <el-button
+          size="small"
+          circle
           class="aegis-hud-btn aegis-hud-secondary"
           :class="{ 'is-active': showStats }"
-          :aria-label="t('aegis.player.statsHud')"
+          :icon="useRenderIcon(DataLine)"
           :title="t('aegis.player.statsHud')"
-          :aria-pressed="showStats"
           data-test="player-stats-toggle"
           @click="showStats = !showStats"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 20V10m6 10V4m6 16v-8m4 8H2" />
-          </svg>
-        </button>
+        />
 
         <!-- Picture-in-Picture -->
-        <button
+        <el-button
           v-if="controls === 'full' && pipSupported"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn aegis-hud-secondary"
-          :aria-label="t('aegis.player.pip')"
+          :icon="useRenderIcon(PictureInPicture)"
           :title="t('aegis.player.pip')"
           @click="togglePiP"
-        >
-          <svg aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2" />
-            <rect x="12" y="11" width="7" height="6" rx="1" fill="currentColor" />
-          </svg>
-        </button>
+        />
 
         <!-- Fullscreen -->
-        <button
+        <el-button
           v-if="controls === 'full'"
-          type="button"
+          size="small"
+          circle
           class="aegis-hud-btn"
-          :aria-label="isFullscreen ? t('aegis.player.exitFullscreen') : t('aegis.player.fullscreen')"
+          :icon="useRenderIcon(isFullscreen ? FullscreenExitFill : FullscreenFill)"
           :title="isFullscreen ? t('aegis.player.exitFullscreen') : t('aegis.player.fullscreen')"
           data-test="player-fullscreen"
           @click="toggleFullscreen"
-        >
-          <svg v-if="!isFullscreen" aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3" />
-          </svg>
-          <svg v-else aria-hidden="true" viewBox="0 0 24 24" class="aegis-hud-icon">
-            <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 3v3a2 2 0 01-2 2H3m18 0h-3a2 2 0 01-2-2V3m0 18v-3a2 2 0 012-2h3M3 16h3a2 2 0 012 2v3" />
-          </svg>
-        </button>
+        />
       </div>
     </div>
   </div>
@@ -885,23 +855,6 @@ defineExpose({
   }
 }
 
-.aegis-retry-btn {
-  padding: 4px 12px;
-  min-block-size: 28px;
-  border-radius: 5px;
-  border: 1px solid rgb(56 189 248 / 50%);
-  background: rgb(2 132 199 / 85%);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 150ms ease;
-}
-
-.aegis-retry-btn:hover {
-  background: #0284c7;
-}
-
 .aegis-whep-controls {
   position: absolute;
   inset-block-end: 0;
@@ -928,46 +881,35 @@ defineExpose({
   gap: 4px;
 }
 
-.aegis-hud-btn,
-.aegis-hud-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: 28px;
-  min-block-size: 28px;
-  border: 0;
-  border-radius: 5px;
-  background: rgb(15 23 42 / 55%);
-  color: #f1f5f9;
-  cursor: pointer;
-  transition: background 150ms ease, color 150ms ease;
+/* Element Plus buttons themed for dark video HUD (keeps pure-admin el-button semantics) */
+.aegis-hud-btn.el-button {
+  --el-button-text-color: #f1f5f9;
+  --el-button-bg-color: rgb(15 23 42 / 55%);
+  --el-button-border-color: transparent;
+  --el-button-hover-text-color: #fff;
+  --el-button-hover-bg-color: rgb(255 255 255 / 22%);
+  --el-button-hover-border-color: transparent;
+  --el-button-active-text-color: #fff;
+  --el-button-active-bg-color: rgb(255 255 255 / 30%);
+  --el-button-active-border-color: transparent;
+
+  margin-left: 0;
 }
 
-.aegis-hud-pill {
-  padding-inline: 7px;
+.aegis-hud-btn.el-button.is-active {
+  --el-button-bg-color: var(--el-color-primary);
+  --el-button-hover-bg-color: var(--el-color-primary-light-3);
+  --el-button-active-bg-color: var(--el-color-primary-dark-2);
+}
+
+.aegis-hud-pill.el-button {
+  padding-inline: 8px;
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.aegis-hud-btn:hover,
-.aegis-hud-pill:hover {
-  background: rgb(255 255 255 / 22%);
-  color: #fff;
-}
-
-.aegis-hud-btn.is-active {
-  background: rgb(14 165 233 / 80%);
-  color: #fff;
-}
-
-.aegis-hud-icon {
-  inline-size: 15px;
-  block-size: 15px;
-  display: block;
-}
-
-/* Container-aware compact mode for 9-grid / 16-grid narrow tiles */
+/* Compact mode for 9-grid / 16-grid narrow tiles */
 @container player (inline-size < 320px) {
   .aegis-whep-code,
   .aegis-whep-live-tag,
@@ -977,12 +919,6 @@ defineExpose({
 
   .aegis-whep-controls {
     padding: 12px 5px 4px;
-  }
-
-  .aegis-hud-btn,
-  .aegis-hud-pill {
-    min-inline-size: 24px;
-    min-block-size: 24px;
   }
 }
 

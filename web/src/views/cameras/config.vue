@@ -26,6 +26,8 @@ import {
 import type { NormalizedPoint } from "@/utils/videoRect";
 import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import RoiEditor from "@/components/aegis/RoiEditor.vue";
+import { useRenderIcon } from "@/components/ReIcon/src/hooks";
+import Back from "~icons/ep/back";
 
 defineOptions({ name: "AegisCameraConfig" });
 
@@ -486,8 +488,8 @@ onBeforeUnmount(() => {
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <div class="flex flex-wrap items-center gap-2">
-            <el-button size="small" @click="router.push('/cameras/index')">
-              ← {{ t("aegis.common.back") }}
+            <el-button size="small" :icon="useRenderIcon(Back)" @click="router.push('/cameras/index')">
+              {{ t("aegis.common.back") }}
             </el-button>
             <h1 class="aegis-page-title">
               {{ camera?.name || cameraId }} — {{ t("aegis.cameras.roiSection") }}
@@ -553,12 +555,7 @@ onBeforeUnmount(() => {
           <div class="text-xs font-semibold text-zinc-500">
             {{ t("aegis.cameras.roiSection") }} ({{ rois.length }})
           </div>
-          <div
-            class="aegis-table-wrap"
-            tabindex="0"
-            role="region"
-            :aria-label="t('aegis.cameras.roiSection')"
-          >
+          <div class="aegis-table-wrap">
             <el-table :data="rois" size="small" border stripe>
               <el-table-column prop="name" label="ROI" min-width="115" show-overflow-tooltip />
               <el-table-column :label="t('aegis.cameras.roiColor')" width="64" align="center">
@@ -600,12 +597,7 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <div
-        class="aegis-table-wrap"
-        tabindex="0"
-        role="region"
-        :aria-label="t('aegis.cameras.ruleSection')"
-      >
+      <div class="aegis-table-wrap">
         <el-table :data="rules" size="small" border stripe>
           <el-table-column prop="name" :label="t('aegis.cameras.ruleName')" min-width="160" show-overflow-tooltip />
           <el-table-column :label="t('aegis.cameras.roi')" min-width="120" show-overflow-tooltip>

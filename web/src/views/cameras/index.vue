@@ -18,6 +18,10 @@ import {
   type ZoneTreeNode
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
+import { useRenderIcon } from "@/components/ReIcon/src/hooks";
+import Plus from "~icons/ep/plus";
+import EditPen from "~icons/ep/edit-pen";
+import Delete from "~icons/ep/delete";
 
 defineOptions({ name: "AegisCameras" });
 
@@ -355,33 +359,30 @@ onMounted(loadAll);
                   <span class="text-zinc-400 aegis-tabular">({{ data.online_camera_count }}/{{ data.camera_count }})</span>
                 </span>
                 <span class="zone-tree-row__actions">
-                  <button
-                    type="button"
-                    class="zone-action-btn"
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :icon="useRenderIcon(Plus)"
                     :title="t('aegis.cameras.addChildZone')"
-                    :aria-label="t('aegis.cameras.addChildZone')"
                     @click.stop="openCreateZone(data.id)"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    class="zone-action-btn"
+                  />
+                  <el-button
+                    link
+                    type="primary"
+                    size="small"
+                    :icon="useRenderIcon(EditPen)"
                     :title="t('aegis.common.edit')"
-                    :aria-label="t('aegis.common.edit')"
                     @click.stop="openEditZone(data)"
-                  >
-                    {{ t("aegis.common.edit") }}
-                  </button>
-                  <button
-                    type="button"
-                    class="zone-action-btn zone-action-btn--danger"
+                  />
+                  <el-button
+                    link
+                    type="danger"
+                    size="small"
+                    :icon="useRenderIcon(Delete)"
                     :title="t('aegis.common.delete')"
-                    :aria-label="t('aegis.common.delete')"
                     @click.stop="onDeleteZone(data)"
-                  >
-                    {{ t("aegis.common.delete") }}
-                  </button>
+                  />
                 </span>
               </div>
             </template>
@@ -439,12 +440,7 @@ onMounted(loadAll);
           </div>
         </div>
 
-        <div
-          class="aegis-table-wrap"
-          tabindex="0"
-          role="region"
-          :aria-label="t('menus.aegisCameras')"
-        >
+        <div class="aegis-table-wrap">
           <el-table
             v-loading="loading"
             :data="filteredCameras"
@@ -643,34 +639,11 @@ onMounted(loadAll);
   transition: opacity 150ms ease;
 }
 
-.zone-tree-row:hover .zone-tree-row__actions,
-.zone-tree-row:focus-within .zone-tree-row__actions {
+.zone-tree-row:hover .zone-tree-row__actions {
   opacity: 1;
 }
 
-.zone-action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-block-size: 24px;
-  padding: 0 4px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--el-color-primary);
-  font-size: 11px;
-  cursor: pointer;
-
-  &:hover {
-    background: var(--el-color-primary-light-9);
-  }
-}
-
-.zone-action-btn--danger {
-  color: var(--el-color-danger);
-
-  &:hover {
-    background: var(--el-color-danger-light-9);
-  }
+.zone-tree-row__actions .el-button + .el-button {
+  margin-left: 2px;
 }
 </style>
