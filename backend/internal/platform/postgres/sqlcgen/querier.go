@@ -34,6 +34,7 @@ type Querier interface {
 	CreateMonitorPreset(ctx context.Context, arg CreateMonitorPresetParams) (MonitorPreset, error)
 	CreateROIAlgorithmRule(ctx context.Context, arg CreateROIAlgorithmRuleParams) (RoiAlgorithmRule, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
+	CreateSOPCycle(ctx context.Context, arg CreateSOPCycleParams) (SopCycle, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateZone(ctx context.Context, arg CreateZoneParams) (Zone, error)
 	DeleteAlarmChannel(ctx context.Context, id uuid.UUID) error

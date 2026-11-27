@@ -132,8 +132,35 @@ func (r *PostgresRepo) CreateAlarmIdempotent(ctx context.Context, alarm Persiste
 			ImageObjectKey:     alarm.ImageObjectKey,
 			VideoObjectKey:     "",
 			VideoStatus:        alarm.VideoStatus,
+			SopTrace:           alarm.SOPTrace,
 		}); err != nil {
 			return err
+		}
+
+		if alarm.RuleMode == domain.RuleModeSOPSequence && alarm.RuleID.Valid {
+			startedAt := alarm.SOPStartedAt
+			if startedAt.IsZero() {
+				startedAt = alarm.TriggeredAt
+			}
+			durMs := alarm.SOPDurationMs
+			if durMs < 0 {
+				durMs = 0
+			}
+			if _, sopErr := q.CreateSOPCycle(ctx, sqlcgen.CreateSOPCycleParams{
+				ID:                 uuid.Must(uuid.NewV7()),
+				RuleID:             alarm.RuleID.UUID,
+				CameraID:           alarm.CameraID,
+				ZoneID:             zoneID,
+				AlgorithmVersionID: alarm.AlgorithmVersionID,
+				Outcome:            domain.SOPOutcomeViolated,
+				ViolationType:      alarm.ViolationType,
+				AlarmID:            uuid.NullUUID{UUID: alarm.ID, Valid: true},
+				StartedAt:          startedAt,
+				EndedAt:            alarm.TriggeredAt,
+				DurationMs:         int32(min(durMs, 2147483647)), // #nosec G115 -- bounded int32 ms
+			}); sopErr != nil {
+				return sopErr
+			}
 		}
 
 		if alarm.RuleID.Valid {
@@ -170,6 +197,35 @@ func (r *PostgresRepo) CreateAlarmIdempotent(ctx context.Context, alarm Persiste
 	return true, bindings, nil
 }
 
+// RecordCompliantSOPCycle inserts a compliant sop_cycles row for accurate SOP compliance analytics.
+func (r *PostgresRepo) RecordCompliantSOPCycle(ctx context.Context, cycle PersistedSOPCycle) error {
+	q := r.store.Queries()
+	var zoneID uuid.NullUUID
+	if cam, err := q.GetCameraByID(ctx, cycle.CameraID); err == nil {
+		zoneID = cam.ZoneID
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	durMs := cycle.DurationMs
+	if durMs < 0 {
+		durMs = 0
+	}
+	_, err := q.CreateSOPCycle(ctx, sqlcgen.CreateSOPCycleParams{
+		ID:                 uuid.Must(uuid.NewV7()),
+		RuleID:             cycle.RuleID,
+		CameraID:           cycle.CameraID,
+		ZoneID:             zoneID,
+		AlgorithmVersionID: cycle.AlgorithmVersionID,
+		Outcome:            domain.SOPOutcomeCompliant,
+		ViolationType:      "",
+		AlarmID:            uuid.NullUUID{},
+		StartedAt:          cycle.StartedAt,
+		EndedAt:            cycle.EndedAt,
+		DurationMs:         int32(min(durMs, 2147483647)), // #nosec G115 -- bounded int32 ms
+	})
+	return err
+}
+
 // GetCameraName resolves a camera's display name for realtime WS alert formatting.
 func (r *PostgresRepo) GetCameraName(ctx context.Context, cameraID uuid.UUID) string {
 	cam, err := r.store.Queries().GetCameraByID(ctx, cameraID)
@@ -179,7 +235,7 @@ func (r *PostgresRepo) GetCameraName(ctx context.Context, cameraID uuid.UUID) st
 	return cam.Name
 }
 
-// ReloadRules loads all enabled cameras, ROIs, and rules from PostgreSQL into the in-memory rules.Engine.
+// ReloadRules loads all enabled cameras, ROIs, arming schedules, and rules from PostgreSQL into the in-memory rules.Engine.
 func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error {
 	q := r.store.Queries()
 	cams, err := q.ListCameras(ctx)
@@ -190,26 +246,42 @@ func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error
 	if err != nil {
 		return fmt.Errorf("list enabled rules for reload: %w", err)
 	}
+	dbSchedules, err := q.ListArmingSchedules(ctx)
+	if err != nil {
+		return fmt.Errorf("list arming schedules for reload: %w", err)
+	}
+	schedByID := make(map[uuid.UUID]*rules.ArmingSchedule, len(dbSchedules))
+	for _, s := range dbSchedules {
+		parsed, pErr := rules.ParseArmingSchedule(s.ID.String(), s.Name, s.Timezone, s.Enabled, s.WeeklyWindows, s.ExcludeDates, s.IncludeDates)
+		if pErr == nil {
+			schedByID[s.ID] = parsed
+		}
+	}
 
 	roiByID := make(map[uuid.UUID]rules.ROI)
+	roisByCamera := make(map[uuid.UUID]map[string]rules.ROI, len(cams))
 	for _, cam := range cams {
 		rois, roiErr := q.ListCameraROIsByCamera(ctx, cam.ID)
 		if roiErr != nil {
 			return fmt.Errorf("list rois for camera %s: %w", cam.ID, roiErr)
 		}
+		camMap := make(map[string]rules.ROI, len(rois))
 		for _, roi := range rois {
 			if !roi.Enabled {
 				continue
 			}
 			var pts []rules.Point
 			_ = json.Unmarshal(roi.Points, &pts)
-			roiByID[roi.ID] = rules.ROI{
+			parsedROI := rules.ROI{
 				ID:      roi.ID.String(),
 				Name:    roi.Name,
 				ROIType: roi.RoiType,
 				Points:  pts,
 			}
+			roiByID[roi.ID] = parsedROI
+			camMap[parsedROI.ID] = parsedROI
 		}
+		roisByCamera[cam.ID] = camMap
 	}
 
 	grouped := make(map[string][]rules.Rule)
@@ -224,14 +296,20 @@ func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error
 		}
 		var params rules.RuleParams
 		_ = json.Unmarshal(dr.Params, &params)
+		var sched *rules.ArmingSchedule
+		if dr.ScheduleID.Valid {
+			sched = schedByID[dr.ScheduleID.UUID]
+		}
 		grouped[dr.CameraID.String()] = append(grouped[dr.CameraID.String()], rules.Rule{
 			ID:                 dr.ID.String(),
 			CameraID:           dr.CameraID.String(),
 			ROI:                roi,
+			CameraROIs:         roisByCamera[dr.CameraID],
 			AlgorithmVersionID: dr.AlgorithmVersionID.String(),
 			Name:               dr.Name,
 			RuleMode:           dr.RuleMode,
 			Params:             params,
+			Schedule:           sched,
 			RecordVideo:        dr.RecordVideo,
 			VideoPreSeconds:    int(dr.VideoPreSeconds),
 			VideoPostSeconds:   int(dr.VideoPostSeconds),

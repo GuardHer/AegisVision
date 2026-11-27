@@ -36,3 +36,11 @@ func (p *PostgresVideoRepo) UpdateAlarmVideoEvidence(ctx context.Context, alarmI
 		VideoStatus:    status,
 	})
 }
+
+// UpdateAlarmImageEvidence backfills image_object_key on alarms after async snapshot fallback capture.
+func (p *PostgresVideoRepo) UpdateAlarmImageEvidence(ctx context.Context, alarmID uuid.UUID, objectKey string) error {
+	return p.store.Queries().UpdateAlarmImageEvidence(ctx, sqlcgen.UpdateAlarmImageEvidenceParams{
+		ID:             alarmID,
+		ImageObjectKey: objectKey,
+	})
+}

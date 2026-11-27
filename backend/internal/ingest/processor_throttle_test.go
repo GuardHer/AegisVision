@@ -38,6 +38,10 @@ func (r *countingLastFrameRepo) CreateAlarmIdempotent(context.Context, ingest.Pe
 	return false, nil, nil
 }
 
+func (r *countingLastFrameRepo) RecordCompliantSOPCycle(context.Context, ingest.PersistedSOPCycle) error {
+	return nil
+}
+
 func (r *countingLastFrameRepo) GetCameraName(context.Context, uuid.UUID) string {
 	return "cam"
 }

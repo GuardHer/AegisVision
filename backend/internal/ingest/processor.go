@@ -50,6 +50,20 @@ type PersistedAlarm struct {
 	ROISnapshot        []byte
 	ImageObjectKey     string
 	VideoStatus        string
+	SOPTrace           []byte
+	ViolationType      string
+	SOPStartedAt       time.Time
+	SOPDurationMs      int64
+}
+
+// PersistedSOPCycle holds a compliant SOP cycle completion to write into sop_cycles.
+type PersistedSOPCycle struct {
+	RuleID             uuid.UUID
+	CameraID           uuid.UUID
+	AlgorithmVersionID uuid.NullUUID
+	StartedAt          time.Time
+	EndedAt            time.Time
+	DurationMs         int64
 }
 
 // Repository abstracts PostgreSQL operations needed by aegis-ingest.
@@ -59,6 +73,7 @@ type Repository interface {
 	UpdateTaskState(ctx context.Context, taskID, actualState, errMsg string) error
 	UpdateTaskLastFrame(ctx context.Context, taskID string, ts time.Time) error
 	CreateAlarmIdempotent(ctx context.Context, alarm PersistedAlarm) (created bool, channels []AlarmChannelBinding, err error)
+	RecordCompliantSOPCycle(ctx context.Context, cycle PersistedSOPCycle) error
 	GetCameraName(ctx context.Context, cameraID uuid.UUID) string
 }
 
@@ -118,12 +133,13 @@ func NewProcessor(deps ProcessorDeps) *Processor {
 }
 
 type wsFrameMessage struct {
-	Type         string            `json:"type"`
-	CameraID     string            `json:"camera_id"`
-	AlgorithmKey string            `json:"algorithm_key,omitempty"`
-	TimestampMs  int64             `json:"timestamp_ms"`
-	Detections   []rules.Detection `json:"detections"`
-	ROICounts    map[string]int    `json:"roi_counts"`
+	Type         string                  `json:"type"`
+	CameraID     string                  `json:"camera_id"`
+	AlgorithmKey string                  `json:"algorithm_key,omitempty"`
+	TimestampMs  int64                   `json:"timestamp_ms"`
+	Detections   []rules.Detection       `json:"detections"`
+	ROICounts    map[string]int          `json:"roi_counts"`
+	SOPProgress  []rules.SOPRuleProgress `json:"sop_progress,omitempty"`
 }
 
 type wsAlarmAlertMessage struct {
@@ -143,11 +159,12 @@ type alarmQueueJob struct {
 }
 
 type evidenceRecordJob struct {
-	AlarmID      string    `json:"alarm_id"`
-	CameraID     string    `json:"camera_id"`
-	TriggeredAt  time.Time `json:"triggered_at"`
-	PreSeconds   int       `json:"pre_seconds"`
-	PostSeconds  int       `json:"post_seconds"`
+	Mode        string    `json:"mode,omitempty"`
+	AlarmID     string    `json:"alarm_id"`
+	CameraID    string    `json:"camera_id"`
+	TriggeredAt time.Time `json:"triggered_at"`
+	PreSeconds  int       `json:"pre_seconds,omitempty"`
+	PostSeconds int       `json:"post_seconds,omitempty"`
 }
 
 // ProcessLiveFrame evaluates a live frame, broadcasts transient boxes via Redis Pub/Sub,
@@ -175,10 +192,30 @@ func (p *Processor) ProcessLiveFrame(ctx context.Context, pbFrame *agentv1.Detec
 			TimestampMs: frame.Timestamp.UnixMilli(),
 			Detections:  dets,
 			ROICounts:   eval.ROICounts,
+			SOPProgress: eval.SOPProgress,
 		})
 		if err == nil {
 			if pubErr := p.redis.PublishFrame(ctx, frame.CameraID, raw); pubErr != nil {
 				p.log.Warn("publish live frame to redis failed", "camera_id", frame.CameraID, "err", pubErr)
+			}
+		}
+	}
+
+	if p.repo != nil {
+		for _, cycle := range eval.CompletedSOPCycles {
+			rID, err1 := uuid.Parse(cycle.RuleID)
+			cID, err2 := uuid.Parse(cycle.CameraID)
+			if err1 == nil && err2 == nil {
+				if recErr := p.repo.RecordCompliantSOPCycle(ctx, PersistedSOPCycle{
+					RuleID:             rID,
+					CameraID:           cID,
+					AlgorithmVersionID: parseNullUUID(cycle.AlgorithmVersionID),
+					StartedAt:          cycle.StartedAt,
+					EndedAt:            cycle.EndedAt,
+					DurationMs:         cycle.DurationMs,
+				}); recErr != nil {
+					p.log.Warn("record compliant sop cycle failed", "rule_id", cycle.RuleID, "err", recErr)
+				}
 			}
 		}
 	}
@@ -264,6 +301,15 @@ func (p *Processor) persistAndDispatchAlarm(ctx context.Context, triggered rules
 		videoStatus = domain.VideoStatusRecording
 	}
 
+	var sopTraceJSON []byte
+	var sopStartedAt time.Time
+	var sopDurationMs int64
+	if triggered.SOPTrace != nil {
+		sopTraceJSON, _ = json.Marshal(triggered.SOPTrace)
+		sopStartedAt = triggered.SOPTrace.StartedAt
+		sopDurationMs = triggered.SOPTrace.DurationMs
+	}
+
 	persisted := PersistedAlarm{
 		ID:                 alarmID,
 		EventDedupKey:      dedupKey,
@@ -280,6 +326,10 @@ func (p *Processor) persistAndDispatchAlarm(ctx context.Context, triggered rules
 		ROISnapshot:        roiJSON,
 		ImageObjectKey:     imageKey,
 		VideoStatus:        videoStatus,
+		SOPTrace:           sopTraceJSON,
+		ViolationType:      triggered.ViolationType,
+		SOPStartedAt:       sopStartedAt,
+		SOPDurationMs:      sopDurationMs,
 	}
 
 	created, _, err := p.repo.CreateAlarmIdempotent(ctx, persisted)
@@ -319,7 +369,20 @@ func (p *Processor) persistAndDispatchAlarm(ctx context.Context, triggered rules
 			p.log.Error("publish alarm to rabbitmq failed", "alarm_id", alarmID, "err", pubErr)
 		}
 
-		// 3. Enqueue asynchronous MP4 video evidence recording (never blocks alarm delivery)
+		// 3. Async single-frame JPEG snapshot fallback when Runtime frame had no snapshot_jpeg (never blocks alarm)
+		if imageKey == "" {
+			snapRaw, _ := json.Marshal(evidenceRecordJob{
+				Mode:        "snapshot",
+				AlarmID:     alarmID.String(),
+				CameraID:    camID.String(),
+				TriggeredAt: triggered.TriggeredAt,
+			})
+			if pubErr := p.mq.PublishEvidenceRecord(ctx, snapRaw); pubErr != nil {
+				p.log.Error("publish snapshot fallback job failed", "alarm_id", alarmID, "err", pubErr)
+			}
+		}
+
+		// 4. Enqueue asynchronous MP4 video evidence recording (never blocks alarm delivery)
 		if triggered.RecordVideo {
 			preSec := triggered.VideoPreSeconds
 			if preSec <= 0 {
@@ -330,6 +393,7 @@ func (p *Processor) persistAndDispatchAlarm(ctx context.Context, triggered rules
 				postSec = 5
 			}
 			recRaw, _ := json.Marshal(evidenceRecordJob{
+				Mode:        "video",
 				AlarmID:     alarmID.String(),
 				CameraID:    camID.String(),
 				TriggeredAt: triggered.TriggeredAt,
