@@ -57,22 +57,24 @@ type logoutRequest struct {
 }
 
 type userProfile struct {
-	ID          uuid.UUID  `json:"id"`
-	Username    string     `json:"username"`
-	DisplayName string     `json:"display_name"`
-	Role        string     `json:"role"`
-	Enabled     bool       `json:"enabled"`
-	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+	ID             uuid.UUID  `json:"id"`
+	Username       string     `json:"username"`
+	DisplayName    string     `json:"display_name"`
+	Role           string     `json:"role"`
+	Enabled        bool       `json:"enabled"`
+	AllZonesAccess bool       `json:"all_zones_access"`
+	LastLoginAt    *time.Time `json:"last_login_at,omitempty"`
 }
 
 func toUserProfile(u sqlcgen.User) userProfile {
 	return userProfile{
-		ID:          u.ID,
-		Username:    u.Username,
-		DisplayName: u.DisplayName,
-		Role:        u.Role,
-		Enabled:     u.Enabled,
-		LastLoginAt: u.LastLoginAt,
+		ID:             u.ID,
+		Username:       u.Username,
+		DisplayName:    u.DisplayName,
+		Role:           u.Role,
+		Enabled:        u.Enabled,
+		AllZonesAccess: u.AllZonesAccess,
+		LastLoginAt:    u.LastLoginAt,
 	}
 }
 

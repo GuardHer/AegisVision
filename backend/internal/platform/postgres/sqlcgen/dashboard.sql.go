@@ -19,13 +19,15 @@ SELECT
     COUNT(*) FILTER (WHERE rule_mode = 'sop_sequence')::bigint AS sop_count
 FROM alarms
 WHERE triggered_at >= $2
+  AND ($3::uuid[] IS NULL OR zone_id = ANY($3::uuid[]))
 GROUP BY (triggered_at AT TIME ZONE $1::text)::date
 ORDER BY (triggered_at AT TIME ZONE $1::text)::date ASC
 `
 
 type GetAlarmTrendByDayParams struct {
-	Tz        string    `json:"tz"`
-	SinceTime time.Time `json:"since_time"`
+	Tz        string      `json:"tz"`
+	SinceTime time.Time   `json:"since_time"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
 }
 
 type GetAlarmTrendByDayRow struct {
@@ -35,7 +37,7 @@ type GetAlarmTrendByDayRow struct {
 }
 
 func (q *Queries) GetAlarmTrendByDay(ctx context.Context, arg GetAlarmTrendByDayParams) ([]GetAlarmTrendByDayRow, error) {
-	rows, err := q.db.Query(ctx, getAlarmTrendByDay, arg.Tz, arg.SinceTime)
+	rows, err := q.db.Query(ctx, getAlarmTrendByDay, arg.Tz, arg.SinceTime, arg.ZoneIds)
 	if err != nil {
 		return nil, err
 	}
@@ -60,17 +62,23 @@ SELECT
     COUNT(*)::bigint AS count
 FROM alarms
 WHERE triggered_at >= $1
+  AND ($2::uuid[] IS NULL OR zone_id = ANY($2::uuid[]))
 GROUP BY rule_mode
 ORDER BY count DESC
 `
+
+type GetAlarmsByRuleModeParams struct {
+	SinceTime time.Time   `json:"since_time"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
+}
 
 type GetAlarmsByRuleModeRow struct {
 	RuleMode string `json:"rule_mode"`
 	Count    int64  `json:"count"`
 }
 
-func (q *Queries) GetAlarmsByRuleMode(ctx context.Context, sinceTime time.Time) ([]GetAlarmsByRuleModeRow, error) {
-	rows, err := q.db.Query(ctx, getAlarmsByRuleMode, sinceTime)
+func (q *Queries) GetAlarmsByRuleMode(ctx context.Context, arg GetAlarmsByRuleModeParams) ([]GetAlarmsByRuleModeRow, error) {
+	rows, err := q.db.Query(ctx, getAlarmsByRuleMode, arg.SinceTime, arg.ZoneIds)
 	if err != nil {
 		return nil, err
 	}
@@ -99,12 +107,14 @@ SELECT
     COUNT(*) FILTER (WHERE triggered_at >= $1 AND triggered_at < $2 AND handle_status IN ('confirmed', 'false_positive', 'ignored'))::bigint AS today_handled,
     COUNT(*) FILTER (WHERE triggered_at >= $1 AND triggered_at < $2 AND rule_mode = 'sop_sequence')::bigint AS today_sop_violations
 FROM alarms
+WHERE ($4::uuid[] IS NULL OR zone_id = ANY($4::uuid[]))
 `
 
 type GetDashboardAlarmKPIsParams struct {
-	TodayStart     time.Time `json:"today_start"`
-	TomorrowStart  time.Time `json:"tomorrow_start"`
-	YesterdayStart time.Time `json:"yesterday_start"`
+	TodayStart     time.Time   `json:"today_start"`
+	TomorrowStart  time.Time   `json:"tomorrow_start"`
+	YesterdayStart time.Time   `json:"yesterday_start"`
+	ZoneIds        []uuid.UUID `json:"zone_ids"`
 }
 
 type GetDashboardAlarmKPIsRow struct {
@@ -118,7 +128,12 @@ type GetDashboardAlarmKPIsRow struct {
 }
 
 func (q *Queries) GetDashboardAlarmKPIs(ctx context.Context, arg GetDashboardAlarmKPIsParams) (GetDashboardAlarmKPIsRow, error) {
-	row := q.db.QueryRow(ctx, getDashboardAlarmKPIs, arg.TodayStart, arg.TomorrowStart, arg.YesterdayStart)
+	row := q.db.QueryRow(ctx, getDashboardAlarmKPIs,
+		arg.TodayStart,
+		arg.TomorrowStart,
+		arg.YesterdayStart,
+		arg.ZoneIds,
+	)
 	var i GetDashboardAlarmKPIsRow
 	err := row.Scan(
 		&i.TodayAlarms,
@@ -138,6 +153,7 @@ SELECT
     COUNT(*) FILTER (WHERE status = 'online')::bigint AS online_count
 FROM cameras
 WHERE enabled = TRUE
+  AND ($1::uuid[] IS NULL OR zone_id = ANY($1::uuid[]))
 `
 
 type GetDashboardCameraHealthRow struct {
@@ -145,8 +161,8 @@ type GetDashboardCameraHealthRow struct {
 	OnlineCount int64 `json:"online_count"`
 }
 
-func (q *Queries) GetDashboardCameraHealth(ctx context.Context) (GetDashboardCameraHealthRow, error) {
-	row := q.db.QueryRow(ctx, getDashboardCameraHealth)
+func (q *Queries) GetDashboardCameraHealth(ctx context.Context, zoneIds []uuid.UUID) (GetDashboardCameraHealthRow, error) {
+	row := q.db.QueryRow(ctx, getDashboardCameraHealth, zoneIds)
 	var i GetDashboardCameraHealthRow
 	err := row.Scan(&i.TotalCount, &i.OnlineCount)
 	return i, err
@@ -179,15 +195,21 @@ SELECT
     COUNT(*) FILTER (WHERE outcome = 'violated')::bigint AS violated_count
 FROM sop_cycles
 WHERE ended_at >= $1
+  AND ($2::uuid[] IS NULL OR zone_id = ANY($2::uuid[]))
 `
+
+type GetDashboardSOPCycleCountsParams struct {
+	SinceTime time.Time   `json:"since_time"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
+}
 
 type GetDashboardSOPCycleCountsRow struct {
 	CompliantCount int64 `json:"compliant_count"`
 	ViolatedCount  int64 `json:"violated_count"`
 }
 
-func (q *Queries) GetDashboardSOPCycleCounts(ctx context.Context, sinceTime time.Time) (GetDashboardSOPCycleCountsRow, error) {
-	row := q.db.QueryRow(ctx, getDashboardSOPCycleCounts, sinceTime)
+func (q *Queries) GetDashboardSOPCycleCounts(ctx context.Context, arg GetDashboardSOPCycleCountsParams) (GetDashboardSOPCycleCountsRow, error) {
+	row := q.db.QueryRow(ctx, getDashboardSOPCycleCounts, arg.SinceTime, arg.ZoneIds)
 	var i GetDashboardSOPCycleCountsRow
 	err := row.Scan(&i.CompliantCount, &i.ViolatedCount)
 	return i, err
@@ -201,10 +223,16 @@ SELECT
 FROM alarms a
 LEFT JOIN zones z ON z.id = a.zone_id
 WHERE a.triggered_at >= $1
+  AND ($2::uuid[] IS NULL OR a.zone_id = ANY($2::uuid[]))
 GROUP BY a.zone_id, z.name
 ORDER BY alarm_count DESC
 LIMIT 10
 `
+
+type GetTopZonesByAlarmsParams struct {
+	SinceTime time.Time   `json:"since_time"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
+}
 
 type GetTopZonesByAlarmsRow struct {
 	ZoneID     uuid.NullUUID `json:"zone_id"`
@@ -212,8 +240,8 @@ type GetTopZonesByAlarmsRow struct {
 	AlarmCount int64         `json:"alarm_count"`
 }
 
-func (q *Queries) GetTopZonesByAlarms(ctx context.Context, sinceTime time.Time) ([]GetTopZonesByAlarmsRow, error) {
-	rows, err := q.db.Query(ctx, getTopZonesByAlarms, sinceTime)
+func (q *Queries) GetTopZonesByAlarms(ctx context.Context, arg GetTopZonesByAlarmsParams) ([]GetTopZonesByAlarmsRow, error) {
+	rows, err := q.db.Query(ctx, getTopZonesByAlarms, arg.SinceTime, arg.ZoneIds)
 	if err != nil {
 		return nil, err
 	}
@@ -250,6 +278,7 @@ LEFT JOIN cameras c ON c.id = a.camera_id
 LEFT JOIN zones z ON z.id = a.zone_id
 WHERE a.handle_status = 'unhandled'
   AND a.severity IN ('critical', 'warning')
+  AND ($1::uuid[] IS NULL OR a.zone_id = ANY($1::uuid[]))
 ORDER BY a.triggered_at DESC
 LIMIT 10
 `
@@ -268,8 +297,8 @@ type ListRecentHighSeverityAlarmsRow struct {
 	TriggeredAt    time.Time     `json:"triggered_at"`
 }
 
-func (q *Queries) ListRecentHighSeverityAlarms(ctx context.Context) ([]ListRecentHighSeverityAlarmsRow, error) {
-	rows, err := q.db.Query(ctx, listRecentHighSeverityAlarms)
+func (q *Queries) ListRecentHighSeverityAlarms(ctx context.Context, zoneIds []uuid.UUID) ([]ListRecentHighSeverityAlarmsRow, error) {
+	rows, err := q.db.Query(ctx, listRecentHighSeverityAlarms, zoneIds)
 	if err != nil {
 		return nil, err
 	}

@@ -182,12 +182,28 @@ func parseUUIDSlice(raw []string) ([]uuid.UUID, error) {
 	return out, nil
 }
 
-// ListByCamera returns all rules configured under a camera.
+// ListByCamera returns all rules configured under a camera (enforcing workshop scope).
 func (h *RulesHandler) ListByCamera(c *gin.Context) {
 	camID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid camera id", err))
 		return
+	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	if !scope.Unrestricted {
+		cam, camErr := h.store.Queries().GetCameraByID(c.Request.Context(), camID)
+		if camErr != nil {
+			respondErr(c, camErr)
+			return
+		}
+		if !scope.AllowsZone(cam.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
+			return
+		}
 	}
 	rules, err := h.store.Queries().ListRulesByCamera(c.Request.Context(), camID)
 	if err != nil {

@@ -125,12 +125,28 @@ func (h *AlarmsHandler) List(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	var camFilter uuid.NullUUID
 	if rawCam := strings.TrimSpace(c.Query("camera_id")); rawCam != "" {
 		id, err := uuid.Parse(rawCam)
 		if err != nil {
 			respondErr(c, domain.NewInvalidArgumentError("invalid camera_id filter", err))
 			return
+		}
+		if !scope.Unrestricted {
+			cam, camErr := h.store.Queries().GetCameraByID(ctx, id)
+			if camErr != nil {
+				respondErr(c, camErr)
+				return
+			}
+			if !scope.AllowsZone(cam.ZoneID) {
+				respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
+				return
+			}
 		}
 		camFilter = uuid.NullUUID{UUID: id, Valid: true}
 	}
@@ -149,6 +165,17 @@ func (h *AlarmsHandler) List(c *gin.Context) {
 		}
 		zoneIDs = desc
 	}
+	effectiveZones, emptyScope := scope.IntersectZoneFilter(zoneIDs)
+	if emptyScope {
+		respondOK(c, gin.H{
+			"items":     []sqlcgen.Alarm{},
+			"total":     int64(0),
+			"page":      page,
+			"page_size": pageSize,
+		})
+		return
+	}
+	zoneIDs = effectiveZones
 
 	ruleModeFilter := toNullableText(c.Query("rule_mode"))
 	severityFilter := toNullableText(c.Query("severity"))
@@ -220,9 +247,18 @@ func (h *AlarmsHandler) Get(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid alarm id", err))
 		return
 	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	item, err := h.store.Queries().GetAlarmByID(c.Request.Context(), id)
 	if err != nil {
 		respondErr(c, err)
+		return
+	}
+	if !scope.AllowsZone(item.ZoneID) {
+		respondErr(c, domain.NewForbiddenError("alarm outside assigned workshops", nil))
 		return
 	}
 	respondOK(c, item)
@@ -234,6 +270,22 @@ func (h *AlarmsHandler) Handle(c *gin.Context) {
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid alarm id", err))
 		return
+	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	if !scope.Unrestricted {
+		existing, getErr := h.store.Queries().GetAlarmByID(c.Request.Context(), id)
+		if getErr != nil {
+			respondErr(c, getErr)
+			return
+		}
+		if !scope.AllowsZone(existing.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("alarm outside assigned workshops", nil))
+			return
+		}
 	}
 	var req handleAlarmRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -283,6 +335,24 @@ func (h *AlarmsHandler) BatchHandle(c *gin.Context) {
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid alarm_ids", err))
 		return
+	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	if !scope.Unrestricted {
+		for _, aid := range ids {
+			existing, getErr := h.store.Queries().GetAlarmByID(c.Request.Context(), aid)
+			if getErr != nil {
+				respondErr(c, getErr)
+				return
+			}
+			if !scope.AllowsZone(existing.ZoneID) {
+				respondErr(c, domain.NewForbiddenError("alarm outside assigned workshops", nil))
+				return
+			}
+		}
 	}
 
 	fpReason := strings.TrimSpace(req.FalsePositiveReason)
@@ -359,12 +429,28 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	var camFilter uuid.NullUUID
 	if rawCam := strings.TrimSpace(req.CameraID); rawCam != "" {
 		id, err := uuid.Parse(rawCam)
 		if err != nil {
 			respondErr(c, domain.NewInvalidArgumentError("invalid camera_id", err))
 			return
+		}
+		if !scope.Unrestricted {
+			cam, camErr := h.store.Queries().GetCameraByID(ctx, id)
+			if camErr != nil {
+				respondErr(c, camErr)
+				return
+			}
+			if !scope.AllowsZone(cam.ZoneID) {
+				respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
+				return
+			}
 		}
 		camFilter = uuid.NullUUID{UUID: id, Valid: true}
 	}
@@ -382,6 +468,8 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 		}
 		zoneIDs = desc
 	}
+	effectiveZones, emptyScope := scope.IntersectZoneFilter(zoneIDs)
+	zoneIDs = effectiveZones
 
 	var startTime, endTime *time.Time
 	if raw := strings.TrimSpace(req.StartTime); raw != "" {
@@ -401,20 +489,24 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 		endTime = &t
 	}
 
-	rows, err := h.store.Queries().ListAlarmsForExport(ctx, sqlcgen.ListAlarmsForExportParams{
-		CameraID:     camFilter,
-		ZoneIds:      zoneIDs,
-		RuleMode:     toNullableText(req.RuleMode),
-		Severity:     toNullableText(req.Severity),
-		HandleStatus: toNullableText(req.HandleStatus),
-		Keyword:      toNullableText(req.Keyword),
-		StartTime:    startTime,
-		EndTime:      endTime,
-		MaxRows:      limit,
-	})
-	if err != nil {
-		respondErr(c, err)
-		return
+	var rows []sqlcgen.ListAlarmsForExportRow
+	if !emptyScope {
+		var err error
+		rows, err = h.store.Queries().ListAlarmsForExport(ctx, sqlcgen.ListAlarmsForExportParams{
+			CameraID:     camFilter,
+			ZoneIds:      zoneIDs,
+			RuleMode:     toNullableText(req.RuleMode),
+			Severity:     toNullableText(req.Severity),
+			HandleStatus: toNullableText(req.HandleStatus),
+			Keyword:      toNullableText(req.Keyword),
+			StartTime:    startTime,
+			EndTime:      endTime,
+			MaxRows:      limit,
+		})
+		if err != nil {
+			respondErr(c, err)
+			return
+		}
 	}
 
 	tsTag := time.Now().UTC().Format("20060102-150405")
@@ -546,6 +638,22 @@ func (h *AlarmsHandler) ListDeliveries(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid alarm id", err))
 		return
 	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	if !scope.Unrestricted {
+		existing, getErr := h.store.Queries().GetAlarmByID(c.Request.Context(), alarmID)
+		if getErr != nil {
+			respondErr(c, getErr)
+			return
+		}
+		if !scope.AllowsZone(existing.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("alarm outside assigned workshops", nil))
+			return
+		}
+	}
 	items, err := h.store.Queries().ListDeliveriesByAlarm(c.Request.Context(), alarmID)
 	if err != nil {
 		respondErr(c, err)
@@ -563,10 +671,26 @@ func (h *AlarmsHandler) RetryDelivery(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	delivery, err := h.store.Queries().GetAlarmDeliveryByID(ctx, deliveryID)
 	if err != nil {
 		respondErr(c, err)
 		return
+	}
+	if !scope.Unrestricted {
+		existing, getErr := h.store.Queries().GetAlarmByID(ctx, delivery.AlarmID)
+		if getErr != nil {
+			respondErr(c, getErr)
+			return
+		}
+		if !scope.AllowsZone(existing.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("alarm outside assigned workshops", nil))
+			return
+		}
 	}
 
 	updated, err := h.store.Queries().UpdateAlarmDeliveryResult(ctx, sqlcgen.UpdateAlarmDeliveryResultParams{

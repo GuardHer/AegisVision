@@ -265,6 +265,15 @@ func (r *PostgresRepo) GetCameraName(ctx context.Context, cameraID uuid.UUID) st
 	return cam.Name
 }
 
+// GetCameraZoneID resolves a camera's assigned spatial zone ID for realtime WS RBAC filtering.
+func (r *PostgresRepo) GetCameraZoneID(ctx context.Context, cameraID uuid.UUID) uuid.NullUUID {
+	cam, err := r.store.Queries().GetCameraByID(ctx, cameraID)
+	if err != nil {
+		return uuid.NullUUID{}
+	}
+	return cam.ZoneID
+}
+
 // ReloadRules loads all enabled cameras, ROIs, arming schedules, and rules from PostgreSQL into the in-memory rules.Engine.
 func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error {
 	q := r.store.Queries()

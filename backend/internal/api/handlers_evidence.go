@@ -13,6 +13,7 @@ import (
 
 	"aegisvision/backend/internal/auth"
 	"aegisvision/backend/internal/domain"
+	"aegisvision/backend/internal/platform/postgres"
 	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 	"aegisvision/backend/internal/platform/storage"
 )
@@ -24,11 +25,12 @@ type AlarmEvidenceReader interface {
 
 // EvidenceHandler proxies S3/local alarm evidence images and Range-capable MP4 videos.
 type EvidenceHandler struct {
-	alarms    AlarmEvidenceReader
-	store     storage.ObjectStorage
-	tokens    *auth.TokenManager
-	blacklist auth.TokenBlacklist
-	signer    *auth.EvidenceSigner
+	alarms     AlarmEvidenceReader
+	scopeStore *postgres.Store
+	store      storage.ObjectStorage
+	tokens     *auth.TokenManager
+	blacklist  auth.TokenBlacklist
+	signer     *auth.EvidenceSigner
 }
 
 // NewEvidenceHandler creates an EvidenceHandler.
@@ -48,6 +50,11 @@ func NewEvidenceHandler(
 	}
 }
 
+// SetScopeStore enables workshop-level data-scope RBAC checks for JWT-authenticated evidence requests.
+func (h *EvidenceHandler) SetScopeStore(s *postgres.Store) {
+	h.scopeStore = s
+}
+
 // ServeImage streams the alarm's snapshot JPEG.
 func (h *EvidenceHandler) ServeImage(c *gin.Context) {
 	h.serve(c, "image")
@@ -60,7 +67,8 @@ func (h *EvidenceHandler) ServeVideo(c *gin.Context) {
 
 func (h *EvidenceHandler) serve(c *gin.Context, kind string) {
 	alarmIDStr := c.Param("alarm_id")
-	if !h.isAuthorized(c, alarmIDStr, kind) {
+	claims, signedOK, authed := h.authorize(c, alarmIDStr, kind)
+	if !authed {
 		respondErr(c, domain.NewUnauthorizedError("valid token or signature required", nil))
 		return
 	}
@@ -75,6 +83,19 @@ func (h *EvidenceHandler) serve(c *gin.Context, kind string) {
 	if err != nil {
 		respondErr(c, err)
 		return
+	}
+
+	// Enforce workshop-level data-scope RBAC for JWT-authenticated users (HMAC signed URLs remain scoped to single alarm).
+	if !signedOK && h.scopeStore != nil {
+		scope, scopeErr := ResolveUserScope(c.Request.Context(), h.scopeStore, claims)
+		if scopeErr != nil {
+			respondErr(c, scopeErr)
+			return
+		}
+		if !scope.AllowsZone(alarm.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("evidence outside assigned workshops", nil))
+			return
+		}
 	}
 
 	var objectKey string
@@ -119,13 +140,13 @@ func (h *EvidenceHandler) serve(c *gin.Context, kind string) {
 	_, _ = io.Copy(c.Writer, rc)
 }
 
-func (h *EvidenceHandler) isAuthorized(c *gin.Context, alarmID, kind string) bool {
+func (h *EvidenceHandler) authorize(c *gin.Context, alarmID, kind string) (auth.Claims, bool, bool) {
 	// 1. Check HMAC-signed URL query parameters (?exp=...&sig=...)
 	exp := c.Query("exp")
 	sig := c.Query("sig")
 	if exp != "" && sig != "" && h.signer != nil {
 		if h.signer.VerifyEvidenceSignature(alarmID, kind, exp, sig, time.Now().UTC()) {
-			return true
+			return auth.Claims{}, true, true
 		}
 	}
 
@@ -135,18 +156,18 @@ func (h *EvidenceHandler) isAuthorized(c *gin.Context, alarmID, kind string) boo
 		rawToken = c.Query("token")
 	}
 	if rawToken == "" || h.tokens == nil {
-		return false
+		return auth.Claims{}, false, false
 	}
 
 	claims, err := h.tokens.ParseAccessToken(rawToken)
 	if err != nil {
-		return false
+		return auth.Claims{}, false, false
 	}
 	if h.blacklist != nil && claims.ID != "" {
 		revoked, blErr := h.blacklist.IsTokenBlacklisted(c.Request.Context(), claims.ID)
 		if blErr != nil || revoked {
-			return false
+			return auth.Claims{}, false, false
 		}
 	}
-	return true
+	return *claims, false, true
 }

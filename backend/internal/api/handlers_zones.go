@@ -59,9 +59,14 @@ func isValidZoneType(zt string) bool {
 	}
 }
 
-// GetTree returns the full spatial tree with rolled-up camera and online camera counts.
+// GetTree returns the full spatial tree with rolled-up camera and online camera counts (scoped by workshop RBAC).
 func (h *ZonesHandler) GetTree(c *gin.Context) {
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	zones, err := h.store.Queries().ListZones(ctx)
 	if err != nil {
 		respondErr(c, err)
@@ -76,7 +81,7 @@ func (h *ZonesHandler) GetTree(c *gin.Context) {
 	directTotal := make(map[uuid.UUID]int64, len(counts))
 	directOnline := make(map[uuid.UUID]int64, len(counts))
 	for _, row := range counts {
-		if row.ZoneID.Valid {
+		if row.ZoneID.Valid && scope.AllowsZone(row.ZoneID) {
 			directTotal[row.ZoneID.UUID] = row.TotalCount
 			directOnline[row.ZoneID.UUID] = row.OnlineCount
 		}
@@ -113,6 +118,28 @@ func (h *ZonesHandler) GetTree(c *gin.Context) {
 			}
 		}
 		roots = append(roots, node)
+	}
+
+	if !scope.Unrestricted {
+		var prune func(n *ZoneTreeNode) bool
+		prune = func(n *ZoneTreeNode) bool {
+			kept := make([]*ZoneTreeNode, 0, len(n.Children))
+			for _, ch := range n.Children {
+				if prune(ch) {
+					kept = append(kept, ch)
+				}
+			}
+			n.Children = kept
+			_, selfAllowed := scope.AllowedZoneSet[n.ID]
+			return selfAllowed || len(kept) > 0
+		}
+		filteredRoots := make([]*ZoneTreeNode, 0, len(roots))
+		for _, r := range roots {
+			if prune(r) {
+				filteredRoots = append(filteredRoots, r)
+			}
+		}
+		roots = filteredRoots
 	}
 
 	var rollup func(n *ZoneTreeNode) (int64, int64)

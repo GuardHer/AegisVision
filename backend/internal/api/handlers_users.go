@@ -13,14 +13,15 @@ import (
 	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
-// UsersHandler manages user accounts and RBAC roles (admin only).
+// UsersHandler manages user accounts, RBAC roles, and workshop zone data scopes (admin only).
 type UsersHandler struct {
 	store *postgres.Store
+	cache CacheStore
 }
 
 // NewUsersHandler constructs a UsersHandler.
-func NewUsersHandler(store *postgres.Store) *UsersHandler {
-	return &UsersHandler{store: store}
+func NewUsersHandler(store *postgres.Store, cache CacheStore) *UsersHandler {
+	return &UsersHandler{store: store, cache: cache}
 }
 
 // BootstrapDefaultAdmin ensures an initial admin user exists when the users table is empty.
@@ -197,4 +198,96 @@ func (h *UsersHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 	respondOK(c, gin.H{"reset": true})
+}
+
+type updateUserZonesRequest struct {
+	AllZonesAccess bool     `json:"all_zones_access"`
+	ZoneIDs        []string `json:"zone_ids"`
+}
+
+// GetZones returns a user's workshop access flag and explicitly assigned zone IDs.
+func (h *UsersHandler) GetZones(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid user id", err))
+		return
+	}
+	ctx := c.Request.Context()
+	flags, err := h.store.Queries().GetUserZoneScopeFlags(ctx, id)
+	if err != nil {
+		respondErr(c, err)
+		return
+	}
+	zoneIDs, err := h.store.Queries().ListUserZoneIDs(ctx, id)
+	if err != nil {
+		respondErr(c, err)
+		return
+	}
+	if zoneIDs == nil {
+		zoneIDs = []uuid.UUID{}
+	}
+	respondOK(c, gin.H{
+		"user_id":          id,
+		"all_zones_access": flags.AllZonesAccess,
+		"zone_ids":         zoneIDs,
+	})
+}
+
+// UpdateZones replaces a user's workshop access scope, invalidates Redis cache, and notifies aegis-ws immediately.
+func (h *UsersHandler) UpdateZones(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid user id", err))
+		return
+	}
+	var req updateUserZonesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid user zones payload", err))
+		return
+	}
+	zoneIDs, err := parseUUIDSlice(req.ZoneIDs)
+	if err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid zone_ids", err))
+		return
+	}
+
+	ctx := c.Request.Context()
+	if _, err := h.store.Queries().GetUserZoneScopeFlags(ctx, id); err != nil {
+		respondErr(c, err)
+		return
+	}
+	if err := h.store.WithTx(ctx, func(q *sqlcgen.Queries) error {
+		if uErr := q.UpdateUserAllZonesAccess(ctx, sqlcgen.UpdateUserAllZonesAccessParams{
+			ID:             id,
+			AllZonesAccess: req.AllZonesAccess,
+		}); uErr != nil {
+			return uErr
+		}
+		if dErr := q.DeleteUserZonesByUser(ctx, id); dErr != nil {
+			return dErr
+		}
+		for _, zid := range zoneIDs {
+			if iErr := q.InsertUserZone(ctx, sqlcgen.InsertUserZoneParams{
+				UserID: id,
+				ZoneID: zid,
+			}); iErr != nil {
+				return iErr
+			}
+		}
+		return nil
+	}); err != nil {
+		respondErr(c, err)
+		return
+	}
+
+	if inv, ok := h.cache.(ScopeInvalidator); ok && inv != nil {
+		_ = inv.DeleteUserScopeCache(ctx, id.String())
+		_ = inv.PublishScopeChanged(ctx, id.String())
+	}
+
+	respondOK(c, gin.H{
+		"user_id":          id,
+		"all_zones_access": req.AllZonesAccess,
+		"zone_ids":         zoneIDs,
+	})
 }

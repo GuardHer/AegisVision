@@ -126,13 +126,27 @@ type updateROIRequest struct {
 	Color   string       `json:"color"`
 }
 
-// ListCameras returns configured cameras, optionally filtered by zone_id (including descendant zones).
+// ListCameras returns configured cameras, optionally filtered by zone_id (including descendant zones) and workshop RBAC.
 func (h *CamerasHandler) ListCameras(c *gin.Context) {
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	items, err := h.store.Queries().ListCameras(ctx)
 	if err != nil {
 		respondErr(c, err)
 		return
+	}
+	if !scope.Unrestricted {
+		scoped := make([]sqlcgen.Camera, 0, len(items))
+		for _, cam := range items {
+			if scope.AllowsZone(cam.ZoneID) {
+				scoped = append(scoped, cam)
+			}
+		}
+		items = scoped
 	}
 	if rawZone := strings.TrimSpace(c.Query("zone_id")); rawZone != "" {
 		zid, parseErr := uuid.Parse(rawZone)
@@ -169,9 +183,18 @@ func (h *CamerasHandler) GetCamera(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid camera id", err))
 		return
 	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	cam, err := h.store.Queries().GetCameraByID(c.Request.Context(), id)
 	if err != nil {
 		respondErr(c, err)
+		return
+	}
+	if !scope.AllowsZone(cam.ZoneID) {
+		respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
 		return
 	}
 	respondOK(c, cam)
@@ -479,9 +502,18 @@ func (h *CamerasHandler) CreateStreamToken(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid camera id", err))
 		return
 	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	cam, err := h.store.Queries().GetCameraByID(c.Request.Context(), id)
 	if err != nil {
 		respondErr(c, err)
+		return
+	}
+	if !scope.AllowsZone(cam.ZoneID) {
+		respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
 		return
 	}
 	streamPath := cam.StreamPath
@@ -528,6 +560,22 @@ func (h *CamerasHandler) ListROIs(c *gin.Context) {
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid camera id", err))
 		return
+	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	if !scope.Unrestricted {
+		cam, camErr := h.store.Queries().GetCameraByID(c.Request.Context(), camID)
+		if camErr != nil {
+			respondErr(c, camErr)
+			return
+		}
+		if !scope.AllowsZone(cam.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
+			return
+		}
 	}
 	rois, err := h.store.Queries().ListCameraROIsByCamera(c.Request.Context(), camID)
 	if err != nil {

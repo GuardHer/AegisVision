@@ -95,7 +95,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	}
 
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
-	usersH := NewUsersHandler(deps.Store)
+	usersH := NewUsersHandler(deps.Store, deps.Cache)
 	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
 	schedulesH := NewSchedulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	presetsH := NewPresetsHandler(deps.Store)
@@ -109,6 +109,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	datasetsH := NewDatasetsHandler(deps.Store, deps.Storage, deps.Logger)
 	channelsH := NewChannelsHandler(deps.Store, deps.Publisher, nil, deps.Logger)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
+	evidenceH.SetScopeStore(deps.Store)
 
 	v1 := r.Group("/api/v1")
 
@@ -138,6 +139,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.PUT("/users/:id", adminOnly, usersH.Update)
 	authed.DELETE("/users/:id", adminOnly, usersH.Delete)
 	authed.POST("/users/:id/reset-password", adminOnly, usersH.ResetPassword)
+	authed.GET("/users/:id/zones", adminOnly, usersH.GetZones)
+	authed.PUT("/users/:id/zones", adminOnly, usersH.UpdateZones)
 
 	// Algorithms & versions
 	authed.GET("/algorithms", allRoles, algosH.ListAlgorithms)

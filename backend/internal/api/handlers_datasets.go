@@ -63,6 +63,11 @@ type FalsePositiveSampleItem struct {
 // ListFalsePositives returns paginated snapshot-bearing false-positive alarms for algorithm iteration.
 func (h *DatasetsHandler) ListFalsePositives(c *gin.Context) {
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	page, pageSize := parsePagination(c, 1, 24, 100)
 
 	var zoneIDs []uuid.UUID
@@ -79,6 +84,17 @@ func (h *DatasetsHandler) ListFalsePositives(c *gin.Context) {
 		}
 		zoneIDs = desc
 	}
+	effectiveZones, emptyScope := scope.IntersectZoneFilter(zoneIDs)
+	if emptyScope {
+		respondOK(c, gin.H{
+			"items":     []FalsePositiveSampleItem{},
+			"total":     int64(0),
+			"page":      page,
+			"page_size": pageSize,
+		})
+		return
+	}
+	zoneIDs = effectiveZones
 
 	var algoVerID uuid.NullUUID
 	if rawVer := strings.TrimSpace(c.Query("algorithm_version_id")); rawVer != "" {
@@ -220,6 +236,11 @@ func (h *DatasetsHandler) ExportFalsePositives(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	maxRows := h.resolveMaxExportRows(ctx)
 	limit := req.Limit
 	if limit <= 0 || limit > maxRows {
@@ -240,6 +261,8 @@ func (h *DatasetsHandler) ExportFalsePositives(c *gin.Context) {
 		}
 		zoneIDs = desc
 	}
+	effectiveZones, emptyScope := scope.IntersectZoneFilter(zoneIDs)
+	zoneIDs = effectiveZones
 
 	var algoVerID uuid.NullUUID
 	if rawVer := strings.TrimSpace(req.AlgorithmVersionID); rawVer != "" {
@@ -269,17 +292,21 @@ func (h *DatasetsHandler) ExportFalsePositives(c *gin.Context) {
 		endTime = &t
 	}
 
-	rows, err := h.store.Queries().ListFalsePositiveAlarmsForExport(ctx, sqlcgen.ListFalsePositiveAlarmsForExportParams{
-		ZoneIds:             zoneIDs,
-		AlgorithmVersionID:  algoVerID,
-		FalsePositiveReason: toNullableText(req.FalsePositiveReason),
-		StartTime:           startTime,
-		EndTime:             endTime,
-		MaxRows:             limit,
-	})
-	if err != nil {
-		respondErr(c, err)
-		return
+	var rows []sqlcgen.ListFalsePositiveAlarmsForExportRow
+	if !emptyScope {
+		var err error
+		rows, err = h.store.Queries().ListFalsePositiveAlarmsForExport(ctx, sqlcgen.ListFalsePositiveAlarmsForExportParams{
+			ZoneIds:             zoneIDs,
+			AlgorithmVersionID:  algoVerID,
+			FalsePositiveReason: toNullableText(req.FalsePositiveReason),
+			StartTime:           startTime,
+			EndTime:             endTime,
+			MaxRows:             limit,
+		})
+		if err != nil {
+			respondErr(c, err)
+			return
+		}
 	}
 
 	tsTag := time.Now().UTC().Format("20060102-150405")

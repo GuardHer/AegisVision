@@ -93,6 +93,7 @@ type analyticsFilter struct {
 	startTime   time.Time
 	endTime     time.Time
 	zoneIDs     []uuid.UUID
+	emptyScope  bool
 	granularity string
 	shift       string
 	tzName      string
@@ -154,10 +155,17 @@ func (h *AnalyticsHandler) parseFilter(c *gin.Context) (analyticsFilter, error) 
 		zoneIDs = desc
 	}
 
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		return analyticsFilter{}, scopeErr
+	}
+	effectiveZones, emptyScope := scope.IntersectZoneFilter(zoneIDs)
+
 	return analyticsFilter{
 		startTime:   startTime,
 		endTime:     endTime,
-		zoneIDs:     zoneIDs,
+		zoneIDs:     effectiveZones,
+		emptyScope:  emptyScope,
 		granularity: granularity,
 		shift:       shift,
 		tzName:      tzName,
@@ -165,6 +173,14 @@ func (h *AnalyticsHandler) parseFilter(c *gin.Context) (analyticsFilter, error) 
 }
 
 func (h *AnalyticsHandler) computeSummary(ctx context.Context, f analyticsFilter) (AnalyticsSummaryPayload, error) {
+	if f.emptyScope {
+		return AnalyticsSummaryPayload{
+			Trend:         []AnalyticsTrendPoint{},
+			ByZone:        []AnalyticsZoneRow{},
+			TopSOPSteps:   []AnalyticsSOPStepRow{},
+			AlgoPrecision: []AnalyticsAlgoPrecisionRow{},
+		}, nil
+	}
 	q := h.store.Queries()
 	kpiRow, err := q.GetAnalyticsAlarmKPIs(ctx, sqlcgen.GetAnalyticsAlarmKPIsParams{
 		Tz:        f.tzName,
