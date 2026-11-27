@@ -30,17 +30,24 @@ type DetectionFrame struct {
 
 // RuleParams corresponds to roi_algorithm_rules.params JSONB schema.
 type RuleParams struct {
-	Labels                  []string `json:"labels"`
-	RequireIsAbnormal       bool     `json:"require_is_abnormal"`
-	MinConfidence           float64  `json:"min_confidence"`
-	HitPoint                string   `json:"hit_point"`
-	MinCount                *int     `json:"min_count,omitempty"`
-	MaxCount                *int     `json:"max_count,omitempty"`
-	ConsecutiveFrames       int      `json:"consecutive_frames"`
-	DurationSeconds         int      `json:"duration_seconds"`
-	CooldownSeconds         int      `json:"cooldown_seconds"`
-	HeartbeatTimeoutSeconds int      `json:"heartbeat_timeout_seconds"`
-	Severity                string   `json:"severity"`
+	Labels                  []string      `json:"labels"`
+	RequireIsAbnormal       bool          `json:"require_is_abnormal"`
+	MinConfidence           float64       `json:"min_confidence"`
+	HitPoint                string        `json:"hit_point"`
+	MinCount                *int          `json:"min_count,omitempty"`
+	MaxCount                *int          `json:"max_count,omitempty"`
+	ConsecutiveFrames       int           `json:"consecutive_frames"`
+	DurationSeconds         int           `json:"duration_seconds"`
+	CooldownSeconds         int           `json:"cooldown_seconds"`
+	HeartbeatTimeoutSeconds int           `json:"heartbeat_timeout_seconds"`
+	Severity                string        `json:"severity"`
+	TriggerMode             string        `json:"trigger_mode,omitempty"`
+	EntryLabels             []string      `json:"entry_labels,omitempty"`
+	RearmMode               string        `json:"rearm_mode,omitempty"`
+	RearmCooldownSeconds    int           `json:"rearm_cooldown_seconds,omitempty"`
+	CycleTimeoutSeconds     int           `json:"cycle_timeout_seconds,omitempty"`
+	ViolationTypes          []string      `json:"violation_types,omitempty"`
+	Steps                   []SOPStepSpec `json:"steps,omitempty"`
 }
 
 // Rule is a configured ROI × AlgorithmVersion evaluation rule.
@@ -77,12 +84,16 @@ type TriggeredAlarm struct {
 	RecordVideo        bool
 	VideoPreSeconds    int
 	VideoPostSeconds   int
+	ViolationType      string
+	SOPTrace           *SOPTrace
 }
 
-// EvalOutput bundles per-ROI live counts and any alarms triggered by a frame.
+// EvalOutput bundles per-ROI live counts, SOP progress bars, compliant SOP cycles, and triggered alarms.
 type EvalOutput struct {
-	ROICounts       map[string]int
-	TriggeredAlarms []TriggeredAlarm
+	ROICounts          map[string]int
+	TriggeredAlarms    []TriggeredAlarm
+	SOPProgress        []SOPRuleProgress
+	CompletedSOPCycles []CompletedSOPCycle
 }
 
 type ruleRuntimeState struct {
@@ -91,6 +102,7 @@ type ruleRuntimeState struct {
 	lastHeartbeatAt time.Time
 	absentElapsed   time.Duration
 	lastAlarmAt     time.Time
+	sop             *sopRuntimeState
 }
 
 func (s *ruleRuntimeState) resetTransient() {
@@ -98,6 +110,9 @@ func (s *ruleRuntimeState) resetTransient() {
 	s.conditionSince = time.Time{}
 	s.lastHeartbeatAt = time.Time{}
 	s.absentElapsed = 0
+	if s.sop != nil {
+		s.sop.resetToIdle(len(s.sop.stepStatuses))
+	}
 }
 
 type cameraBucket struct {
@@ -190,6 +205,18 @@ func (e *Engine) Evaluate(frame DetectionFrame) EvalOutput {
 		// while preserving live ROICounts for monitor wall visualization.
 		if rule.Schedule != nil && !rule.Schedule.IsArmed(ts) {
 			st.resetTransient()
+			continue
+		}
+
+		if rule.RuleMode == domain.RuleModeSOPSequence {
+			alarm, completed, progress := evaluateSOPRule(rule, st, frame, ts)
+			out.SOPProgress = append(out.SOPProgress, progress)
+			if completed != nil {
+				out.CompletedSOPCycles = append(out.CompletedSOPCycles, *completed)
+			}
+			if alarm != nil {
+				out.TriggeredAlarms = append(out.TriggeredAlarms, *alarm)
+			}
 			continue
 		}
 
