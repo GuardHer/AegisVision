@@ -107,10 +107,15 @@ func (r *PostgresRepo) CreateAlarmIdempotent(ctx context.Context, alarm Persiste
 
 	var bindings []AlarmChannelBinding
 	err := r.store.WithTx(ctx, func(q *sqlcgen.Queries) error {
+		var zoneID uuid.NullUUID
+		if cam, camErr := q.GetCameraByID(ctx, alarm.CameraID); camErr == nil {
+			zoneID = cam.ZoneID
+		}
 		if _, err := q.CreateAlarm(ctx, sqlcgen.CreateAlarmParams{
 			ID:                 alarm.ID,
 			EventDedupKey:      dedup,
 			CameraID:           alarm.CameraID,
+			ZoneID:             zoneID,
 			RoiID:              alarm.ROIID,
 			RuleID:             alarm.RuleID,
 			AlgorithmVersionID: alarm.AlgorithmVersionID,

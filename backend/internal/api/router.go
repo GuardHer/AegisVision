@@ -103,7 +103,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	camsH := NewCamerasHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Publisher, deps.Logger)
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	nodesH := NewNodesTasksHandler(deps.Store, deps.Publisher, deps.Logger)
-	alarmsH := NewAlarmsHandler(deps.Store, deps.Publisher, deps.Logger)
+	alarmsH := NewAlarmsHandler(deps.Store, deps.Storage, deps.Publisher, deps.Logger)
 	channelsH := NewChannelsHandler(deps.Store, nil)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
 
@@ -187,6 +187,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 
 	// Alarms & deliveries
 	authed.GET("/alarms", allRoles, alarmsH.List)
+	authed.POST("/alarms/batch-handle", opRoles, alarmsH.BatchHandle)
+	authed.POST("/alarms/export", allRoles, alarmsH.Export)
 	authed.GET("/alarms/:id", allRoles, alarmsH.Get)
 	authed.POST("/alarms/:id/handle", opRoles, alarmsH.Handle)
 	authed.GET("/alarms/:id/deliveries", allRoles, alarmsH.ListDeliveries)
