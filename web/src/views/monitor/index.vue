@@ -23,6 +23,28 @@ const cameras = ref<CameraItem[]>([]);
 const selectedSlots = ref<string[]>(Array(9).fill(""));
 const roisByCamera = reactive<Record<string, CameraROIItem[]>>({});
 const videoDims = reactive<Record<string, { width: number; height: number }>>({});
+const slotDims = reactive<Record<number, { width: number; height: number }>>({});
+const slotElements = new Map<number, HTMLElement>();
+let slotResizeObserver: ResizeObserver | null = null;
+
+function setSlotRef(idx: number, el: unknown) {
+  const prev = slotElements.get(idx);
+  if (prev && slotResizeObserver) {
+    slotResizeObserver.unobserve(prev);
+  }
+  if (el instanceof HTMLElement) {
+    slotElements.set(idx, el);
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      slotDims[idx] = { width: rect.width, height: rect.height };
+    }
+    if (slotResizeObserver) {
+      slotResizeObserver.observe(el);
+    }
+  } else {
+    slotElements.delete(idx);
+  }
+}
 const liveFrames = reactive<
   Record<
     string,
@@ -141,11 +163,34 @@ watch(subscribedCameraIds, ids => {
 });
 
 onMounted(() => {
+  if (typeof ResizeObserver !== "undefined") {
+    slotResizeObserver = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const el = entry.target as HTMLElement;
+        for (const [idx, mapped] of slotElements.entries()) {
+          if (mapped === el) {
+            slotDims[idx] = {
+              width: entry.contentRect.width,
+              height: entry.contentRect.height
+            };
+            break;
+          }
+        }
+      }
+    });
+    for (const el of slotElements.values()) {
+      slotResizeObserver.observe(el);
+    }
+  }
   void loadCameras();
   connectWS();
 });
 
 onBeforeUnmount(() => {
+  if (slotResizeObserver) {
+    slotResizeObserver.disconnect();
+    slotResizeObserver = null;
+  }
   if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
   if (ws) ws.close();
 });
@@ -203,7 +248,7 @@ onBeforeUnmount(() => {
               />
             </el-select>
           </div>
-          <div class="relative flex-1">
+          <div :ref="el => setSlotRef(idx, el)" class="relative flex-1">
             <template v-if="camId">
               <WhepPlayer
                 :camera-id="camId"
@@ -211,8 +256,8 @@ onBeforeUnmount(() => {
                 @video-resize="sz => onVideoResize(camId, sz)"
               />
               <CanvasOverlay
-                :container-width="640"
-                :container-height="360"
+                :container-width="slotDims[idx]?.width || 640"
+                :container-height="slotDims[idx]?.height || 360"
                 :video-width="videoDims[camId]?.width ?? 1920"
                 :video-height="videoDims[camId]?.height ?? 1080"
                 :visible="showOverlay"

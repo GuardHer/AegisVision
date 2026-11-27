@@ -11,10 +11,17 @@ import {
   type UserResult,
   type RefreshTokenResult,
   getLogin,
+  logoutApi,
   refreshTokenApi
 } from "@/api/user";
 import { useMultiTagsStoreHook } from "./multiTags";
-import { type DataInfo, setToken, removeToken, userKey } from "@/utils/auth";
+import {
+  type DataInfo,
+  getToken,
+  setToken,
+  removeToken,
+  userKey
+} from "@/utils/auth";
 
 export const useUserStore = defineStore("pure-user", {
   state: (): userType => ({
@@ -76,8 +83,16 @@ export const useUserStore = defineStore("pure-user", {
           });
       });
     },
-    /** 前端登出（不调用接口） */
-    logOut() {
+    /** 登出并服务端注销 Access/Refresh Token */
+    async logOut() {
+      const tokenData = getToken();
+      if (tokenData?.accessToken) {
+        try {
+          await logoutApi(tokenData.refreshToken || "", tokenData.accessToken);
+        } catch {
+          // Best-effort server revocation; always clear local state afterward.
+        }
+      }
       this.username = "";
       this.roles = [];
       this.permissions = [];

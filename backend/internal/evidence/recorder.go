@@ -14,7 +14,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"aegisvision/backend/internal/auth"
 	"aegisvision/backend/internal/domain"
+	platformredis "aegisvision/backend/internal/platform/redis"
 	"aegisvision/backend/internal/platform/storage"
 )
 
@@ -47,10 +49,16 @@ type VideoRepo interface {
 	UpdateAlarmVideoEvidence(ctx context.Context, alarmID uuid.UUID, objectKey, status string) error
 }
 
+// StreamTokenMinter mints short-lived MediaMTX RTSP pull tokens in Redis for ffmpeg capture.
+type StreamTokenMinter interface {
+	SetStreamToken(ctx context.Context, kind, token string, payload platformredis.StreamTokenPayload, ttl time.Duration) error
+}
+
 // RecorderDeps holds explicit dependencies for asynchronous MP4 evidence recording.
 type RecorderDeps struct {
 	Repo        VideoRepo
 	Storage     storage.ObjectStorage
+	Tokens      StreamTokenMinter
 	Generator   ClipGenerator
 	RTSPBaseURL string
 	Logger      *slog.Logger
@@ -60,6 +68,7 @@ type RecorderDeps struct {
 type Recorder struct {
 	repo        VideoRepo
 	storage     storage.ObjectStorage
+	tokens      StreamTokenMinter
 	generator   ClipGenerator
 	rtspBaseURL string
 	log         *slog.Logger
@@ -76,6 +85,7 @@ func NewRecorder(deps RecorderDeps) *Recorder {
 	return &Recorder{
 		repo:        deps.Repo,
 		storage:     deps.Storage,
+		tokens:      deps.Tokens,
 		generator:   deps.Generator,
 		rtspBaseURL: strings.TrimRight(deps.RTSPBaseURL, "/"),
 		log:         deps.Logger,
@@ -136,8 +146,25 @@ func (r *Recorder) RecordAndUpload(ctx context.Context, req RecordRequest) (stri
 		triggeredAt = time.Now().UTC()
 	}
 
+	cleanPath := strings.TrimLeft(streamPath, "/")
+	streamURL := fmt.Sprintf("%s/%s", r.rtspBaseURL, cleanPath)
+	if r.tokens != nil {
+		tok, tokErr := auth.GenerateOpaqueToken()
+		if tokErr != nil {
+			return markFailed(fmt.Errorf("generate rtsp pull token: %w", tokErr))
+		}
+		tokTTL := time.Duration(preSec+postSec+60) * time.Second
+		if err := r.tokens.SetStreamToken(ctx, platformredis.StreamTokenKindPull, tok, platformredis.StreamTokenPayload{
+			TaskID:     alarmID.String(),
+			StreamPath: cleanPath,
+		}, tokTTL); err != nil {
+			return markFailed(fmt.Errorf("store rtsp pull token: %w", err))
+		}
+		streamURL = streamURL + "?token=" + tok
+	}
+
 	clipInput := ClipInput{
-		StreamURL:   fmt.Sprintf("%s/%s", r.rtspBaseURL, strings.TrimLeft(streamPath, "/")),
+		StreamURL:   streamURL,
 		StreamPath:  streamPath,
 		TriggeredAt: triggeredAt,
 		PreSeconds:  preSec,

@@ -305,6 +305,98 @@ func TestSchedulerLeaderElectionStandbyTakeover(t *testing.T) {
 	<-doneB
 }
 
+func TestReconcilerSubStreamSyncUpdateTaskAndPendingRetry(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb, err := platformredis.New(context.Background(), mr.Addr(), "", 0)
+	if err != nil {
+		t.Fatalf("redis.New(): %v", err)
+	}
+	defer func() { _ = rdb.Close() }()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	camID := uuid.Must(uuid.NewV7())
+	verID := uuid.Must(uuid.NewV7())
+	roiID := uuid.Must(uuid.NewV7())
+
+	state := &memStateStore{
+		cameras: []scheduler.CameraInfo{
+			{
+				ID:           camID,
+				StreamPath:   "cam_sub_sync",
+				SourceURL:    "rtsp://cam/main",
+				SubStreamURL: "rtsp://cam/sub",
+				Enabled:      true,
+			},
+		},
+		versions: []scheduler.VersionInfo{
+			{ID: verID, RuntimeKey: "py-yolo-v2", DefaultParams: []byte(`{"target_fps":5}`), Status: "active"},
+		},
+		rois: []scheduler.ROIInfo{
+			{ID: roiID, CameraID: camID, Name: "Zone 1", ROIType: domain.ROITypeFullFrame, Enabled: true},
+		},
+		rules: []scheduler.RuleInfo{
+			{ID: uuid.Must(uuid.NewV7()), CameraID: camID, ROIID: roiID, AlgorithmVersionID: verID, ScheduleMode: "auto", Enabled: true},
+		},
+		nodes: map[string]scheduler.NodeInfo{
+			"node-1": {
+				NodeID:          "node-1",
+				RuntimeKeys:     []string{"py-yolo-v2"},
+				MaxTasks:        8,
+				Status:          domain.NodeStatusOnline,
+				LastHeartbeatAt: now,
+			},
+		},
+		tasks: map[uuid.UUID]scheduler.ExistingTaskInfo{},
+	}
+	bus := &spyCommandBus{}
+	mtx := &spyMediaMTX{}
+	rec := scheduler.NewReconciler(scheduler.ReconcilerDeps{
+		InstanceID:  "sched-sub",
+		State:       state,
+		Redis:       rdb,
+		Bus:         bus,
+		MediaMTX:    mtx,
+		Logger:      slog.Default(),
+		LeaseTTL:    30 * time.Second,
+		NodeTimeout: 15 * time.Second,
+		NowFunc:     func() time.Time { return now },
+	})
+
+	// Pass 1: route not yet registered -> task saved as pending, no AssignTask emitted yet; sub-stream synced.
+	if err := rec.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce pass 1: %v", err)
+	}
+	if len(mtx.upserts) != 2 || mtx.upserts[1].StreamPath != "cam_sub_sync_sub" {
+		t.Fatalf("expected main + _sub MediaMTX upserts, got %+v", mtx.upserts)
+	}
+	if len(bus.cmds) != 0 {
+		t.Fatalf("expected 0 commands when route missing, got %d", len(bus.cmds))
+	}
+
+	// Pass 2: agent route arrives -> pending task MUST retry CmdAssignTask!
+	_ = rdb.SetAgentRoute(ctx, "node-1", "ingest-1", time.Minute)
+	if err := rec.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce pass 2: %v", err)
+	}
+	if len(bus.cmds) != 1 || bus.cmds[0].Envelope.CommandType != scheduler.CmdAssignTask {
+		t.Fatalf("expected pending task to retry CmdAssignTask, got %+v", bus.cmds)
+	}
+
+	// Mark task running as agent ACK would do, then mutate ROI -> Pass 3 MUST emit CmdUpdateTask!
+	for id, tk := range state.tasks {
+		tk.ActualState = domain.TaskActualRunning
+		state.tasks[id] = tk
+	}
+	state.rois[0].Name = "Zone 1 Updated"
+	if err := rec.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce pass 3: %v", err)
+	}
+	if len(bus.cmds) != 2 || bus.cmds[1].Envelope.CommandType != scheduler.CmdUpdateTask {
+		t.Fatalf("expected CmdUpdateTask after ROI change on same node, got %+v", bus.cmds)
+	}
+}
+
 func waitUntil(t *testing.T, timeout time.Duration, cond func() bool, msg string) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

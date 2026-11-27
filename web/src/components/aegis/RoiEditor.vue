@@ -27,6 +27,7 @@ const emit = defineEmits<{
 
 const svgRef = ref<SVGSVGElement | null>(null);
 const draggingIndex = ref<number | null>(null);
+let suppressNextClick = false;
 
 const videoRect = computed(() =>
   computeContainedVideoRect(
@@ -56,6 +57,10 @@ function localCoords(evt: MouseEvent): { x: number; y: number } {
 }
 
 function onSvgClick(evt: MouseEvent) {
+  if (suppressNextClick) {
+    suppressNextClick = false;
+    return;
+  }
   if (!props.editable || draggingIndex.value !== null) return;
   const { x, y } = localCoords(evt);
   const norm = pixelToNormalized(x, y, videoRect.value);
@@ -66,10 +71,12 @@ function onVertexPointerDown(index: number, evt: MouseEvent) {
   if (!props.editable) return;
   evt.stopPropagation();
   draggingIndex.value = index;
+  suppressNextClick = false;
 }
 
 function onSvgMouseMove(evt: MouseEvent) {
   if (draggingIndex.value === null || !props.editable) return;
+  suppressNextClick = true;
   const { x, y } = localCoords(evt);
   const norm = pixelToNormalized(x, y, videoRect.value);
   const next = props.modelValue.map((pt, idx) =>
@@ -129,6 +136,7 @@ function removeVertex(index: number, evt: MouseEvent) {
       stroke="#ffffff"
       stroke-width="2"
       class="cursor-move"
+      @click.stop
       @mousedown="onVertexPointerDown(idx, $event)"
       @contextmenu="removeVertex(idx, $event)"
     />

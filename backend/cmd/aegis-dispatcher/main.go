@@ -19,6 +19,7 @@ import (
 	"aegisvision/backend/internal/platform/logger"
 	"aegisvision/backend/internal/platform/postgres"
 	"aegisvision/backend/internal/platform/rabbitmq"
+	platformredis "aegisvision/backend/internal/platform/redis"
 	"aegisvision/backend/internal/platform/storage"
 	"aegisvision/backend/internal/platform/telemetry"
 )
@@ -71,6 +72,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	redisClient, err := platformredis.New(bootCtx, cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
+	if err != nil {
+		log.Error("connect redis failed", "addr", cfg.Redis.Addr, "err", err)
+		os.Exit(1)
+	}
+	defer func() { _ = redisClient.Close() }()
+
 	registry := notifier.NewRegistry()
 	registry.Register(notifier.NewWebhookNotifier(nil))
 
@@ -88,12 +96,14 @@ func main() {
 	recorder := evidence.NewRecorder(evidence.RecorderDeps{
 		Repo:        evidence.NewPostgresVideoRepo(pgStore),
 		Storage:     objStore,
+		Tokens:      redisClient,
 		RTSPBaseURL: cfg.MediaMTX.RTSPBaseURL,
 		Logger:      log,
 	})
 
 	health := telemetry.NewHealth("aegis-dispatcher")
 	health.AddReadinessCheck("postgres", pgStore.Ping)
+	health.AddReadinessCheck("redis", redisClient.Ping)
 
 	healthSrv := &http.Server{
 		Addr:              cfg.HTTP.DispatcherAddr,

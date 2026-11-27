@@ -190,6 +190,9 @@ func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error
 			return fmt.Errorf("list rois for camera %s: %w", cam.ID, roiErr)
 		}
 		for _, roi := range rois {
+			if !roi.Enabled {
+				continue
+			}
 			var pts []rules.Point
 			_ = json.Unmarshal(roi.Points, &pts)
 			roiByID[roi.ID] = rules.ROI{

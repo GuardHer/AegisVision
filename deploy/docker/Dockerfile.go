@@ -1,11 +1,12 @@
 # Multi-stage pure Go Dockerfile (CGO_ENABLED=0) for all 5 platform Go services.
 # Usage: docker build -f deploy/docker/Dockerfile.go --build-arg SERVICE=aegis-api -t aegisvision/aegis-api:latest .
 
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 ARG SERVICE=aegis-api
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
+ENV GOTOOLCHAIN=local
 ENV CGO_ENABLED=0
 
 WORKDIR /src/backend

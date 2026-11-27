@@ -1,4 +1,5 @@
 import { http } from "@/utils/http";
+import { formatToken } from "@/utils/auth";
 import { rolePermissions } from "@/utils/permissions";
 
 export type UserResult = {
@@ -108,8 +109,9 @@ export const refreshTokenApi = async (
 };
 
 /** 登出对接 aegis-api POST /api/v1/auth/logout */
-export const logoutApi = (refreshToken?: string) => {
+export const logoutApi = (refreshToken?: string, accessToken?: string) => {
   return http.request("post", "/api/v1/auth/logout", {
-    data: refreshToken ? { refresh_token: refreshToken } : {}
+    data: refreshToken ? { refresh_token: refreshToken } : {},
+    headers: accessToken ? { Authorization: formatToken(accessToken) } : undefined
   });
 };

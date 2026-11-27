@@ -16,6 +16,7 @@ import (
 
 	"aegisvision/backend/internal/domain"
 	"aegisvision/backend/internal/evidence"
+	platformredis "aegisvision/backend/internal/platform/redis"
 	"aegisvision/backend/internal/platform/storage"
 )
 
@@ -39,15 +40,30 @@ func (r *spyVideoRepo) UpdateAlarmVideoEvidence(_ context.Context, _ uuid.UUID, 
 }
 
 type fakeClipGenerator struct {
-	data []byte
-	err  error
+	data      []byte
+	err       error
+	lastInput evidence.ClipInput
 }
 
-func (f *fakeClipGenerator) GenerateClip(_ context.Context, _ evidence.ClipInput, outputPath string) error {
+func (f *fakeClipGenerator) GenerateClip(_ context.Context, input evidence.ClipInput, outputPath string) error {
+	f.lastInput = input
 	if f.err != nil {
 		return f.err
 	}
 	return os.WriteFile(outputPath, f.data, 0o600)
+}
+
+type spyTokenMinter struct {
+	kind    string
+	token   string
+	payload platformredis.StreamTokenPayload
+}
+
+func (s *spyTokenMinter) SetStreamToken(_ context.Context, kind, token string, payload platformredis.StreamTokenPayload, _ time.Duration) error {
+	s.kind = kind
+	s.token = token
+	s.payload = payload
+	return nil
 }
 
 func TestEvidenceRecorderUpdatesAlarmVideoKey(t *testing.T) {
@@ -62,10 +78,13 @@ func TestEvidenceRecorderUpdatesAlarmVideoKey(t *testing.T) {
 	mp4Bytes := []byte("fake-ftyp-moov-mdat-mp4-video-evidence-payload")
 
 	repo := &spyVideoRepo{camPath: "cam_press_1"}
+	minter := &spyTokenMinter{}
+	gen := &fakeClipGenerator{data: mp4Bytes}
 	rec := evidence.NewRecorder(evidence.RecorderDeps{
 		Repo:        repo,
 		Storage:     localStore,
-		Generator:   &fakeClipGenerator{data: mp4Bytes},
+		Tokens:      minter,
+		Generator:   gen,
 		RTSPBaseURL: "rtsp://127.0.0.1:8554",
 		Logger:      slog.Default(),
 	})
@@ -80,6 +99,13 @@ func TestEvidenceRecorderUpdatesAlarmVideoKey(t *testing.T) {
 
 	if err := rec.HandleMessage(context.Background(), jobRaw); err != nil {
 		t.Fatalf("HandleMessage(success) failed: %v", err)
+	}
+	if minter.kind != platformredis.StreamTokenKindPull || minter.token == "" || minter.payload.StreamPath != "cam_press_1" {
+		t.Fatalf("expected minted stream:pull token for cam_press_1, got %+v", minter)
+	}
+	wantURL := "rtsp://127.0.0.1:8554/cam_press_1?token=" + minter.token
+	if gen.lastInput.StreamURL != wantURL {
+		t.Fatalf("expected authorized StreamURL %q, got %q", wantURL, gen.lastInput.StreamURL)
 	}
 
 	wantPrefix := "videos/2026/11/27/" + camID.String() + "/" + alarmID.String() + ".mp4"

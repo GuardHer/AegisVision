@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
@@ -37,6 +37,9 @@ const versions = ref<(AlgorithmVersionItem & { algoName: string })[]>([]);
 const channels = ref<AlarmChannelItem[]>([]);
 
 const videoSize = reactive({ width: 1920, height: 1080 });
+const editorContainerRef = ref<HTMLElement | null>(null);
+const editorContainerSize = reactive({ width: 800, height: 450 });
+let editorResizeObserver: ResizeObserver | null = null;
 const draftRoiName = ref("");
 const draftPoints = ref<NormalizedPoint[]>([]);
 
@@ -158,7 +161,34 @@ async function removeRule(id: string) {
   await loadAll();
 }
 
-onMounted(loadAll);
+onMounted(() => {
+  void loadAll();
+  const el = editorContainerRef.value;
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      editorContainerSize.width = rect.width;
+      editorContainerSize.height = rect.height;
+    }
+    if (typeof ResizeObserver !== "undefined") {
+      editorResizeObserver = new ResizeObserver(entries => {
+        const first = entries[0];
+        if (first) {
+          editorContainerSize.width = first.contentRect.width;
+          editorContainerSize.height = first.contentRect.height;
+        }
+      });
+      editorResizeObserver.observe(el);
+    }
+  }
+});
+
+onBeforeUnmount(() => {
+  if (editorResizeObserver) {
+    editorResizeObserver.disconnect();
+    editorResizeObserver = null;
+  }
+});
 </script>
 
 <template>
@@ -169,7 +199,7 @@ onMounted(loadAll);
       </div>
       <div class="text-xs text-zinc-500 mb-2">{{ t("aegis.cameras.roiHint") }}</div>
 
-      <div class="relative w-full max-w-[800px] h-[450px] bg-black rounded overflow-hidden">
+      <div ref="editorContainerRef" class="relative w-full max-w-[800px] h-[450px] bg-black rounded overflow-hidden">
         <WhepPlayer
           v-if="cameraId"
           :camera-id="cameraId"
@@ -177,8 +207,8 @@ onMounted(loadAll);
         />
         <RoiEditor
           v-model="draftPoints"
-          :container-width="800"
-          :container-height="450"
+          :container-width="editorContainerSize.width || 800"
+          :container-height="editorContainerSize.height || 450"
           :video-width="videoSize.width"
           :video-height="videoSize.height"
         />

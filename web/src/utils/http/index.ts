@@ -35,7 +35,10 @@ class PureHttp {
   }
 
   /** `token`过期后，暂存待执行的请求 */
-  private static requests = [];
+  private static requests: Array<{
+    resolve: (token: string) => void;
+    reject: (err: unknown) => void;
+  }> = [];
 
   /** 防止重复刷新`token` */
   private static isRefreshing = false;
@@ -48,10 +51,13 @@ class PureHttp {
 
   /** 重连原始请求 */
   private static retryOriginalRequest(config: PureHttpRequestConfig) {
-    return new Promise(resolve => {
-      PureHttp.requests.push((token: string) => {
-        config.headers["Authorization"] = formatToken(token);
-        resolve(config);
+    return new Promise((resolve, reject) => {
+      PureHttp.requests.push({
+        resolve: (token: string) => {
+          config.headers["Authorization"] = formatToken(token);
+          resolve(config);
+        },
+        reject
       });
     });
   }
@@ -70,10 +76,14 @@ class PureHttp {
           return config;
         }
         /** 请求白名单，放置一些不需要`token`的接口（通过设置请求白名单，防止`token`过期后再请求造成的死循环问题） */
-        const whiteList = ["/api/v1/auth/refresh", "/api/v1/auth/login"];
+        const whiteList = [
+          "/api/v1/auth/refresh",
+          "/api/v1/auth/login",
+          "/api/v1/auth/logout"
+        ];
         return whiteList.some(url => config.url.endsWith(url))
           ? config
-          : new Promise(resolve => {
+          : new Promise((resolve, reject) => {
               const data = getToken();
               if (data) {
                 const now = new Date().getTime();
@@ -87,14 +97,21 @@ class PureHttp {
                       .then(res => {
                         const token = res.data.accessToken;
                         config.headers["Authorization"] = formatToken(token);
-                        PureHttp.requests.forEach(cb => cb(token));
+                        PureHttp.requests.forEach(item => item.resolve(token));
                         PureHttp.requests = [];
+                      })
+                      .catch(err => {
+                        PureHttp.requests.forEach(item => item.reject(err));
+                        PureHttp.requests = [];
+                        void useUserStoreHook().logOut();
                       })
                       .finally(() => {
                         PureHttp.isRefreshing = false;
                       });
                   }
-                  resolve(PureHttp.retryOriginalRequest(config));
+                  PureHttp.retryOriginalRequest(config)
+                    .then(resolve)
+                    .catch(reject);
                 } else {
                   config.headers["Authorization"] = formatToken(
                     data.accessToken

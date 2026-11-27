@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import {
@@ -41,6 +41,48 @@ const query = reactive({
 const drawerVisible = ref(false);
 const selectedAlarm = ref<AlarmItem | null>(null);
 const deliveries = ref<AlarmDeliveryItem[]>([]);
+const snapshotContainerRef = ref<HTMLElement | null>(null);
+const snapshotContainerSize = reactive({ width: 640, height: 288 });
+const snapshotNaturalSize = reactive({ width: 1920, height: 1080 });
+let snapshotResizeObserver: ResizeObserver | null = null;
+
+function onSnapshotLoad(evt: Event) {
+  const img = evt.target as HTMLImageElement | null;
+  if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    snapshotNaturalSize.width = img.naturalWidth;
+    snapshotNaturalSize.height = img.naturalHeight;
+  }
+}
+
+watch(snapshotContainerRef, el => {
+  if (snapshotResizeObserver) {
+    snapshotResizeObserver.disconnect();
+    snapshotResizeObserver = null;
+  }
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) {
+    snapshotContainerSize.width = rect.width;
+    snapshotContainerSize.height = rect.height;
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    snapshotResizeObserver = new ResizeObserver(entries => {
+      const first = entries[0];
+      if (first) {
+        snapshotContainerSize.width = first.contentRect.width;
+        snapshotContainerSize.height = first.contentRect.height;
+      }
+    });
+    snapshotResizeObserver.observe(el);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (snapshotResizeObserver) {
+    snapshotResizeObserver.disconnect();
+    snapshotResizeObserver = null;
+  }
+});
 const handleForm = reactive({
   handle_status: "confirmed",
   handle_note: ""
@@ -155,16 +197,17 @@ onMounted(async () => {
 
           <div v-if="selectedAlarm.image_object_key">
             <div class="text-xs text-zinc-500 mb-1">{{ t("aegis.alarms.snapshot") }}</div>
-            <div class="relative w-full h-72 bg-black rounded overflow-hidden">
+            <div ref="snapshotContainerRef" class="relative w-full h-72 bg-black rounded overflow-hidden">
               <img
                 :src="evidenceImageURL(selectedAlarm.id)"
                 class="w-full h-full object-contain"
+                @load="onSnapshotLoad"
               />
               <CanvasOverlay
-                :container-width="640"
-                :container-height="288"
-                :video-width="1920"
-                :video-height="1080"
+                :container-width="snapshotContainerSize.width || 640"
+                :container-height="snapshotContainerSize.height || 288"
+                :video-width="snapshotNaturalSize.width"
+                :video-height="snapshotNaturalSize.height"
                 :visible="true"
                 :stale-timeout-ms="0"
                 :detections="selectedAlarm.detections_snapshot ?? []"

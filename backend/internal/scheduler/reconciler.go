@@ -2,9 +2,11 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -87,6 +89,9 @@ type Reconciler struct {
 
 	isLeader  atomic.Bool
 	triggerCh chan struct{}
+
+	specMu       sync.Mutex
+	lastSpecHash map[uuid.UUID]string
 }
 
 // NewReconciler creates a Reconciler with sensible defaults for omitted timings.
@@ -126,6 +131,7 @@ func NewReconciler(deps ReconcilerDeps) *Reconciler {
 		nodeTimeout:       deps.NodeTimeout,
 		now:               deps.NowFunc,
 		triggerCh:         make(chan struct{}, 1),
+		lastSpecHash:      make(map[uuid.UUID]string),
 	}
 }
 
@@ -288,9 +294,10 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 		}
 	}
 
-	// 3. Sync MediaMTX paths
+	// 3. Sync MediaMTX main & optional sub-stream paths
 	if r.mediamtx != nil {
 		for _, cam := range snap.Cameras {
+			subPath := cam.StreamPath + "_sub"
 			if cam.Enabled {
 				if err := r.mediamtx.UpsertPath(ctx, mediamtx.PathSpec{
 					StreamPath:  cam.StreamPath,
@@ -299,9 +306,23 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 				}); err != nil {
 					r.log.Warn("mediamtx upsert path failed", "camera_id", cam.ID, "stream_path", cam.StreamPath, "err", err)
 				}
+				if cam.SubStreamURL != "" {
+					if err := r.mediamtx.UpsertPath(ctx, mediamtx.PathSpec{
+						StreamPath:  subPath,
+						SourceURL:   cam.SubStreamURL,
+						RecordVideo: false,
+					}); err != nil {
+						r.log.Warn("mediamtx upsert sub-stream path failed", "camera_id", cam.ID, "stream_path", subPath, "err", err)
+					}
+				}
 			} else {
 				if err := r.mediamtx.DeletePath(ctx, cam.StreamPath); err != nil {
 					r.log.Warn("mediamtx delete path failed", "camera_id", cam.ID, "stream_path", cam.StreamPath, "err", err)
+				}
+				if cam.SubStreamURL != "" {
+					if err := r.mediamtx.DeletePath(ctx, subPath); err != nil {
+						r.log.Warn("mediamtx delete sub-stream path failed", "camera_id", cam.ID, "stream_path", subPath, "err", err)
+					}
 				}
 			}
 		}
@@ -321,6 +342,7 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 			if err := r.state.StopTask(ctx, oldTask.ID); err != nil {
 				r.log.Warn("stop obsolete task failed", "task_id", oldTask.ID, "err", err)
 			}
+			r.deleteSpecHash(oldTask.ID)
 			r.sendRevoke(ctx, oldTask, "rule disabled or removed")
 		}
 	}
@@ -359,6 +381,14 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 			configVer++
 		}
 
+		specSig := taskSpecSignature(dt)
+		prevSig := r.getSpecHash(taskID)
+		needsAssign := nodeChanged || existing.ActualState == domain.TaskActualPending
+		needsUpdate := !needsAssign && prevSig != "" && prevSig != specSig
+		if needsUpdate {
+			configVer++
+		}
+
 		leaseID := uuid.Must(uuid.NewV7())
 		leaseExp := now.Add(r.leaseTTL)
 		if !nodeChanged && existing.LeaseID.Valid {
@@ -387,7 +417,7 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 			continue
 		}
 
-		if nodeChanged && ingestID != "" {
+		if needsAssign && ingestID != "" {
 			streamURL, err := r.issuePullStreamURL(ctx, taskID, dt.StreamPath)
 			if err != nil {
 				r.log.Error("issue pull stream url failed", "task_id", taskID, "err", err)
@@ -411,7 +441,26 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 				},
 			}); err != nil {
 				r.log.Warn("publish assign task command failed", "task_id", taskID, "err", err)
+			} else {
+				r.setSpecHash(taskID, specSig)
 			}
+		} else if needsUpdate && ingestID != "" {
+			if err := r.publishCommand(ctx, ingestID, AgentCommandEnvelope{
+				NodeID:      dt.AssignedNodeID,
+				CommandType: CmdUpdateTask,
+				UpdateTask: &UpdateTaskPayload{
+					TaskID:         taskID.String(),
+					ROIs:           buildCommandROIs(dt.ROIs),
+					AlgoParamsJSON: dt.AlgoParamsJSON,
+					ConfigVersion:  configVer,
+				},
+			}); err != nil {
+				r.log.Warn("publish update task command failed", "task_id", taskID, "err", err)
+			} else {
+				r.setSpecHash(taskID, specSig)
+			}
+		} else if !needsAssign && prevSig == "" {
+			r.setSpecHash(taskID, specSig)
 		}
 	}
 
@@ -499,4 +548,33 @@ func (r *Reconciler) sendRevoke(ctx context.Context, task ExistingTaskInfo, reas
 	}); err != nil {
 		r.log.Warn("publish revoke task command failed", "task_id", task.ID, "err", err)
 	}
+}
+
+func (r *Reconciler) getSpecHash(taskID uuid.UUID) string {
+	r.specMu.Lock()
+	defer r.specMu.Unlock()
+	return r.lastSpecHash[taskID]
+}
+
+func (r *Reconciler) setSpecHash(taskID uuid.UUID, sig string) {
+	r.specMu.Lock()
+	defer r.specMu.Unlock()
+	r.lastSpecHash[taskID] = sig
+}
+
+func (r *Reconciler) deleteSpecHash(taskID uuid.UUID) {
+	r.specMu.Lock()
+	defer r.specMu.Unlock()
+	delete(r.lastSpecHash, taskID)
+}
+
+func taskSpecSignature(dt DesiredTask) string {
+	raw, _ := json.Marshal(struct {
+		ROIs           []CommandROI `json:"rois"`
+		AlgoParamsJSON string       `json:"algo_params_json"`
+	}{
+		ROIs:           buildCommandROIs(dt.ROIs),
+		AlgoParamsJSON: dt.AlgoParamsJSON,
+	})
+	return string(raw)
 }

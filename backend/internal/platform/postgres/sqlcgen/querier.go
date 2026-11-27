@@ -66,6 +66,7 @@ type Querier interface {
 	ListRulesByCamera(ctx context.Context, cameraID uuid.UUID) ([]RoiAlgorithmRule, error)
 	ListRunningInferenceTasks(ctx context.Context) ([]InferenceTask, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	ResetInferenceTaskForReschedule(ctx context.Context, id uuid.UUID) (InferenceTask, error)
 	RevokeAllUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	StopInferenceTask(ctx context.Context, id uuid.UUID) error
