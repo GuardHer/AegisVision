@@ -45,6 +45,44 @@ class MockAlgorithm(BaseAlgorithm):
             # Emit empty frames -> RuntimeServer sends periodic is_heartbeat=True frames.
             return FrameOutput(detections=[], frame_width=1920, frame_height=1080)
 
+        if mode == "sop":
+            script = str(task_ctx.algo_params.get("sop_script") or os.getenv("AEGIS_SOP_SCRIPT", "compliant"))
+            phase = self._step % 6
+            if script == "out_of_order":
+                # Jump straight to step 2 (scan_barcode) skipping required step 1 (wear_esd_strap)
+                return FrameOutput(
+                    detections=[
+                        Detection(bbox=(0.3, 0.25, 0.6, 0.75), label="scan_barcode", confidence=0.95, track_id="op-1", is_abnormal=False)
+                    ],
+                    frame_width=1920,
+                    frame_height=1080,
+                )
+            if script == "timeout":
+                # Perform step 1 on first two frames, then emit empty frames to trigger step_timeout
+                if self._step <= 2:
+                    return FrameOutput(
+                        detections=[
+                            Detection(bbox=(0.2, 0.25, 0.45, 0.75), label="wear_esd_strap", confidence=0.95, track_id="op-1", is_abnormal=False)
+                        ],
+                        frame_width=1920,
+                        frame_height=1080,
+                    )
+                return FrameOutput(detections=[], frame_width=1920, frame_height=1080)
+            # Default "compliant": step 1 (2 frames) -> step 2 (2 frames) -> idle pause (2 frames)
+            if phase in (1, 2):
+                label = "wear_esd_strap"
+            elif phase in (3, 4):
+                label = "scan_barcode"
+            else:
+                return FrameOutput(detections=[], frame_width=1920, frame_height=1080)
+            return FrameOutput(
+                detections=[
+                    Detection(bbox=(0.25, 0.25, 0.55, 0.75), label=label, confidence=0.95, track_id="op-1", is_abnormal=False)
+                ],
+                frame_width=1920,
+                frame_height=1080,
+            )
+
         if mode == "count":
             count = int(task_ctx.algo_params.get("mock_count", 3))
             dets = []

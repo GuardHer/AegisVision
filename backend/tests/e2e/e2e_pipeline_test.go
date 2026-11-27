@@ -66,6 +66,11 @@ func (f *fakeMP4ClipGenerator) GenerateClip(_ context.Context, _ evidence.ClipIn
 	return os.WriteFile(outputPath, buf, 0o600)
 }
 
+func (f *fakeMP4ClipGenerator) GenerateSnapshot(_ context.Context, _, outputPath string) error {
+	jpeg := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 'J', 'F', 'I', 'F', 0xFF, 0xD9}
+	return os.WriteFile(outputPath, jpeg, 0o600)
+}
+
 type webhookDeliveryCapture struct {
 	Event       string
 	Signature   string
@@ -154,6 +159,7 @@ func TestE2EFullPipeline(t *testing.T) {
 	nodeID := "e2e-node-" + suffix
 	anomalyRuntimeKey := "py-e2e-anomaly-" + suffix
 	absenceRuntimeKey := "py-e2e-absence-" + suffix
+	sopRuntimeKey := "py-e2e-sop-" + suffix
 
 	if _, err := api.BootstrapDefaultAdmin(ctx, pgStore, "admin", "Admin@123456"); err != nil {
 		t.Fatalf("bootstrap default admin: %v", err)
@@ -411,6 +417,14 @@ func TestE2EFullPipeline(t *testing.T) {
 				Args:            []string{"-m", "mock_runtime.main"},
 				WorkDir:         pySDKDir,
 				Env:             map[string]string{"PYTHONPATH": pySDKDir, "AEGIS_MOCK_MODE": "absence"},
+				IdleGracePeriod: 2 * time.Second,
+			},
+			sopRuntimeKey: {
+				RuntimeKey:      sopRuntimeKey,
+				Command:         pythonBin,
+				Args:            []string{"-m", "mock_runtime.main"},
+				WorkDir:         pySDKDir,
+				Env:             map[string]string{"PYTHONPATH": pySDKDir, "AEGIS_MOCK_MODE": "sop", "AEGIS_SOP_SCRIPT": "out_of_order"},
 				IdleGracePeriod: 2 * time.Second,
 			},
 		},
@@ -902,6 +916,96 @@ func TestE2EFullPipeline(t *testing.T) {
 	}](t, http.MethodGet, apiSrv.URL+"/api/v1/alarms?camera_id="+camPause.ID, jwtToken, nil)
 	if pauseAlarms.Total != 0 {
 		t.Fatalf("expected 0 false alarms when heartbeat gap exceeds timeout, got %d", pauseAlarms.Total)
+	}
+
+	// 12. Enterprise M2 E2E: Arming Schedule + Real Python Mock SOP Runtime -> sop_trace + sop_cycles + async snapshot fallback + Analytics!
+	schedResp := doJSON[struct {
+		ID string `json:"id"`
+	}](t, http.MethodPost, apiSrv.URL+"/api/v1/schedules", jwtToken, map[string]any{
+		"name":     "E2E-24x7-" + suffix,
+		"timezone": "Asia/Shanghai",
+		"weekly_windows": []map[string]any{
+			{"days": []int{1, 2, 3, 4, 5, 6, 7}, "start": "00:00", "end": "24:00"},
+		},
+	})
+	t.Cleanup(func() {
+		if sid, pErr := uuid.Parse(schedResp.ID); pErr == nil {
+			_ = pgStore.Queries().DeleteArmingSchedule(context.Background(), sid)
+		}
+	})
+
+	sopVer := doJSON[struct {
+		ID string `json:"id"`
+	}](t, http.MethodPost, apiSrv.URL+"/api/v1/algorithms/"+algoResp.ID+"/versions", jwtToken, map[string]any{
+		"version":     "2.0.0",
+		"runtime_key": sopRuntimeKey,
+		"status":      "active",
+	})
+
+	camSOP := doJSON[struct {
+		ID string `json:"id"`
+	}](t, http.MethodPost, apiSrv.URL+"/api/v1/cameras", jwtToken, map[string]any{
+		"name":             "E2E-Cam-SOP-" + suffix,
+		"location":         "Assembly-Line-1",
+		"workstation_code": "WS-SOP-01",
+		"rtsp_url":         "rtsp://127.0.0.1:8554/mock-source-sop",
+	})
+	trackCam(camSOP.ID)
+
+	roiSOP := doJSON[struct {
+		ID string `json:"id"`
+	}](t, http.MethodPost, apiSrv.URL+"/api/v1/cameras/"+camSOP.ID+"/rois", jwtToken, map[string]any{
+		"name":     "ESD-Bench",
+		"roi_type": domain.ROITypeFullFrame,
+		"points":   []map[string]float64{},
+	})
+
+	_ = doJSON[struct {
+		ID string `json:"id"`
+	}](t, http.MethodPost, apiSrv.URL+"/api/v1/cameras/"+camSOP.ID+"/rules", jwtToken, map[string]any{
+		"roi_id":               roiSOP.ID,
+		"algorithm_version_id": sopVer.ID,
+		"name":                 "ESD-Before-Scan",
+		"rule_mode":            domain.RuleModeSOPSequence,
+		"schedule_id":          schedResp.ID,
+		"params": map[string]any{
+			"trigger_mode":              "first_step",
+			"heartbeat_timeout_seconds": 5,
+			"cooldown_seconds":          60,
+			"severity":                  "critical",
+			"violation_types":           []string{"missing_step", "out_of_order", "step_timeout"},
+			"steps": []map[string]any{
+				{"step_id": "s1", "name": "Wear ESD Strap", "labels": []string{"wear_esd_strap"}, "min_confidence": 0.6, "required": true},
+				{"step_id": "s2", "name": "Scan Barcode", "labels": []string{"scan_barcode"}, "min_confidence": 0.6, "required": true},
+			},
+		},
+		"record_video": false,
+	})
+
+	var sopAlarmImgKey string
+	waitUntil(t, 25*time.Second, "sop_sequence violation alarm with sop_trace and async snapshot fallback", func() bool {
+		list := doJSON[struct {
+			Items []struct {
+				ID             string          `json:"id"`
+				RuleMode       string          `json:"rule_mode"`
+				ImageObjectKey string          `json:"image_object_key"`
+				SOPTrace       json.RawMessage `json:"sop_trace"`
+			} `json:"items"`
+		}](t, http.MethodGet, apiSrv.URL+"/api/v1/alarms?camera_id="+camSOP.ID, jwtToken, nil)
+		for _, item := range list.Items {
+			if item.RuleMode == domain.RuleModeSOPSequence && len(item.SOPTrace) > 2 && item.ImageObjectKey != "" {
+				sopAlarmImgKey = item.ImageObjectKey
+				return true
+			}
+		}
+		return false
+	})
+	trackS3(sopAlarmImgKey)
+
+	// Verify analytics summary reflects the SOP violation step
+	anSum := doJSON[api.AnalyticsSummaryPayload](t, http.MethodGet, apiSrv.URL+"/api/v1/analytics/summary?tz=Asia/Shanghai", jwtToken, nil)
+	if anSum.KPIs.SOPViolatedCycles < 1 {
+		t.Fatalf("expected analytics sop_violated_cycles >= 1, got %+v", anSum.KPIs)
 	}
 }
 
