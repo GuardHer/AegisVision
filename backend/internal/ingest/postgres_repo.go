@@ -163,27 +163,57 @@ func (r *PostgresRepo) CreateAlarmIdempotent(ctx context.Context, alarm Persiste
 			}
 		}
 
+		channelMap := make(map[uuid.UUID]sqlcgen.AlarmChannel)
+		var orderedChannels []sqlcgen.AlarmChannel
+		addChannel := func(ch sqlcgen.AlarmChannel) {
+			if _, exists := channelMap[ch.ID]; !exists {
+				channelMap[ch.ID] = ch
+				orderedChannels = append(orderedChannels, ch)
+			}
+		}
+
 		if alarm.RuleID.Valid {
 			channels, chErr := q.ListChannelsByRule(ctx, alarm.RuleID.UUID)
 			if chErr != nil {
 				return chErr
 			}
 			for _, ch := range channels {
-				if _, dErr := q.CreateAlarmDelivery(ctx, sqlcgen.CreateAlarmDeliveryParams{
-					ID:          uuid.Must(uuid.NewV7()),
-					AlarmID:     alarm.ID,
-					ChannelID:   ch.ID,
-					ChannelType: ch.ChannelType,
-					Status:      "pending",
-					MaxAttempts: 4,
-				}); dErr != nil {
-					return dErr
-				}
-				bindings = append(bindings, AlarmChannelBinding{
-					ChannelID:   ch.ID,
-					ChannelType: ch.ChannelType,
-				})
+				addChannel(ch)
 			}
+		}
+
+		// Merge channels with explicit routing_rules.auto_route == true (recursive zone tree + severity + rule_mode).
+		enabledChs, allChErr := q.ListEnabledAlarmChannels(ctx)
+		if allChErr != nil {
+			return allChErr
+		}
+		var zoneAncestors map[uuid.UUID]struct{}
+		if zoneID.Valid {
+			if allZones, zErr := q.ListZones(ctx); zErr == nil {
+				zoneAncestors = buildZoneAncestorSet(allZones, zoneID.UUID)
+			}
+		}
+		for _, ch := range enabledChs {
+			if matchesChannelAutoRoute(ch.RoutingRules, alarm.Severity, alarm.RuleMode, zoneID, zoneAncestors) {
+				addChannel(ch)
+			}
+		}
+
+		for _, ch := range orderedChannels {
+			if _, dErr := q.CreateAlarmDelivery(ctx, sqlcgen.CreateAlarmDeliveryParams{
+				ID:          uuid.Must(uuid.NewV7()),
+				AlarmID:     alarm.ID,
+				ChannelID:   ch.ID,
+				ChannelType: ch.ChannelType,
+				Status:      "pending",
+				MaxAttempts: 4,
+			}); dErr != nil {
+				return dErr
+			}
+			bindings = append(bindings, AlarmChannelBinding{
+				ChannelID:   ch.ID,
+				ChannelType: ch.ChannelType,
+			})
 		}
 		return nil
 	})
@@ -324,4 +354,76 @@ func (r *PostgresRepo) ReloadRules(ctx context.Context, eng *rules.Engine) error
 		eng.SetCameraRules(camID, list)
 	}
 	return nil
+}
+
+type channelRoutingRules struct {
+	AutoRoute  bool     `json:"auto_route"`
+	Severities []string `json:"severities"`
+	ZoneIDs    []string `json:"zone_ids"`
+	RuleModes  []string `json:"rule_modes"`
+}
+
+func buildZoneAncestorSet(zones []sqlcgen.Zone, leafID uuid.UUID) map[uuid.UUID]struct{} {
+	parentByID := make(map[uuid.UUID]uuid.NullUUID, len(zones))
+	for _, z := range zones {
+		parentByID[z.ID] = z.ParentID
+	}
+	anc := map[uuid.UUID]struct{}{leafID: {}}
+	cur := leafID
+	for len(anc) <= len(zones)+1 {
+		p, ok := parentByID[cur]
+		if !ok || !p.Valid {
+			break
+		}
+		if _, seen := anc[p.UUID]; seen {
+			break
+		}
+		anc[p.UUID] = struct{}{}
+		cur = p.UUID
+	}
+	return anc
+}
+
+func matchesChannelAutoRoute(raw json.RawMessage, severity, ruleMode string, zoneID uuid.NullUUID, zoneAncestors map[uuid.UUID]struct{}) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var rr channelRoutingRules
+	if err := json.Unmarshal(raw, &rr); err != nil || !rr.AutoRoute {
+		return false
+	}
+	if len(rr.Severities) > 0 && !containsString(rr.Severities, severity) {
+		return false
+	}
+	if len(rr.RuleModes) > 0 && !containsString(rr.RuleModes, ruleMode) {
+		return false
+	}
+	if len(rr.ZoneIDs) > 0 {
+		if !zoneID.Valid {
+			return false
+		}
+		matchedZone := false
+		for _, rawZ := range rr.ZoneIDs {
+			zid, err := uuid.Parse(rawZ)
+			if err == nil {
+				if _, ok := zoneAncestors[zid]; ok {
+					matchedZone = true
+					break
+				}
+			}
+		}
+		if !matchedZone {
+			return false
+		}
+	}
+	return true
+}
+
+func containsString(list []string, target string) bool {
+	for _, v := range list {
+		if v == target {
+			return true
+		}
+	}
+	return false
 }

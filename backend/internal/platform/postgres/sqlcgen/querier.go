@@ -94,6 +94,7 @@ type Querier interface {
 	ListCameras(ctx context.Context) ([]Camera, error)
 	ListChannelsByRule(ctx context.Context, ruleID uuid.UUID) ([]AlarmChannel, error)
 	ListDeliveriesByAlarm(ctx context.Context, alarmID uuid.UUID) ([]AlarmDelivery, error)
+	ListEnabledAlarmChannels(ctx context.Context) ([]AlarmChannel, error)
 	ListEnabledCameras(ctx context.Context) ([]Camera, error)
 	ListEnabledRules(ctx context.Context) ([]RoiAlgorithmRule, error)
 	ListInferenceTasks(ctx context.Context) ([]InferenceTask, error)

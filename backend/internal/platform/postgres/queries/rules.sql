@@ -41,8 +41,8 @@ RETURNING *;
 DELETE FROM roi_algorithm_rules WHERE id = $1;
 
 -- name: CreateAlarmChannel :one
-INSERT INTO alarm_channels (id, name, channel_type, config, enabled)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO alarm_channels (id, name, channel_type, config, routing_rules, enabled)
+VALUES ($1, $2, $3, $4, COALESCE(sqlc.narg('routing_rules')::jsonb, '{"auto_route":false}'::jsonb), $5)
 RETURNING *;
 
 -- name: GetAlarmChannelByID :one
@@ -51,11 +51,15 @@ SELECT * FROM alarm_channels WHERE id = $1;
 -- name: ListAlarmChannels :many
 SELECT * FROM alarm_channels ORDER BY created_at DESC;
 
+-- name: ListEnabledAlarmChannels :many
+SELECT * FROM alarm_channels WHERE enabled = TRUE ORDER BY created_at ASC;
+
 -- name: UpdateAlarmChannel :one
 UPDATE alarm_channels
 SET name = $2,
     channel_type = $3,
     config = $4,
+    routing_rules = COALESCE(sqlc.narg('routing_rules')::jsonb, routing_rules),
     enabled = $5,
     updated_at = NOW()
 WHERE id = $1

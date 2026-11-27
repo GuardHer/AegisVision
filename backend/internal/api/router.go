@@ -106,7 +106,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	nodesH := NewNodesTasksHandler(deps.Store, deps.Publisher, deps.Logger)
 	alarmsH := NewAlarmsHandler(deps.Store, deps.Storage, deps.Publisher, deps.Logger)
-	channelsH := NewChannelsHandler(deps.Store, nil)
+	channelsH := NewChannelsHandler(deps.Store, deps.Publisher, nil, deps.Logger)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
 
 	v1 := r.Group("/api/v1")
@@ -204,12 +204,13 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.GET("/alarms/:id/deliveries", allRoles, alarmsH.ListDeliveries)
 	authed.POST("/deliveries/:delivery_id/retry", opRoles, alarmsH.RetryDelivery)
 
-	// Alarm channels (admin only)
+	// Alarm channels (admin only; reset allowed for operator/admin)
 	authed.GET("/channels", adminOnly, channelsH.List)
 	authed.POST("/channels", adminOnly, channelsH.Create)
 	authed.PUT("/channels/:id", adminOnly, channelsH.Update)
 	authed.DELETE("/channels/:id", adminOnly, channelsH.Delete)
 	authed.POST("/channels/:id/test", adminOnly, channelsH.Test)
+	authed.POST("/channels/:id/reset", opRoles, channelsH.Reset)
 
 	return r
 }

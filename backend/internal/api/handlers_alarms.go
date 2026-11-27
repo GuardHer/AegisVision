@@ -2,6 +2,7 @@ package api
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -263,6 +264,7 @@ func (h *AlarmsHandler) Handle(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	h.enqueueSoundLightResetForAlarms(c.Request.Context(), []uuid.UUID{id})
 	respondOK(c, updated)
 }
 
@@ -302,7 +304,37 @@ func (h *AlarmsHandler) BatchHandle(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	h.enqueueSoundLightResetForAlarms(c.Request.Context(), ids)
 	respondOK(c, gin.H{"updated_count": affected})
+}
+
+func (h *AlarmsHandler) enqueueSoundLightResetForAlarms(ctx context.Context, alarmIDs []uuid.UUID) {
+	if h.pub == nil || len(alarmIDs) == 0 {
+		return
+	}
+	seen := make(map[uuid.UUID]struct{})
+	for _, aid := range alarmIDs {
+		deliveries, err := h.store.Queries().ListDeliveriesByAlarm(ctx, aid)
+		if err != nil {
+			continue
+		}
+		for _, del := range deliveries {
+			if del.ChannelType != "sound_light" {
+				continue
+			}
+			if _, ok := seen[del.ChannelID]; ok {
+				continue
+			}
+			seen[del.ChannelID] = struct{}{}
+			body, _ := json.Marshal(map[string]any{
+				"action":     "reset_channel",
+				"channel_id": del.ChannelID.String(),
+			})
+			if pubErr := h.pub.PublishAlarm(ctx, body); pubErr != nil && h.log != nil {
+				h.log.Warn("enqueue sound_light handle reset failed", "channel_id", del.ChannelID, "err", pubErr)
+			}
+		}
+	}
 }
 
 // Export streams filtered alarms (hard-capped at 500 rows) as UTF-8 BOM CSV or an evidence ZIP bundle.
