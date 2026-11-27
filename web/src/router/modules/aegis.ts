@@ -45,13 +45,34 @@ export default [
     ]
   },
   {
+    path: "/analytics",
+    component: Layout,
+    redirect: "/analytics/index",
+    meta: {
+      icon: "ep/data-analysis",
+      title: $t("menus.aegisAnalytics"),
+      rank: 3
+    },
+    children: [
+      {
+        path: "/analytics/index",
+        name: "AegisAnalytics",
+        component: () => import("@/views/analytics/index.vue"),
+        meta: {
+          title: $t("menus.aegisAnalytics"),
+          roles: ["admin", "operator", "viewer"]
+        }
+      }
+    ]
+  },
+  {
     path: "/cameras",
     component: Layout,
     redirect: "/cameras/index",
     meta: {
       icon: "ep/camera",
       title: $t("menus.aegisCameras"),
-      rank: 3
+      rank: 4
     },
     children: [
       {
@@ -76,13 +97,34 @@ export default [
     ]
   },
   {
+    path: "/schedules",
+    component: Layout,
+    redirect: "/schedules/index",
+    meta: {
+      icon: "ep/calendar",
+      title: $t("menus.aegisSchedules"),
+      rank: 5
+    },
+    children: [
+      {
+        path: "/schedules/index",
+        name: "AegisSchedules",
+        component: () => import("@/views/schedules/index.vue"),
+        meta: {
+          title: $t("menus.aegisSchedules"),
+          roles: ["admin"]
+        }
+      }
+    ]
+  },
+  {
     path: "/algorithms",
     component: Layout,
     redirect: "/algorithms/index",
     meta: {
       icon: "ep/cpu",
       title: $t("menus.aegisAlgorithms"),
-      rank: 4
+      rank: 6
     },
     children: [
       {
@@ -103,7 +145,7 @@ export default [
     meta: {
       icon: "ep/monitor",
       title: $t("menus.aegisNodes"),
-      rank: 5
+      rank: 7
     },
     children: [
       {
@@ -124,7 +166,7 @@ export default [
     meta: {
       icon: "ep/connection",
       title: $t("menus.aegisChannels"),
-      rank: 6
+      rank: 8
     },
     children: [
       {
@@ -145,7 +187,7 @@ export default [
     meta: {
       icon: "ep/user",
       title: $t("menus.aegisUsers"),
-      rank: 7
+      rank: 9
     },
     children: [
       {

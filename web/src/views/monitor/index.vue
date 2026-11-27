@@ -23,6 +23,7 @@ import {
   type CameraROIItem,
   type DetectionBox,
   type MonitorPresetItem,
+  type SOPRuleProgress,
   type ZoneTreeNode
 } from "@/api/aegis";
 import { useUserStoreHook } from "@/store/modules/user";
@@ -84,6 +85,7 @@ const liveFrames = reactive<
       seq: number;
       detections: DetectionBox[];
       roiCounts: Record<string, number>;
+      sopProgress: SOPRuleProgress[];
     }
   >
 >({});
@@ -451,7 +453,8 @@ function connectWS() {
         liveFrames[msg.camera_id] = {
           seq: prevSeq + 1,
           detections: msg.detections ?? [],
-          roiCounts: msg.roi_counts ?? {}
+          roiCounts: msg.roi_counts ?? {},
+          sopProgress: Array.isArray(msg.sop_progress) ? msg.sop_progress : []
         };
       } else if (msg.type === "alarm_alert") {
         recentAlerts.value = [msg, ...recentAlerts.value].slice(0, 80);
@@ -715,6 +718,34 @@ onBeforeUnmount(() => {
                 :rois="roisByCamera[camId] ?? []"
                 :roi-counts="liveFrames[camId]?.roiCounts ?? {}"
               />
+              <!-- Live Workstation SOP Step Progress Bar -->
+              <div
+                v-if="(liveFrames[camId]?.sopProgress?.length ?? 0) > 0"
+                data-test="sop-progress-bar"
+                class="absolute left-1.5 right-1.5 bottom-1.5 z-10 flex flex-col gap-1 pointer-events-none"
+              >
+                <div
+                  v-for="sop in liveFrames[camId].sopProgress"
+                  :key="sop.rule_id"
+                  class="bg-black/80 text-white rounded px-2 py-1 text-[11px] flex flex-wrap items-center gap-1.5 border border-white/15"
+                >
+                  <span class="font-semibold text-amber-300 shrink-0">{{ sop.rule_name }}</span>
+                  <span
+                    v-for="(step, sIdx) in sop.steps"
+                    :key="step.step_id"
+                    class="px-1.5 py-0.5 rounded text-[10px]"
+                    :class="{
+                      'bg-emerald-600/90 text-white': step.status === 'completed',
+                      'bg-blue-600/95 text-white ring-1 ring-blue-300': step.status === 'active',
+                      'bg-red-600/95 text-white': step.status === 'violated',
+                      'bg-zinc-700/80 text-zinc-300 line-through': step.status === 'skipped',
+                      'bg-zinc-800/90 text-zinc-400': step.status === 'pending'
+                    }"
+                  >
+                    {{ sIdx + 1 }}. {{ step.name }}
+                  </span>
+                </div>
+              </div>
             </template>
             <div v-else class="w-full h-full flex items-center justify-center text-zinc-400 text-xs">
               {{ t("aegis.monitor.noCameraSelected") }}
@@ -759,6 +790,7 @@ onBeforeUnmount(() => {
               :src="evidenceImageURL(alert.alarm_id)"
               class="w-full h-24 object-cover rounded bg-black/80"
               loading="lazy"
+              @error="e => { (e.target as HTMLImageElement).style.display = 'none'; }"
             />
             <div class="flex items-center justify-between text-zinc-400">
               <span>{{ alert.triggered_at }}</span>

@@ -26,12 +26,13 @@ import (
 )
 
 type spyIngestRepo struct {
-	mu          sync.Mutex
-	dedupKeys   map[string]uuid.UUID
-	alarms      []ingest.PersistedAlarm
-	nodes       map[string]string
-	lastFrames  map[string]time.Time
-	taskStates  map[string]string
+	mu               sync.Mutex
+	dedupKeys        map[string]uuid.UUID
+	alarms           []ingest.PersistedAlarm
+	compliantCycles  []ingest.PersistedSOPCycle
+	nodes            map[string]string
+	lastFrames       map[string]time.Time
+	taskStates       map[string]string
 }
 
 func newSpyRepo() *spyIngestRepo {
@@ -84,6 +85,13 @@ func (r *spyIngestRepo) CreateAlarmIdempotent(_ context.Context, alarm ingest.Pe
 	return true, []ingest.AlarmChannelBinding{
 		{ChannelID: uuid.Must(uuid.NewV7()), ChannelType: "webhook"},
 	}, nil
+}
+
+func (r *spyIngestRepo) RecordCompliantSOPCycle(_ context.Context, cycle ingest.PersistedSOPCycle) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.compliantCycles = append(r.compliantCycles, cycle)
+	return nil
 }
 
 func (r *spyIngestRepo) GetCameraName(_ context.Context, _ uuid.UUID) string {

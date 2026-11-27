@@ -110,3 +110,43 @@ def test_runtime_emits_empty_heartbeat_frames():
         rt.shutdown()
         channel.close()
         server.stop(grace=1)
+
+
+def test_mock_algorithm_sop_modes():
+    from mock_runtime.main import MockAlgorithm
+
+    algo_ok = MockAlgorithm()
+    ctx_ok = TaskContext(
+        task_id="t-sop-1",
+        camera_id="cam-1",
+        algorithm_version_id="ver-1",
+        stream_url="rtsp://127.0.0.1/c1",
+        stream_protocol="rtsp",
+        rois=[],
+        lease_id="l1",
+        lease_ttl_seconds=30,
+        config_version=1,
+        algo_params={"mock_mode": "sop", "sop_script": "compliant"},
+    )
+    algo_ok.on_task_start(ctx_ok)
+    labels_seq = [
+        out.detections[0].label if out.detections else None
+        for out in (algo_ok.infer_task(ctx_ok) for _ in range(6))
+    ]
+    assert labels_seq == ["wear_esd_strap", "wear_esd_strap", "scan_barcode", None, None, None]
+
+    algo_viol = MockAlgorithm()
+    ctx_viol = TaskContext(
+        task_id="t-sop-2",
+        camera_id="cam-1",
+        algorithm_version_id="ver-1",
+        stream_url="rtsp://127.0.0.1/c1",
+        stream_protocol="rtsp",
+        rois=[],
+        lease_id="l2",
+        lease_ttl_seconds=30,
+        config_version=1,
+        algo_params={"mock_mode": "sop", "sop_script": "out_of_order"},
+    )
+    out = algo_viol.infer_task(ctx_viol)
+    assert len(out.detections) == 1 and out.detections[0].label == "scan_barcode"

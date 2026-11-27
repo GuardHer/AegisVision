@@ -21,10 +21,11 @@ import (
 )
 
 type spyVideoRepo struct {
-	mu      sync.Mutex
-	camPath string
-	key     string
-	status  string
+	mu       sync.Mutex
+	camPath  string
+	key      string
+	status   string
+	imageKey string
 }
 
 func (r *spyVideoRepo) GetCameraStreamPath(_ context.Context, _ uuid.UUID) (string, error) {
@@ -37,6 +38,27 @@ func (r *spyVideoRepo) UpdateAlarmVideoEvidence(_ context.Context, _ uuid.UUID, 
 	r.key = objectKey
 	r.status = status
 	return nil
+}
+
+func (r *spyVideoRepo) UpdateAlarmImageEvidence(_ context.Context, _ uuid.UUID, objectKey string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.imageKey = objectKey
+	return nil
+}
+
+type fakeSnapshotGenerator struct {
+	data    []byte
+	err     error
+	lastURL string
+}
+
+func (f *fakeSnapshotGenerator) GenerateSnapshot(_ context.Context, streamURL, outputPath string) error {
+	f.lastURL = streamURL
+	if f.err != nil {
+		return f.err
+	}
+	return os.WriteFile(outputPath, f.data, 0o600)
 }
 
 type fakeClipGenerator struct {
@@ -170,5 +192,61 @@ func TestFindRecordingSegmentsWindowAndOrder(t *testing.T) {
 	got := evidence.FindRecordingSegments(root, "cam_ring_1", triggeredAt, 5, 5)
 	if len(got) != 2 || got[0] != seg1 || got[1] != seg2 {
 		t.Fatalf("FindRecordingSegments() = %v, want [%s, %s]", got, seg1, seg2)
+	}
+}
+
+func TestRecorderSnapshotFallbackUploadsAndPreservesVideoStatusOnFailure(t *testing.T) {
+	localStore, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatalf("storage.NewLocal: %v", err)
+	}
+	alarmID := uuid.Must(uuid.NewV7())
+	camID := uuid.Must(uuid.NewV7())
+	triggeredAt := time.Date(2026, 11, 27, 9, 15, 0, 0, time.UTC)
+	jpgBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 'J', 'P', 'G', 0xFF, 0xD9}
+
+	repo := &spyVideoRepo{camPath: "cam_sop_01"}
+	minter := &spyTokenMinter{}
+	snapGen := &fakeSnapshotGenerator{data: jpgBytes}
+	rec := evidence.NewRecorder(evidence.RecorderDeps{
+		Repo:        repo,
+		Storage:     localStore,
+		Tokens:      minter,
+		Snapshotter: snapGen,
+		RTSPBaseURL: "rtsp://127.0.0.1:8554",
+		Logger:      slog.Default(),
+	})
+
+	jobRaw, _ := json.Marshal(evidence.RecordRequest{
+		Mode:        "snapshot",
+		AlarmID:     alarmID.String(),
+		CameraID:    camID.String(),
+		TriggeredAt: triggeredAt,
+	})
+	if err := rec.HandleMessage(context.Background(), jobRaw); err != nil {
+		t.Fatalf("HandleMessage(snapshot) failed: %v", err)
+	}
+	wantKey := "images/2026/11/27/" + camID.String() + "/" + alarmID.String() + ".jpg"
+	if repo.imageKey != wantKey || repo.status != "" {
+		t.Fatalf("expected imageKey=%q and untouched video_status, got imageKey=%q status=%q", wantKey, repo.imageKey, repo.status)
+	}
+	if !strings.Contains(snapGen.lastURL, "cam_sop_01?token=") {
+		t.Fatalf("expected authorized RTSP URL, got %q", snapGen.lastURL)
+	}
+
+	// Review Focus #4: Snapshot failure must NOT mutate video_status
+	failRepo := &spyVideoRepo{camPath: "cam_sop_01"}
+	failRec := evidence.NewRecorder(evidence.RecorderDeps{
+		Repo:        failRepo,
+		Storage:     localStore,
+		Snapshotter: &fakeSnapshotGenerator{err: errors.New("camera offline")},
+		RTSPBaseURL: "rtsp://127.0.0.1:8554",
+		Logger:      slog.Default(),
+	})
+	if err := failRec.HandleMessage(context.Background(), jobRaw); err == nil {
+		t.Fatal("expected error when snapshot capture fails")
+	}
+	if failRepo.status != "" || failRepo.imageKey != "" {
+		t.Fatalf("snapshot failure must leave video_status and imageKey untouched, got (%q, %q)", failRepo.status, failRepo.imageKey)
 	}
 }

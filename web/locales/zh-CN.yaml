@@ -75,8 +75,10 @@ menus:
   aegisDashboard: 运营态势总览
   aegisMonitor: 实时值班中心
   aegisAlarms: 告警处置台
+  aegisAnalytics: 统计分析报表
   aegisCameras: 厂区点位管理
   aegisCameraConfig: 点位智能配置
+  aegisSchedules: 布防排班模板
   aegisAlgorithms: 算法仓库
   aegisNodes: 算力集群与任务
   aegisChannels: 联动通知通道
@@ -169,6 +171,8 @@ aegis:
     retry: 手动重发
     snapshot: 触发抓拍（含叠加还原）
     videoClip: 短视频证据
+    sopTimeline: SOP 违规步骤时间线
+    violationType: 违规类型
   cameras:
     name: 名称
     zone: 所属区域
@@ -191,6 +195,9 @@ aegis:
     codecHint: 编码格式
     configRoiRules: 配置 ROI 与规则
     roiSection: ROI 检测区域
+    roiColor: 区域颜色
+    freezeFrame: 定格画面画框
+    unfreezeFrame: 恢复实时画面
     addPolygonRoi: 新增多边形区域
     addFullFrameRoi: 新增全画面区域
     clearPoints: 清空顶点
@@ -200,10 +207,55 @@ aegis:
     ruleName: 规则名称
     roi: 所属区域
     algorithmVersion: 算法版本
+    armingSchedule: 布防排班模板
+    alwaysArmed: 24×7 全天候布防
     recordVideo: 录制短视频证据
     scheduleMode: 调度模式
     pinnedNode: 指定算力节点
     channels: 关联报警通道
+    sopSteps: SOP 有序步骤编排
+    addStep: 新增步骤
+    triggerMode: 触发方式
+    cycleTimeout: 周期总超时 (秒)
+    rearmCooldown: 防重触冷却 (秒)
+    entryLabels: 进区触发标签
+    violationTypes: 违规检测项
+    stepName: 步骤名称
+    stepLabels: 检测标签 (逗号分隔)
+    stepRoi: 步骤 ROI (留空继承主 ROI)
+    stepRequired: 必做步骤
+    stepDwell: 确认帧数
+    stepMaxWait: 等待超时 (秒)
+  schedules:
+    title: 布防排班模板管理
+    name: 模板名称
+    timezone: 时区
+    weeklyWindows: 每周布防时段
+    addWindow: 新增时段
+    overnightHint: 结束时间早于开始时间（如 20:00 → 08:00）自动识别为跨午夜夜班
+    excludeDates: 节假日/停线撤防日期
+    includeDates: 临时加班布防日期
+    addDate: 添加日期
+    ruleCount: 关联规则数
+  analytics:
+    title: 工厂安全与 SOP 统计分析报表
+    today: 今日
+    last7d: 近 7 天
+    last30d: 近 30 天
+    shiftAll: 全部班次
+    shiftDay: 白班 (08:00-20:00)
+    shiftNight: 夜班 (20:00-08:00)
+    byDay: 按天
+    byHour: 按小时
+    exportCsv: 导出统计 CSV
+    totalAlarms: 周期告警总数
+    sopComplianceRate: SOP 合规率
+    avgSopDuration: SOP 平均周期耗时
+    fpRate: 综合误报率
+    trendChart: 安全行为与 SOP 违规趋势
+    zoneChart: 各车间安全与 SOP 告警对比
+    topSopSteps: SOP 高频违规步骤排行
+    algoPrecision: 算法版本误报率对比
   algorithms:
     key: 算法标识
     name: 算法名称

@@ -97,8 +97,10 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
 	usersH := NewUsersHandler(deps.Store)
 	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
+	schedulesH := NewSchedulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	presetsH := NewPresetsHandler(deps.Store)
 	dashboardH := NewDashboardHandler(deps.Store)
+	analyticsH := NewAnalyticsHandler(deps.Store, deps.Logger)
 	algosH := NewAlgorithmsHandler(deps.Store, deps.Publisher, deps.Logger)
 	camsH := NewCamerasHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Publisher, deps.Logger)
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
@@ -145,8 +147,10 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/algorithms/:id/versions", adminOnly, algosH.CreateVersion)
 	authed.PUT("/algorithm-versions/:version_id", adminOnly, algosH.UpdateVersion)
 
-	// Operations dashboard & monitor tour presets
+	// Operations dashboard, analytics & monitor tour presets
 	authed.GET("/dashboard/overview", allRoles, dashboardH.Overview)
+	authed.GET("/analytics/summary", allRoles, analyticsH.Summary)
+	authed.GET("/analytics/export", allRoles, analyticsH.Export)
 	authed.GET("/monitor/presets", allRoles, presetsH.List)
 	authed.POST("/monitor/presets", allRoles, presetsH.Create)
 	authed.PUT("/monitor/presets/:id", allRoles, presetsH.Update)
@@ -157,6 +161,12 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/zones", adminOnly, zonesH.Create)
 	authed.PUT("/zones/:id", adminOnly, zonesH.Update)
 	authed.DELETE("/zones/:id", adminOnly, zonesH.Delete)
+
+	// Arming schedules
+	authed.GET("/schedules", allRoles, schedulesH.List)
+	authed.POST("/schedules", adminOnly, schedulesH.Create)
+	authed.PUT("/schedules/:id", adminOnly, schedulesH.Update)
+	authed.DELETE("/schedules/:id", adminOnly, schedulesH.Delete)
 
 	// Cameras, stream token, ROIs, rules
 	authed.GET("/cameras", allRoles, camsH.ListCameras)

@@ -7,6 +7,8 @@ import {
   type NormalizedPoint
 } from "@/utils/videoRect";
 
+import type { CameraROIItem } from "@/api/aegis";
+
 const props = withDefaults(
   defineProps<{
     modelValue: NormalizedPoint[];
@@ -15,9 +17,13 @@ const props = withDefaults(
     videoWidth: number;
     videoHeight: number;
     editable?: boolean;
+    strokeColor?: string;
+    existingRois?: CameraROIItem[];
   }>(),
   {
-    editable: true
+    editable: true,
+    strokeColor: "#38bdf8",
+    existingRois: () => []
   }
 );
 
@@ -44,6 +50,22 @@ const pixelPoints = computed(() =>
 
 const polygonAttr = computed(() =>
   pixelPoints.value.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
+);
+
+const existingPolygons = computed(() =>
+  (props.existingRois ?? [])
+    .filter(r => r.enabled && r.roi_type === "polygon" && (r.points?.length ?? 0) >= 3)
+    .map(r => {
+      const pts = r.points.map(pt => normalizedToPixel(pt, videoRect.value));
+      return {
+        id: r.id,
+        name: r.name,
+        color: r.color || "#38bdf8",
+        attr: pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" "),
+        labelX: pts[0]?.x ?? 0,
+        labelY: Math.max(14, (pts[0]?.y ?? 14) - 6)
+      };
+    })
 );
 
 function localCoords(evt: MouseEvent): { x: number; y: number } {
@@ -111,18 +133,40 @@ function removeVertex(index: number, evt: MouseEvent) {
     @mouseup="onSvgMouseUp"
     @mouseleave="onSvgMouseUp"
   >
+    <!-- Saved camera ROIs in their configured colors -->
+    <g v-for="r in existingPolygons" :key="r.id" class="pointer-events-none">
+      <polygon
+        :points="r.attr"
+        :stroke="r.color"
+        :fill="r.color"
+        fill-opacity="0.14"
+        stroke-width="1.8"
+        stroke-dasharray="5 3"
+      />
+      <text
+        :x="r.labelX + 4"
+        :y="r.labelY"
+        :fill="r.color"
+        font-size="11"
+        font-weight="600"
+      >
+        {{ r.name }}
+      </text>
+    </g>
+
     <polygon
       v-if="pixelPoints.length >= 3"
       :points="polygonAttr"
-      fill="rgba(56, 189, 248, 0.22)"
-      stroke="#38bdf8"
+      :fill="strokeColor"
+      fill-opacity="0.22"
+      :stroke="strokeColor"
       stroke-width="2"
     />
     <polyline
       v-else-if="pixelPoints.length === 2"
       :points="polygonAttr"
       fill="none"
-      stroke="#38bdf8"
+      :stroke="strokeColor"
       stroke-width="2"
       stroke-dasharray="4 4"
     />
@@ -132,7 +176,7 @@ function removeVertex(index: number, evt: MouseEvent) {
       :cx="pt.x"
       :cy="pt.y"
       r="6"
-      fill="#0ea5e9"
+      :fill="strokeColor"
       stroke="#ffffff"
       stroke-width="2"
       class="cursor-move"
