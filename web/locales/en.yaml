@@ -75,8 +75,10 @@ menus:
   aegisDashboard: Operations Dashboard
   aegisMonitor: Duty Monitor Center
   aegisAlarms: Alarm Console
+  aegisAnalytics: Analytics & Reports
   aegisCameras: Factory Assets
   aegisCameraConfig: Camera AI Config
+  aegisSchedules: Arming Schedules
   aegisAlgorithms: Algorithm Hub
   aegisNodes: Compute Cluster & Tasks
   aegisChannels: Notification Channels
@@ -169,6 +171,8 @@ aegis:
     retry: Retry Delivery
     snapshot: Trigger Snapshot (with Overlay)
     videoClip: Video Evidence Clip
+    sopTimeline: SOP Violation Step Timeline
+    violationType: Violation Type
   cameras:
     name: Name
     zone: Zone
@@ -191,6 +195,9 @@ aegis:
     codecHint: Codec
     configRoiRules: Configure ROI & Rules
     roiSection: ROI Regions
+    roiColor: ROI Color
+    freezeFrame: Freeze Frame to Draw
+    unfreezeFrame: Resume Live Video
     addPolygonRoi: Add Polygon ROI
     addFullFrameRoi: Add Full-Frame ROI
     clearPoints: Clear Points
@@ -200,10 +207,55 @@ aegis:
     ruleName: Rule Name
     roi: ROI Region
     algorithmVersion: Algorithm Version
+    armingSchedule: Arming Schedule
+    alwaysArmed: 24×7 Always Armed
     recordVideo: Record Video Evidence
     scheduleMode: Schedule Mode
     pinnedNode: Pinned Compute Node
     channels: Alarm Channels
+    sopSteps: SOP Ordered Steps
+    addStep: Add Step
+    triggerMode: Trigger Mode
+    cycleTimeout: Cycle Timeout (s)
+    rearmCooldown: Rearm Cooldown (s)
+    entryLabels: Zone Entry Labels
+    violationTypes: Violation Checks
+    stepName: Step Name
+    stepLabels: Labels (comma-separated)
+    stepRoi: Step ROI (blank = primary ROI)
+    stepRequired: Required
+    stepDwell: Dwell Frames
+    stepMaxWait: Max Wait (s)
+  schedules:
+    title: Arming Schedule Templates
+    name: Template Name
+    timezone: Timezone
+    weeklyWindows: Weekly Armed Windows
+    addWindow: Add Window
+    overnightHint: End earlier than start (e.g. 20:00 → 08:00) spans overnight into the next day
+    excludeDates: Excluded Holidays / Downtime
+    includeDates: Extra Overtime Dates
+    addDate: Add Date
+    ruleCount: Linked Rules
+  analytics:
+    title: Factory Safety & SOP Analytics Center
+    today: Today
+    last7d: Last 7 Days
+    last30d: Last 30 Days
+    shiftAll: All Shifts
+    shiftDay: Day Shift (08:00-20:00)
+    shiftNight: Night Shift (20:00-08:00)
+    byDay: Daily
+    byHour: Hourly
+    exportCsv: Export Summary CSV
+    totalAlarms: Total Alarms
+    sopComplianceRate: SOP Compliance Rate
+    avgSopDuration: Avg SOP Cycle Time
+    fpRate: False Positive Rate
+    trendChart: Safety vs SOP Violation Trend
+    zoneChart: Zone Safety & SOP Breakdown
+    topSopSteps: Top SOP Violated Steps
+    algoPrecision: Algorithm Version False Positive Rate
   algorithms:
     key: Algorithm Key
     name: Name

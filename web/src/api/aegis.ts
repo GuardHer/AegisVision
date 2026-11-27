@@ -118,6 +118,105 @@ export interface CameraROIItem {
   roi_type: "polygon" | "full_frame";
   points: NormalizedPoint[];
   enabled: boolean;
+  color?: string;
+}
+
+export interface WeeklyWindow {
+  days: number[];
+  start: string;
+  end: string;
+}
+
+export interface IncludeDateWindow {
+  date: string;
+  start?: string;
+  end?: string;
+}
+
+export interface ArmingScheduleItem {
+  id: string;
+  name: string;
+  description: string;
+  timezone: string;
+  weekly_windows: WeeklyWindow[];
+  exclude_dates: string[];
+  include_dates: IncludeDateWindow[];
+  enabled: boolean;
+  rule_count?: number;
+  created_at: string;
+}
+
+export interface SOPStepSpec {
+  step_id: string;
+  name: string;
+  labels: string[];
+  roi_id?: string;
+  min_confidence: number;
+  hit_point?: string;
+  min_dwell_frames?: number;
+  max_wait_seconds?: number;
+  required: boolean;
+}
+
+export interface SOPStepTraceItem {
+  step_id: string;
+  name: string;
+  status: "pending" | "active" | "completed" | "skipped" | "violated";
+  completed_at?: string | null;
+  elapsed_ms?: number;
+}
+
+export interface SOPTrace {
+  trigger_mode: string;
+  violation_type: string;
+  violated_step_id?: string;
+  violated_step_name?: string;
+  started_at: string;
+  ended_at: string;
+  duration_ms: number;
+  steps: SOPStepTraceItem[];
+}
+
+export interface SOPRuleProgress {
+  rule_id: string;
+  rule_name: string;
+  state: "idle" | "in_progress" | "rearm";
+  current_step_index: number;
+  steps: SOPStepTraceItem[];
+}
+
+export interface AnalyticsSummary {
+  kpis: {
+    total_alarms: number;
+    safety_alarms: number;
+    sop_alarms: number;
+    confirmed_count: number;
+    false_positive_count: number;
+    false_positive_rate: number;
+    sop_compliant_cycles: number;
+    sop_violated_cycles: number;
+    sop_compliance_rate: number;
+    avg_sop_duration_ms: number;
+  };
+  trend: Array<{ bucket: string; safety_count: number; sop_count: number }>;
+  by_zone: Array<{
+    zone_id?: string | null;
+    zone_name: string;
+    safety_count: number;
+    sop_count: number;
+    confirmed_count: number;
+    false_positive_count: number;
+  }>;
+  top_sop_steps: Array<{ step_name: string; violation_type: string; count: number }>;
+  algo_precision: Array<{
+    algorithm_version_id: string;
+    algorithm_name: string;
+    version: string;
+    total_alarms: number;
+    confirmed_count: number;
+    false_positive_count: number;
+    false_positive_rate: number;
+  }>;
 }
 
 export interface ROIAlgorithmRuleItem {
@@ -126,11 +225,12 @@ export interface ROIAlgorithmRuleItem {
   roi_id: string;
   algorithm_version_id: string;
   name: string;
-  rule_mode: "anomaly_detect" | "count_threshold" | "absence_detect";
+  rule_mode: "anomaly_detect" | "count_threshold" | "absence_detect" | "sop_sequence";
   params: Record<string, any>;
   algo_params_override: Record<string, any>;
   schedule_mode: "auto" | "pinned";
   pinned_node_id?: string | null;
+  schedule_id?: string | null;
   record_video: boolean;
   video_pre_seconds: number;
   video_post_seconds: number;
@@ -189,6 +289,7 @@ export interface AlarmItem {
   video_status: "none" | "recording" | "ready" | "failed";
   handle_status: "unhandled" | "confirmed" | "false_positive" | "ignored";
   false_positive_reason?: string;
+  sop_trace?: SOPTrace | null;
   handled_by?: string | null;
   handled_at?: string | null;
   handle_note: string;
@@ -258,11 +359,30 @@ export const updateAlgorithmVersion = (
     { data }
   );
 
-// Dashboard, Spatial Zones & Monitor Tour Presets
+// Dashboard, Analytics, Arming Schedules, Spatial Zones & Monitor Tour Presets
 export const getDashboardOverview = (tz = "Asia/Shanghai") =>
   http.request<ApiEnvelope<DashboardOverview>>("get", "/api/v1/dashboard/overview", {
     params: { tz }
   });
+
+export const getAnalyticsSummary = (params: Record<string, any>) =>
+  http.request<ApiEnvelope<AnalyticsSummary>>("get", "/api/v1/analytics/summary", { params });
+
+export const exportAnalyticsCSVBlob = (params: Record<string, any>): Promise<Blob> =>
+  http.request<Blob>("get", "/api/v1/analytics/export", {
+    params,
+    responseType: "blob",
+    timeout: 60000
+  });
+
+export const listSchedules = () =>
+  http.request<ApiEnvelope<ArmingScheduleItem[]>>("get", "/api/v1/schedules");
+export const createSchedule = (data: Record<string, any>) =>
+  http.request<ApiEnvelope<ArmingScheduleItem>>("post", "/api/v1/schedules", { data });
+export const updateSchedule = (id: string, data: Record<string, any>) =>
+  http.request<ApiEnvelope<ArmingScheduleItem>>("put", `/api/v1/schedules/${id}`, { data });
+export const deleteSchedule = (id: string) =>
+  http.request<ApiEnvelope<any>>("delete", `/api/v1/schedules/${id}`);
 
 export const getZonesTree = () =>
   http.request<ApiEnvelope<ZoneTreeNode[]>>("get", "/api/v1/zones/tree");
