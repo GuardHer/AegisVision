@@ -225,50 +225,53 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-4 flex flex-col gap-4">
-    <!-- Filter Toolbar -->
-    <el-card shadow="never">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="font-semibold text-base mr-2">{{ t("aegis.analytics.title") }}</span>
-          <el-radio-group v-model="filters.rangePreset" size="small" @change="loadData">
-            <el-radio-button value="today">{{ t("aegis.analytics.today") }}</el-radio-button>
-            <el-radio-button value="7d">{{ t("aegis.analytics.last7d") }}</el-radio-button>
-            <el-radio-button value="30d">{{ t("aegis.analytics.last30d") }}</el-radio-button>
-            <el-radio-button value="custom">Custom</el-radio-button>
-          </el-radio-group>
-          <el-date-picker
-            v-if="filters.rangePreset === 'custom'"
-            v-model="filters.customRange"
-            type="daterange"
-            size="small"
-            class="w-56"
-            @change="loadData"
-          />
-          <el-select v-model="filters.zone_id" clearable size="small" class="w-44" :placeholder="t('aegis.alarms.zone')" @change="loadData">
-            <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
-          </el-select>
-          <el-select v-model="filters.shift" size="small" class="w-40" @change="loadData">
-            <el-option :label="t('aegis.analytics.shiftAll')" value="all" />
-            <el-option :label="t('aegis.analytics.shiftDay')" value="day" />
-            <el-option :label="t('aegis.analytics.shiftNight')" value="night" />
-          </el-select>
-          <el-radio-group v-model="filters.granularity" size="small" @change="loadData">
-            <el-radio-button value="day">{{ t("aegis.analytics.byDay") }}</el-radio-button>
-            <el-radio-button value="hour">{{ t("aegis.analytics.byHour") }}</el-radio-button>
-          </el-radio-group>
+  <div class="aegis-page">
+    <!-- Header & Filter Toolbar -->
+    <section class="aegis-panel">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h1 class="aegis-page-title">{{ t("aegis.analytics.title") }}</h1>
         </div>
-        <div class="flex gap-2">
+        <div class="aegis-header-actions">
           <el-button size="small" :loading="loading" @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
           <el-button size="small" type="primary" :loading="exporting" data-test="export-analytics-btn" @click="onExportCSV">
             {{ t("aegis.analytics.exportCsv") }}
           </el-button>
         </div>
+      </header>
+
+      <div class="aegis-filter-bar !mb-0">
+        <el-radio-group v-model="filters.rangePreset" size="small" @change="loadData">
+          <el-radio-button value="today">{{ t("aegis.analytics.today") }}</el-radio-button>
+          <el-radio-button value="7d">{{ t("aegis.analytics.last7d") }}</el-radio-button>
+          <el-radio-button value="30d">{{ t("aegis.analytics.last30d") }}</el-radio-button>
+          <el-radio-button value="custom">Custom</el-radio-button>
+        </el-radio-group>
+        <el-date-picker
+          v-if="filters.rangePreset === 'custom'"
+          v-model="filters.customRange"
+          type="daterange"
+          size="small"
+          style="width: 224px"
+          @change="loadData"
+        />
+        <el-select v-model="filters.zone_id" clearable size="small" style="width: 175px" :placeholder="t('aegis.alarms.zone')" @change="loadData">
+          <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
+        </el-select>
+        <el-select v-model="filters.shift" size="small" style="width: 165px" @change="loadData">
+          <el-option :label="t('aegis.analytics.shiftAll')" value="all" />
+          <el-option :label="t('aegis.analytics.shiftDay')" value="day" />
+          <el-option :label="t('aegis.analytics.shiftNight')" value="night" />
+        </el-select>
+        <el-radio-group v-model="filters.granularity" size="small" @change="loadData">
+          <el-radio-button value="day">{{ t("aegis.analytics.byDay") }}</el-radio-button>
+          <el-radio-button value="hour">{{ t("aegis.analytics.byHour") }}</el-radio-button>
+        </el-radio-group>
       </div>
-    </el-card>
+    </section>
 
     <!-- 4 Period Summary KPI Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 aegis-tabular">
       <el-card shadow="hover">
         <div class="text-xs text-zinc-500">{{ t("aegis.analytics.totalAlarms") }}</div>
         <div class="text-2xl font-bold mt-1" data-test="an-total-alarms">{{ summary.kpis.total_alarms }}</div>
@@ -327,20 +330,22 @@ onBeforeUnmount(() => {
 
       <el-card shadow="never">
         <template #header><span class="font-medium text-sm">{{ t("aegis.analytics.algoPrecision") }}</span></template>
-        <el-table :data="summary.algo_precision" size="small" border stripe max-height="288">
-          <el-table-column prop="algorithm_name" :label="t('aegis.algorithms.name')" min-width="130" />
-          <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="85" />
-          <el-table-column prop="total_alarms" label="Total" width="75" />
-          <el-table-column prop="confirmed_count" label="Confirmed" width="90" />
-          <el-table-column prop="false_positive_count" label="FP" width="65" />
-          <el-table-column label="FP Rate" width="85">
-            <template #default="{ row }">
-              <el-tag :type="row.false_positive_rate > 30 ? 'danger' : 'success'" size="small">
-                {{ row.false_positive_rate }}%
-              </el-tag>
-            </template>
-          </el-table-column>
-        </el-table>
+        <div class="aegis-table-wrap" tabindex="0" role="region" :aria-label="t('aegis.analytics.algoPrecision')">
+          <el-table :data="summary.algo_precision" size="small" border stripe max-height="288">
+            <el-table-column prop="algorithm_name" :label="t('aegis.algorithms.name')" min-width="130" show-overflow-tooltip />
+            <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="85" />
+            <el-table-column prop="total_alarms" label="Total" width="72" align="right" />
+            <el-table-column prop="confirmed_count" label="Confirmed" width="88" align="right" />
+            <el-table-column prop="false_positive_count" label="FP" width="60" align="right" />
+            <el-table-column label="FP Rate" width="86">
+              <template #default="{ row }">
+                <el-tag :type="row.false_positive_rate > 30 ? 'danger' : 'success'" size="small">
+                  {{ row.false_positive_rate }}%
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </el-card>
     </div>
   </div>

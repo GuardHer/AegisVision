@@ -30,6 +30,7 @@ import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
 import { playDutyAlertChime } from "@/utils/alertSound";
 import { computeContainedVideoRect } from "@/utils/videoRect";
+import { formatDateTime } from "@/utils/format";
 import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
@@ -43,9 +44,12 @@ const allowHandle = computed(() =>
 );
 
 const gridSize = ref<1 | 4 | 9 | 16>(4);
+const soloSlotIdx = ref<number | null>(null);
 const showOverlay = ref(true);
 const soundEnabled = ref(true);
 const streamMode = ref<"main" | "sub">("main");
+const slotStreamOverride = reactive<Record<number, "main" | "sub">>({});
+const slotOverlayOverride = reactive<Record<number, boolean>>({});
 const leftCollapsed = ref(false);
 const rightCollapsed = ref(false);
 const leftTab = ref<"zones" | "presets">("zones");
@@ -193,23 +197,41 @@ const combinedTree = computed<TreeItem[]>(() => {
   return roots;
 });
 
-const visibleSlots = computed(() => selectedSlots.value.slice(0, gridSize.value));
+const visibleSlotEntries = computed(() => {
+  if (soloSlotIdx.value !== null) {
+    const idx = soloSlotIdx.value;
+    return [{ idx, camId: selectedSlots.value[idx] || "" }];
+  }
+  return selectedSlots.value
+    .slice(0, gridSize.value)
+    .map((camId, idx) => ({ idx, camId }));
+});
 
-const gridColsClass = computed(() => {
-  if (gridSize.value === 1) return "grid-cols-1";
-  if (gridSize.value === 4) return "grid-cols-2";
-  if (gridSize.value === 9) return "grid-cols-3";
-  return "grid-cols-4";
+const gridTemplateStyle = computed(() => {
+  const count = soloSlotIdx.value !== null ? 1 : gridSize.value;
+  const cols = count === 1 ? 1 : count === 4 ? 2 : count === 9 ? 3 : 4;
+  return {
+    gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+    gridTemplateRows: `repeat(${cols}, minmax(0, 1fr))`
+  };
 });
 
 const subscribedCameraIds = computed(() =>
-  Array.from(new Set(visibleSlots.value.filter(Boolean)))
+  Array.from(new Set(visibleSlotEntries.value.map(s => s.camId).filter(Boolean)))
 );
 
 const filteredAlerts = computed(() => {
   if (alertSeverityFilter.value === "all") return recentAlerts.value;
   return recentAlerts.value.filter(a => a.severity === alertSeverityFilter.value);
 });
+
+function effectiveStreamFor(idx: number): "main" | "sub" {
+  return slotStreamOverride[idx] ?? streamMode.value;
+}
+
+function effectiveOverlayFor(idx: number): boolean {
+  return slotOverlayOverride[idx] ?? showOverlay.value;
+}
 
 function setSlotRef(idx: number, el: unknown) {
   const prev = slotElements.get(idx);
@@ -265,13 +287,32 @@ async function loadCameraROIs(camId: string) {
 
 function onTreeNodeClick(item: TreeItem) {
   if (!item.isCamera || !item.camera) return;
+  if (soloSlotIdx.value !== null) {
+    selectedSlots.value[soloSlotIdx.value] = item.camera.id;
+    return;
+  }
   const idx = activeSlotIdx.value < gridSize.value ? activeSlotIdx.value : 0;
   selectedSlots.value[idx] = item.camera.id;
   activeSlotIdx.value = (idx + 1) % gridSize.value;
 }
 
+function clearSlot(idx: number) {
+  selectedSlots.value[idx] = "";
+  delete slotStreamOverride[idx];
+  delete slotOverlayOverride[idx];
+  if (soloSlotIdx.value === idx) {
+    soloSlotIdx.value = null;
+  }
+}
+
+function toggleSolo(idx: number) {
+  if (gridSize.value === 1) return;
+  soloSlotIdx.value = soloSlotIdx.value === idx ? null : idx;
+}
+
 function applyPreset(preset: MonitorPresetItem) {
   stopTour();
+  soloSlotIdx.value = null;
   gridSize.value = preset.grid_size;
   const next = Array(16).fill("");
   (preset.camera_ids ?? []).slice(0, 16).forEach((id, idx) => {
@@ -365,10 +406,10 @@ function toggleFullscreen() {
   }
 }
 
-function captureSlotSnapshot(idx: number, camId: string) {
+function captureSlotSnapshot(idx: number, camId: string, videoEl?: HTMLVideoElement | null) {
   const container = slotElements.get(idx);
   if (!container) return;
-  const video = container.querySelector("video") as HTMLVideoElement | null;
+  const video = videoEl || (container.querySelector("video") as HTMLVideoElement | null);
   const overlay = container.querySelector("canvas") as HTMLCanvasElement | null;
   const w = video?.videoWidth || container.clientWidth || 640;
   const h = video?.videoHeight || container.clientHeight || 360;
@@ -382,7 +423,7 @@ function captureSlotSnapshot(idx: number, camId: string) {
   if (video && video.readyState >= 2) {
     ctx.drawImage(video, 0, 0, w, h);
   }
-  if (overlay && showOverlay.value && overlay.width > 0 && overlay.height > 0) {
+  if (overlay && effectiveOverlayFor(idx) && overlay.width > 0 && overlay.height > 0) {
     const crop = computeContainedVideoRect(overlay.width, overlay.height, w, h);
     ctx.drawImage(overlay, crop.x, crop.y, crop.width, crop.height, 0, 0, w, h);
   }
@@ -486,6 +527,22 @@ function onVideoResize(camId: string, size: { width: number; height: number }) {
   videoDims[camId] = size;
 }
 
+watch(gridSize, () => {
+  soloSlotIdx.value = null;
+});
+
+watch(streamMode, () => {
+  for (const key of Object.keys(slotStreamOverride)) {
+    delete slotStreamOverride[Number(key)];
+  }
+});
+
+watch(showOverlay, () => {
+  for (const key of Object.keys(slotOverlayOverride)) {
+    delete slotOverlayOverride[Number(key)];
+  }
+});
+
 watch(subscribedCameraIds, ids => {
   ids.forEach(id => void loadCameraROIs(id));
   sendSubscribe();
@@ -530,12 +587,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="wallContainerRef" class="p-3 flex flex-col gap-3 h-full">
-    <!-- Duty Control Toolbar -->
-    <div class="flex flex-wrap items-center justify-between gap-2 bg-white dark:bg-zinc-900 p-2.5 rounded border">
-      <div class="flex flex-wrap items-center gap-2">
-        <el-button size="small" @click="leftCollapsed = !leftCollapsed">
-          {{ leftCollapsed ? "▶" : "◀" }} {{ t("aegis.monitor.zoneTree") }}
+  <div ref="wallContainerRef" class="monitor-shell">
+    <!-- Top Duty Control Bar -->
+    <div class="monitor-toolbar">
+      <div class="monitor-toolbar__group">
+        <el-button size="small" :type="leftCollapsed ? 'default' : 'primary'" plain @click="leftCollapsed = !leftCollapsed">
+          {{ t("aegis.monitor.zoneTree") }}
         </el-button>
 
         <el-radio-group v-model="gridSize" size="small" data-test="grid-selector">
@@ -545,6 +602,10 @@ onBeforeUnmount(() => {
           <el-radio-button :value="16">{{ t("aegis.monitor.grid16") }}</el-radio-button>
         </el-radio-group>
 
+        <el-button v-if="soloSlotIdx !== null" size="small" type="primary" @click="soloSlotIdx = null">
+          {{ t("aegis.monitor.exitSolo") }}
+        </el-button>
+
         <el-radio-group v-model="streamMode" size="small">
           <el-radio-button value="main">{{ t("aegis.monitor.mainStream") }}</el-radio-button>
           <el-radio-button value="sub">{{ t("aegis.monitor.subStream") }}</el-radio-button>
@@ -553,6 +614,7 @@ onBeforeUnmount(() => {
         <el-button
           size="small"
           :type="showOverlay ? 'primary' : 'default'"
+          plain
           @click="showOverlay = !showOverlay"
         >
           {{ showOverlay ? t("aegis.monitor.overlayOn") : t("aegis.monitor.overlayOff") }}
@@ -561,6 +623,7 @@ onBeforeUnmount(() => {
         <el-button
           size="small"
           :type="soundEnabled ? 'warning' : 'default'"
+          plain
           data-test="sound-toggle"
           @click="soundEnabled = !soundEnabled"
         >
@@ -586,24 +649,24 @@ onBeforeUnmount(() => {
         </el-button>
       </div>
 
-      <div class="flex items-center gap-2">
-        <el-tag :type="wsConnected ? 'success' : 'danger'" size="small">
+      <div class="monitor-toolbar__group">
+        <span class="hidden xl:inline text-xs text-zinc-400">
+          {{ t("aegis.monitor.doubleClickSolo") }}
+        </span>
+        <el-tag :type="wsConnected ? 'success' : 'danger'" size="small" effect="light">
           {{ wsConnected ? t("aegis.monitor.wsConnected") : t("aegis.monitor.wsDisconnected") }}
         </el-tag>
-        <el-button size="small" @click="rightCollapsed = !rightCollapsed">
-          {{ t("aegis.monitor.realtimeAlarms") }} {{ rightCollapsed ? "◀" : "▶" }}
+        <el-button size="small" :type="rightCollapsed ? 'default' : 'primary'" plain @click="rightCollapsed = !rightCollapsed">
+          {{ t("aegis.monitor.realtimeAlarms") }} ({{ filteredAlerts.length }})
         </el-button>
       </div>
     </div>
 
     <!-- 3-Column Duty Workspace -->
-    <div class="flex gap-3 flex-1 min-h-[560px]">
+    <div class="monitor-workspace">
       <!-- Left Collapsible Sidebar: Zone Tree + Tour Presets -->
-      <div
-        v-show="!leftCollapsed"
-        class="w-64 shrink-0 bg-white dark:bg-zinc-900 rounded border p-2.5 flex flex-col overflow-hidden"
-      >
-        <el-tabs v-model="leftTab" stretch>
+      <aside v-show="!leftCollapsed" class="monitor-sidebar monitor-sidebar--left">
+        <el-tabs v-model="leftTab" stretch class="monitor-tabs">
           <el-tab-pane :label="t('aegis.monitor.zoneTree')" name="zones">
             <el-input
               v-model="treeSearch"
@@ -613,7 +676,7 @@ onBeforeUnmount(() => {
               class="mb-2"
               data-test="zone-tree-search"
             />
-            <div class="overflow-y-auto max-h-[500px]">
+            <div class="aegis-scroll-region monitor-sidebar__scroll">
               <el-tree
                 :data="combinedTree"
                 node-key="id"
@@ -636,7 +699,7 @@ onBeforeUnmount(() => {
           </el-tab-pane>
 
           <el-tab-pane :label="t('aegis.monitor.presets')" name="presets">
-            <div class="flex flex-col gap-2 overflow-y-auto max-h-[520px]">
+            <div class="aegis-scroll-region monitor-sidebar__scroll flex flex-col gap-2">
               <div
                 v-for="p in presets"
                 :key="p.id"
@@ -663,25 +726,93 @@ onBeforeUnmount(() => {
             </div>
           </el-tab-pane>
         </el-tabs>
-      </div>
+      </aside>
 
       <!-- Center Video Wall -->
-      <div class="flex-1 grid gap-2" :class="gridColsClass" data-test="video-wall">
+      <section
+        class="monitor-wall"
+        :style="gridTemplateStyle"
+        data-test="video-wall"
+      >
         <div
-          v-for="(camId, idx) in visibleSlots"
+          v-for="{ idx, camId } in visibleSlotEntries"
           :key="idx"
+          :ref="el => setSlotRef(idx, el)"
           data-test="video-tile"
-          class="relative bg-black rounded overflow-hidden border flex flex-col min-h-[150px]"
-          :class="activeSlotIdx === idx ? 'border-blue-500 ring-1 ring-blue-500' : 'border-zinc-700'"
+          class="monitor-tile"
+          :class="{ 'is-active': activeSlotIdx === idx }"
           @click="activeSlotIdx = idx"
         >
-          <div class="z-10 flex items-center justify-between gap-1 bg-black/75 px-2 py-1 text-xs text-white">
+          <template v-if="camId">
+            <WhepPlayer
+              :camera-id="camId"
+              :camera-name="cameraMap.get(camId)?.name || camId"
+              :workstation-code="cameraMap.get(camId)?.workstation_code || ''"
+              :stream="effectiveStreamFor(idx)"
+              :show-overlay="effectiveOverlayFor(idx)"
+              :closable="true"
+              :fullscreen-target="slotElements.get(idx) ?? null"
+              @video-resize="sz => onVideoResize(camId, sz)"
+              @update:stream="val => (slotStreamOverride[idx] = val)"
+              @update:show-overlay="val => (slotOverlayOverride[idx] = val)"
+              @snapshot="video => captureSlotSnapshot(idx, camId, video)"
+              @close="clearSlot(idx)"
+              @toggle-solo="toggleSolo(idx)"
+            />
+            <CanvasOverlay
+              :container-width="slotDims[idx]?.width || 640"
+              :container-height="slotDims[idx]?.height || 360"
+              :video-width="videoDims[camId]?.width ?? 1920"
+              :video-height="videoDims[camId]?.height ?? 1080"
+              :visible="effectiveOverlayFor(idx)"
+              :frame-seq="liveFrames[camId]?.seq ?? 0"
+              :detections="liveFrames[camId]?.detections ?? []"
+              :rois="roisByCamera[camId] ?? []"
+              :roi-counts="liveFrames[camId]?.roiCounts ?? {}"
+            />
+            <!-- Live Workstation SOP Step Progress Bar -->
+            <div
+              v-if="(liveFrames[camId]?.sopProgress?.length ?? 0) > 0"
+              data-test="sop-progress-bar"
+              class="monitor-sop-bar"
+            >
+              <div
+                v-for="sop in liveFrames[camId].sopProgress"
+                :key="sop.rule_id"
+                class="bg-black/80 text-white rounded px-2 py-1 text-[11px] flex flex-wrap items-center gap-1.5 border border-white/15"
+              >
+                <span class="font-semibold text-amber-300 shrink-0">{{ sop.rule_name }}</span>
+                <span
+                  v-for="(step, sIdx) in sop.steps"
+                  :key="step.step_id"
+                  class="px-1.5 py-0.5 rounded text-[10px]"
+                  :class="{
+                    'bg-emerald-600/90 text-white': step.status === 'completed',
+                    'bg-blue-600/95 text-white ring-1 ring-blue-300': step.status === 'active',
+                    'bg-red-600/95 text-white': step.status === 'violated',
+                    'bg-zinc-700/80 text-zinc-300 line-through': step.status === 'skipped',
+                    'bg-zinc-800/90 text-zinc-400': step.status === 'pending'
+                  }"
+                >
+                  {{ sIdx + 1 }}. {{ step.name }}
+                </span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Clean Empty Slot Picker -->
+          <div v-else class="monitor-empty-slot">
+            <div class="text-xs text-slate-400 mb-2">
+              #{{ idx + 1 }} · {{ t("aegis.monitor.clickTreeToAdd") }}
+            </div>
             <el-select
               v-model="selectedSlots[idx]"
               size="small"
+              filterable
               clearable
               :placeholder="t('aegis.monitor.selectCamera')"
-              class="w-40"
+              class="w-48"
+              @click.stop
             >
               <el-option
                 v-for="c in cameras"
@@ -690,75 +821,12 @@ onBeforeUnmount(() => {
                 :value="c.id"
               />
             </el-select>
-            <el-button
-              v-if="camId"
-              size="small"
-              link
-              class="text-zinc-200"
-              @click.stop="captureSlotSnapshot(idx, camId)"
-            >
-              {{ t("aegis.monitor.snapshot") }}
-            </el-button>
-          </div>
-          <div :ref="el => setSlotRef(idx, el)" class="relative flex-1">
-            <template v-if="camId">
-              <WhepPlayer
-                :camera-id="camId"
-                :stream="streamMode"
-                @video-resize="sz => onVideoResize(camId, sz)"
-              />
-              <CanvasOverlay
-                :container-width="slotDims[idx]?.width || 640"
-                :container-height="slotDims[idx]?.height || 360"
-                :video-width="videoDims[camId]?.width ?? 1920"
-                :video-height="videoDims[camId]?.height ?? 1080"
-                :visible="showOverlay"
-                :frame-seq="liveFrames[camId]?.seq ?? 0"
-                :detections="liveFrames[camId]?.detections ?? []"
-                :rois="roisByCamera[camId] ?? []"
-                :roi-counts="liveFrames[camId]?.roiCounts ?? {}"
-              />
-              <!-- Live Workstation SOP Step Progress Bar -->
-              <div
-                v-if="(liveFrames[camId]?.sopProgress?.length ?? 0) > 0"
-                data-test="sop-progress-bar"
-                class="absolute left-1.5 right-1.5 bottom-1.5 z-10 flex flex-col gap-1 pointer-events-none"
-              >
-                <div
-                  v-for="sop in liveFrames[camId].sopProgress"
-                  :key="sop.rule_id"
-                  class="bg-black/80 text-white rounded px-2 py-1 text-[11px] flex flex-wrap items-center gap-1.5 border border-white/15"
-                >
-                  <span class="font-semibold text-amber-300 shrink-0">{{ sop.rule_name }}</span>
-                  <span
-                    v-for="(step, sIdx) in sop.steps"
-                    :key="step.step_id"
-                    class="px-1.5 py-0.5 rounded text-[10px]"
-                    :class="{
-                      'bg-emerald-600/90 text-white': step.status === 'completed',
-                      'bg-blue-600/95 text-white ring-1 ring-blue-300': step.status === 'active',
-                      'bg-red-600/95 text-white': step.status === 'violated',
-                      'bg-zinc-700/80 text-zinc-300 line-through': step.status === 'skipped',
-                      'bg-zinc-800/90 text-zinc-400': step.status === 'pending'
-                    }"
-                  >
-                    {{ sIdx + 1 }}. {{ step.name }}
-                  </span>
-                </div>
-              </div>
-            </template>
-            <div v-else class="w-full h-full flex items-center justify-center text-zinc-400 text-xs">
-              {{ t("aegis.monitor.noCameraSelected") }}
-            </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <!-- Right Collapsible Sidebar: Realtime Alert Stream + Quick Handle -->
-      <div
-        v-show="!rightCollapsed"
-        class="w-80 shrink-0 bg-white dark:bg-zinc-900 rounded border p-3 flex flex-col overflow-hidden"
-      >
+      <aside v-show="!rightCollapsed" class="monitor-sidebar monitor-sidebar--right">
         <div class="flex items-center justify-between mb-2">
           <span class="font-semibold text-sm">{{ t("aegis.monitor.realtimeAlarms") }}</span>
           <el-select v-model="alertSeverityFilter" size="small" class="w-28">
@@ -768,11 +836,11 @@ onBeforeUnmount(() => {
           </el-select>
         </div>
 
-        <div class="flex-1 overflow-y-auto flex flex-col gap-2">
+        <div class="aegis-scroll-region flex-1 flex flex-col gap-2">
           <div
             v-for="alert in filteredAlerts"
             :key="alert.alarm_id"
-            class="p-2 rounded border text-xs flex flex-col gap-1.5"
+            class="p-2.5 rounded-md border text-xs flex flex-col gap-1.5"
             :class="
               alert.severity === 'critical'
                 ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30'
@@ -785,15 +853,16 @@ onBeforeUnmount(() => {
                 {{ alert.severity }}
               </el-tag>
             </div>
-            <div class="text-zinc-500">{{ alert.camera_name }} · {{ alert.rule_mode }}</div>
+            <div class="text-zinc-500 truncate">{{ alert.camera_name }} · {{ alert.rule_mode }}</div>
             <img
               :src="evidenceImageURL(alert.alarm_id)"
-              class="w-full h-24 object-cover rounded bg-black/80"
+              :alt="alert.title"
+              class="w-full aspect-video object-cover rounded bg-black/80"
               loading="lazy"
               @error="e => { (e.target as HTMLImageElement).style.display = 'none'; }"
             />
-            <div class="flex items-center justify-between text-zinc-400">
-              <span>{{ alert.triggered_at }}</span>
+            <div class="flex items-center justify-between text-zinc-400 aegis-tabular">
+              <span>{{ formatDateTime(alert.triggered_at) }}</span>
               <div v-if="allowHandle && !alert.handled" class="flex gap-1">
                 <el-button size="small" type="success" link @click="quickHandleAlert(alert, 'confirmed')">
                   {{ t("aegis.alarms.confirm") }}
@@ -805,8 +874,11 @@ onBeforeUnmount(() => {
               <el-tag v-else-if="alert.handled" size="small" type="success">OK</el-tag>
             </div>
           </div>
+          <div v-if="filteredAlerts.length === 0" class="text-center text-xs text-zinc-400 py-8">
+            {{ t("aegis.dashboard.noRecentAlerts") }}
+          </div>
         </div>
-      </div>
+      </aside>
     </div>
 
     <!-- Save Tour Preset Dialog -->
@@ -846,3 +918,109 @@ onBeforeUnmount(() => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.monitor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  block-size: calc(100dvh - 88px);
+  min-block-size: 560px;
+}
+
+.monitor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: safe center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+
+.monitor-toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.monitor-workspace {
+  display: flex;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-block-size: 0;
+}
+
+.monitor-sidebar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 10px;
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.monitor-sidebar--left {
+  inline-size: 256px;
+}
+
+.monitor-sidebar--right {
+  inline-size: 300px;
+}
+
+.monitor-sidebar__scroll {
+  max-block-size: calc(100dvh - 240px);
+}
+
+.monitor-wall {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.monitor-tile {
+  position: relative;
+  background: #090d16;
+  border-radius: 8px;
+  overflow: clip;
+  border: 1px solid rgb(51 65 85 / 80%);
+  min-block-size: 130px;
+  transition: border-color 150ms ease;
+}
+
+.monitor-tile.is-active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 1px var(--el-color-primary);
+}
+
+.monitor-sop-bar {
+  position: absolute;
+  inset-inline: 8px;
+  inset-block-end: 42px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.monitor-empty-slot {
+  inline-size: 100%;
+  block-size: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: radial-gradient(circle at center, #111827 0%, #090d16 100%);
+}
+</style>

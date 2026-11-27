@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -30,6 +30,7 @@ import RoiEditor from "@/components/aegis/RoiEditor.vue";
 defineOptions({ name: "AegisCameraConfig" });
 
 const route = useRoute();
+const router = useRouter();
 const { t } = useI18n();
 const cameraId = String(route.params.id ?? "");
 
@@ -53,6 +54,12 @@ const draftPoints = ref<NormalizedPoint[]>([]);
 const scheduleNameMap = computed(() => {
   const m = new Map<string, string>();
   for (const s of schedules.value) m.set(s.id, s.name);
+  return m;
+});
+
+const roiNameMap = computed(() => {
+  const m = new Map<string, string>();
+  for (const r of rois.value) m.set(r.id, r.name);
   return m;
 });
 
@@ -97,7 +104,6 @@ const ruleForm = reactive({
   algo_params_override: {} as Record<string, any>,
   enabled: true,
   channel_ids: [] as string[],
-  // SOP sequence fields
   trigger_mode: "first_step" as "first_step" | "zone_entry",
   entry_labels: "person",
   rearm_cooldown_seconds: 30,
@@ -149,14 +155,14 @@ async function loadAll() {
     channels.value = chRes?.data ?? [];
     schedules.value = schedRes?.data ?? [];
 
-    const allVers: (AlgorithmVersionItem & { algoName: string })[] = [];
-    for (const algo of algoRes?.data ?? []) {
-      const vRes = await listAlgorithmVersions(algo.id);
-      for (const v of vRes?.data ?? []) {
-        allVers.push({ ...v, algoName: `${algo.name} (${v.version})` });
-      }
-    }
-    versions.value = allVers;
+    const algos = algoRes?.data ?? [];
+    const versionGroups = await Promise.all(
+      algos.map(async algo => {
+        const vRes = await listAlgorithmVersions(algo.id).catch(() => ({ data: [] as AlgorithmVersionItem[] }));
+        return (vRes?.data ?? []).map(v => ({ ...v, algoName: `${algo.name} (${v.version})` }));
+      })
+    );
+    versions.value = versionGroups.flat();
   } catch (err: any) {
     ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load camera config");
   }
@@ -474,115 +480,179 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="p-4 flex flex-col gap-4">
-    <!-- ROI Visual Canvas -->
-    <el-card shadow="never">
-      <div class="flex items-center justify-between mb-2">
-        <div>
-          <div class="font-semibold">
-            {{ camera?.name }} — {{ t("aegis.cameras.roiSection") }}
-          </div>
-          <div class="text-xs text-zinc-500">{{ t("aegis.cameras.roiHint") }}</div>
-        </div>
-        <el-button size="small" :type="frozenDataURL ? 'warning' : 'default'" @click="toggleFreezeFrame">
-          {{ frozenDataURL ? t("aegis.cameras.unfreezeFrame") : t("aegis.cameras.freezeFrame") }}
-        </el-button>
-      </div>
-
-      <div ref="editorContainerRef" class="relative w-full max-w-[840px] h-[470px] bg-black rounded overflow-hidden">
-        <img
-          v-if="frozenDataURL"
-          :src="frozenDataURL"
-          class="absolute inset-0 w-full h-full object-contain"
-        />
-        <WhepPlayer
-          v-else-if="cameraId"
-          :camera-id="cameraId"
-          @video-resize="sz => Object.assign(videoSize, sz)"
-        />
-        <RoiEditor
-          v-model="draftPoints"
-          :container-width="editorContainerSize.width || 840"
-          :container-height="editorContainerSize.height || 470"
-          :video-width="videoSize.width"
-          :video-height="videoSize.height"
-          :stroke-color="draftRoiColor"
-          :existing-rois="rois"
-        />
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2 mt-3">
-        <el-input v-model="draftRoiName" placeholder="ROI Name" class="w-48" size="small" />
-        <el-color-picker v-model="draftRoiColor" size="small" />
-        <el-button type="primary" size="small" @click="savePolygonROI">
-          {{ t("aegis.cameras.addPolygonRoi") }} ({{ draftPoints.length }})
-        </el-button>
-        <el-button size="small" @click="saveFullFrameROI">
-          {{ t("aegis.cameras.addFullFrameRoi") }}
-        </el-button>
-        <el-button size="small" @click="draftPoints = []">
-          {{ t("aegis.cameras.clearPoints") }}
-        </el-button>
-      </div>
-
-      <el-table :data="rois" size="small" border class="mt-4">
-        <el-table-column prop="name" label="ROI" />
-        <el-table-column :label="t('aegis.cameras.roiColor')" width="95">
-          <template #default="{ row }">
-            <span
-              class="inline-block w-4 h-4 rounded-full border align-middle"
-              :style="{ backgroundColor: row.color || '#38bdf8' }"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column prop="roi_type" label="Type" width="120" />
-        <el-table-column :label="t('aegis.common.actions')" width="100">
-          <template #default="{ row }">
-            <el-button link type="danger" @click="removeROI(row.id)">
-              {{ t("aegis.common.delete") }}
+  <div class="aegis-page">
+    <!-- ROI Visual Workspace -->
+    <section class="aegis-panel">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <div class="flex flex-wrap items-center gap-2">
+            <el-button size="small" @click="router.push('/cameras/index')">
+              ← {{ t("aegis.common.back") }}
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
-
-    <!-- Rules Table -->
-    <el-card shadow="never">
-      <div class="flex justify-between items-center mb-3">
-        <span class="font-semibold">{{ t("aegis.cameras.ruleSection") }}</span>
-        <el-button type="primary" size="small" @click="openCreateRule">
-          {{ t("aegis.cameras.addRule") }}
-        </el-button>
-      </div>
-
-      <el-table :data="rules" size="small" border>
-        <el-table-column prop="name" :label="t('aegis.cameras.ruleName')" min-width="150" />
-        <el-table-column prop="rule_mode" :label="t('aegis.alarms.ruleMode')" width="145">
-          <template #default="{ row }">
-            <el-tag :type="row.rule_mode === 'sop_sequence' ? 'warning' : 'info'" size="small">
-              {{ row.rule_mode }}
+            <h1 class="aegis-page-title">
+              {{ camera?.name || cameraId }} — {{ t("aegis.cameras.roiSection") }}
+            </h1>
+            <el-tag v-if="camera?.workstation_code" size="small" type="info" effect="plain">
+              {{ camera.workstation_code }}
             </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.cameras.armingSchedule')" min-width="140">
-          <template #default="{ row }">
-            {{ row.schedule_id ? scheduleNameMap.get(row.schedule_id) || row.schedule_id : t("aegis.cameras.alwaysArmed") }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="schedule_mode" :label="t('aegis.cameras.scheduleMode')" width="100" />
-        <el-table-column prop="record_video" :label="t('aegis.cameras.recordVideo')" width="105" />
-        <el-table-column :label="t('aegis.common.actions')" width="140" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openEditRule(row)">
-              {{ t("aegis.common.edit") }}
+          </div>
+          <p class="aegis-page-subtitle">{{ t("aegis.cameras.roiHint") }}</p>
+        </div>
+        <div class="aegis-header-actions">
+          <el-button size="small" :type="frozenDataURL ? 'warning' : 'default'" @click="toggleFreezeFrame">
+            {{ frozenDataURL ? t("aegis.cameras.unfreezeFrame") : t("aegis.cameras.freezeFrame") }}
+          </el-button>
+        </div>
+      </header>
+
+      <div class="roi-studio-grid">
+        <!-- Left: Responsive 16:9 Canvas + Draw Controls -->
+        <div class="min-w-0 flex flex-col gap-3">
+          <div ref="editorContainerRef" class="roi-stage">
+            <img
+              v-if="frozenDataURL"
+              :src="frozenDataURL"
+              class="absolute inset-0 w-full h-full object-contain"
+              alt="Frozen camera frame"
+            />
+            <WhepPlayer
+              v-else-if="cameraId"
+              :camera-id="cameraId"
+              :camera-name="camera?.name"
+              controls="minimal"
+              @video-resize="sz => Object.assign(videoSize, sz)"
+            />
+            <RoiEditor
+              v-model="draftPoints"
+              :container-width="editorContainerSize.width || 800"
+              :container-height="editorContainerSize.height || 450"
+              :video-width="videoSize.width"
+              :video-height="videoSize.height"
+              :stroke-color="draftRoiColor"
+              :existing-rois="rois"
+            />
+          </div>
+
+          <div class="aegis-filter-bar !mb-0">
+            <el-input v-model="draftRoiName" placeholder="ROI Name" style="width: 185px" size="small" />
+            <el-color-picker v-model="draftRoiColor" size="small" />
+            <el-button type="primary" size="small" @click="savePolygonROI">
+              {{ t("aegis.cameras.addPolygonRoi") }} ({{ draftPoints.length }})
             </el-button>
-            <el-button link type="danger" @click="removeRule(row.id)">
-              {{ t("aegis.common.delete") }}
+            <el-button size="small" @click="saveFullFrameROI">
+              {{ t("aegis.cameras.addFullFrameRoi") }}
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+            <el-button size="small" @click="draftPoints = []">
+              {{ t("aegis.cameras.clearPoints") }}
+            </el-button>
+          </div>
+        </div>
+
+        <!-- Right: Configured ROIs List -->
+        <div class="min-w-0 flex flex-col gap-2">
+          <div class="text-xs font-semibold text-zinc-500">
+            {{ t("aegis.cameras.roiSection") }} ({{ rois.length }})
+          </div>
+          <div
+            class="aegis-table-wrap"
+            tabindex="0"
+            role="region"
+            :aria-label="t('aegis.cameras.roiSection')"
+          >
+            <el-table :data="rois" size="small" border stripe>
+              <el-table-column prop="name" label="ROI" min-width="115" show-overflow-tooltip />
+              <el-table-column :label="t('aegis.cameras.roiColor')" width="64" align="center">
+                <template #default="{ row }">
+                  <span
+                    class="inline-block w-4 h-4 rounded-full border align-middle"
+                    :style="{ backgroundColor: row.color || '#38bdf8' }"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column prop="roi_type" label="Type" width="96">
+                <template #default="{ row }">
+                  <el-tag size="small" type="info" effect="plain">{{ row.roi_type }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column :label="t('aegis.common.actions')" width="78" fixed="right">
+                <template #default="{ row }">
+                  <el-button link type="danger" @click="removeROI(row.id)">
+                    {{ t("aegis.common.delete") }}
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Rules Section -->
+    <section class="aegis-panel">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h2 class="aegis-page-title">{{ t("aegis.cameras.ruleSection") }}</h2>
+        </div>
+        <div class="aegis-header-actions">
+          <el-button type="primary" size="small" @click="openCreateRule">
+            {{ t("aegis.cameras.addRule") }}
+          </el-button>
+        </div>
+      </header>
+
+      <div
+        class="aegis-table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="t('aegis.cameras.ruleSection')"
+      >
+        <el-table :data="rules" size="small" border stripe>
+          <el-table-column prop="name" :label="t('aegis.cameras.ruleName')" min-width="160" show-overflow-tooltip />
+          <el-table-column :label="t('aegis.cameras.roi')" min-width="120" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ roiNameMap.get(row.roi_id) || "—" }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="rule_mode" :label="t('aegis.alarms.ruleMode')" width="142">
+            <template #default="{ row }">
+              <el-tag :type="row.rule_mode === 'sop_sequence' ? 'warning' : 'info'" size="small">
+                {{ row.rule_mode }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.cameras.armingSchedule')" min-width="145" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.schedule_id ? scheduleNameMap.get(row.schedule_id) || row.schedule_id : t("aegis.cameras.alwaysArmed") }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="schedule_mode" :label="t('aegis.cameras.scheduleMode')" width="96" />
+          <el-table-column :label="t('aegis.cameras.recordVideo')" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.record_video ? 'success' : 'info'" size="small" effect="plain">
+                {{ row.record_video ? t("aegis.common.yes") : t("aegis.common.no") }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.enabled')" width="84">
+            <template #default="{ row }">
+              <el-tag :type="row.enabled ? 'success' : 'danger'" size="small">
+                {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.actions')" width="136" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEditRule(row)">
+                {{ t("aegis.common.edit") }}
+              </el-button>
+              <el-button link type="danger" @click="removeRule(row.id)">
+                {{ t("aegis.common.delete") }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </section>
 
     <!-- Create / Edit Rule Dialog (with Visual SOP Sequence Orchestrator) -->
     <el-dialog
@@ -687,9 +757,9 @@ onBeforeUnmount(() => {
                   <span class="font-medium text-xs">#{{ idx + 1 }} ({{ step.step_id }})</span>
                   <div class="flex items-center gap-1">
                     <el-switch v-model="step.required" :active-text="t('aegis.cameras.stepRequired')" />
-                    <el-button size="small" link :disabled="idx === 0" @click="moveSOPStep(idx, -1)">↑</el-button>
-                    <el-button size="small" link :disabled="idx === ruleForm.steps.length - 1" @click="moveSOPStep(idx, 1)">↓</el-button>
-                    <el-button size="small" link type="danger" :disabled="ruleForm.steps.length <= 1" @click="removeSOPStep(idx)">×</el-button>
+                    <el-button size="small" link :disabled="idx === 0" aria-label="Move step up" @click="moveSOPStep(idx, -1)">↑</el-button>
+                    <el-button size="small" link :disabled="idx === ruleForm.steps.length - 1" aria-label="Move step down" @click="moveSOPStep(idx, 1)">↓</el-button>
+                    <el-button size="small" link type="danger" :disabled="ruleForm.steps.length <= 1" aria-label="Remove step" @click="removeSOPStep(idx)">×</el-button>
                   </div>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
@@ -732,3 +802,27 @@ onBeforeUnmount(() => {
     </el-dialog>
   </div>
 </template>
+
+<style scoped lang="scss">
+.roi-studio-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.roi-stage {
+  position: relative;
+  inline-size: 100%;
+  aspect-ratio: 16 / 9;
+  background: #0b1120;
+  border-radius: 6px;
+  overflow: clip;
+}
+
+@media (max-width: 1100px) {
+  .roi-studio-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

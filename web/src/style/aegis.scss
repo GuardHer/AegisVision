@@ -1,0 +1,194 @@
+/* AegisVision Operate-Mode Enterprise Layout & Table System
+ * Follows Impeccable Operate Mode + Modern Web Guidance (css-layout, responsive-table, accessibility)
+ */
+
+.aegis-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  min-inline-size: 0;
+}
+
+.aegis-panel {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 16px;
+  min-inline-size: 0;
+}
+
+.aegis-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block-end: 12px;
+  margin-block-end: 12px;
+  border-block-end: 1px solid var(--el-border-color-extra-light);
+}
+
+.aegis-page-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.aegis-page-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--el-text-color-primary);
+}
+
+.aegis-page-subtitle {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--el-text-color-secondary);
+}
+
+.aegis-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: safe center;
+  gap: 8px;
+}
+
+.aegis-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: safe center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-block-end: 12px;
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-extra-light);
+  border-radius: 6px;
+}
+
+.aegis-filter-bar__end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+/* Container-aware responsive table wrapper with stable scrollbar gutter & tabular numerals */
+.aegis-table-wrap {
+  container-type: inline-size;
+  inline-size: 100%;
+  min-inline-size: 0;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+
+  .el-table {
+    font-variant-numeric: tabular-nums;
+
+    th.el-table__cell {
+      background-color: var(--el-fill-color-light) !important;
+      color: var(--el-text-color-primary);
+      font-weight: 600;
+      font-size: 12.5px;
+    }
+
+    td.el-table__cell {
+      font-size: 13px;
+    }
+  }
+}
+
+.aegis-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.aegis-mono-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--el-text-color-regular);
+}
+
+.aegis-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding-block-start: 14px;
+}
+
+/* Responsive two-column split (e.g. left zone tree + right asset table) */
+.aegis-split-layout {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .aegis-split-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Dataset card grid using CSS Grid + subgrid row alignment for crisp bottoms */
+.aegis-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(276px, 1fr));
+  gap: 14px;
+}
+
+.aegis-sample-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  overflow: clip;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+
+  &:hover {
+    border-color: var(--el-color-primary-light-5);
+    box-shadow: 0 4px 14px rgb(15 23 42 / 7%);
+  }
+}
+
+.aegis-sample-card__media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  inline-size: 100%;
+  background: #0b1120;
+  overflow: clip;
+
+  img {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: contain;
+  }
+}
+
+.aegis-sample-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  gap: 6px;
+  padding: 12px;
+  min-inline-size: 0;
+}
+
+/* Accessible focus-visible indicator for native controls inside AegisVision surfaces */
+.aegis-page :where(button, a, [tabindex="0"]):focus-visible,
+.aegis-whep-player :where(button, select, input):focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
+}
+
+.aegis-scroll-region {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}

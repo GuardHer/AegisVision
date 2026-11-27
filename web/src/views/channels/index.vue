@@ -65,6 +65,16 @@ function targetUrlOf(row: AlarmChannelItem): string {
   return row.config?.url ?? "";
 }
 
+function routingSummary(row: AlarmChannelItem): string {
+  const rr = row.routing_rules;
+  if (!rr?.auto_route) return "";
+  const parts: string[] = [];
+  if (rr.severities?.length) parts.push(rr.severities.join("/"));
+  if (rr.zone_ids?.length) parts.push(`${rr.zone_ids.length} zones`);
+  if (rr.rule_modes?.length) parts.push(`${rr.rule_modes.length} modes`);
+  return parts.join(" · ");
+}
+
 async function loadData() {
   loading.value = true;
   try {
@@ -228,70 +238,87 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="p-4">
-    <el-card shadow="never">
-      <div class="flex justify-between mb-4">
-        <el-button type="primary" @click="openCreate">{{ t("aegis.common.create") }}</el-button>
-        <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
-      </div>
+  <div class="aegis-page">
+    <section class="aegis-panel">
+      <header class="aegis-page-header">
+        <div class="aegis-page-title-group">
+          <h1 class="aegis-page-title">{{ t("menus.aegisChannels") }}</h1>
+        </div>
+        <div class="aegis-header-actions">
+          <el-button type="primary" @click="openCreate">{{ t("aegis.common.create") }}</el-button>
+          <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
+        </div>
+      </header>
 
-      <el-table v-loading="loading" :data="channels" border stripe>
-        <el-table-column prop="name" :label="t('aegis.channels.name')" min-width="150" />
-        <el-table-column :label="t('aegis.channels.type')" width="150">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.channel_type === 'sound_light' ? 'danger' : 'primary'">
-              {{ typeLabel(row.channel_type) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.channels.url')" min-width="220" show-overflow-tooltip>
-          <template #default="{ row }">{{ targetUrlOf(row) }}</template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.channels.routing')" width="140">
-          <template #default="{ row }">
-            <el-tag v-if="row.routing_rules?.auto_route" size="small" type="success">
-              Auto-Route
-            </el-tag>
-            <span v-else class="text-xs text-slate-400">Manual Rule</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.common.enabled')" width="90">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.enabled ? 'success' : 'info'">
-              {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.common.actions')" width="280">
-          <template #default="{ row }">
-            <el-button link type="success" @click="onTest(row.id)">
-              {{ t("aegis.channels.test") }}
-            </el-button>
-            <el-button
-              v-if="row.channel_type === 'sound_light'"
-              link
-              type="warning"
-              @click="onReset(row.id)"
-            >
-              {{ t("aegis.channels.reset") }}
-            </el-button>
-            <el-button link type="primary" @click="openEdit(row)">
-              {{ t("aegis.common.edit") }}
-            </el-button>
-            <el-button link type="danger" @click="onDelete(row.id)">
-              {{ t("aegis.common.delete") }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <div
+        class="aegis-table-wrap"
+        tabindex="0"
+        role="region"
+        :aria-label="t('menus.aegisChannels')"
+      >
+        <el-table v-loading="loading" :data="channels" border stripe>
+          <el-table-column prop="name" :label="t('aegis.channels.name')" min-width="150" show-overflow-tooltip />
+          <el-table-column :label="t('aegis.channels.type')" width="150">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.channel_type === 'sound_light' ? 'danger' : 'primary'">
+                {{ typeLabel(row.channel_type) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.channels.url')" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span class="aegis-mono-id">{{ targetUrlOf(row) || "—" }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.channels.routing')" min-width="165">
+            <template #default="{ row }">
+              <div v-if="row.routing_rules?.auto_route" class="flex flex-col items-start gap-0.5">
+                <el-tag size="small" type="success">Auto-Route</el-tag>
+                <span v-if="routingSummary(row)" class="text-[11px] text-slate-400">
+                  {{ routingSummary(row) }}
+                </span>
+              </div>
+              <span v-else class="text-xs text-slate-400">Manual Rule</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.enabled')" width="90">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.enabled ? 'success' : 'info'">
+                {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('aegis.common.actions')" width="270" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="success" @click="onTest(row.id)">
+                {{ t("aegis.channels.test") }}
+              </el-button>
+              <el-button
+                v-if="row.channel_type === 'sound_light'"
+                link
+                type="warning"
+                @click="onReset(row.id)"
+              >
+                {{ t("aegis.channels.reset") }}
+              </el-button>
+              <el-button link type="primary" @click="openEdit(row)">
+                {{ t("aegis.common.edit") }}
+              </el-button>
+              <el-button link type="danger" @click="onDelete(row.id)">
+                {{ t("aegis.common.delete") }}
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </section>
 
     <el-dialog
       v-model="dialogVisible"
       :title="editingId ? t('aegis.common.edit') : t('aegis.common.create')"
       width="620px"
     >
-      <el-form label-width="150px">
+      <el-form label-width="150px" size="small">
         <el-form-item :label="t('aegis.channels.name')">
           <el-input v-model="form.name" />
         </el-form-item>

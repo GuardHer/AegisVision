@@ -17,6 +17,7 @@ import {
   type CameraItem,
   type ZoneTreeNode
 } from "@/api/aegis";
+import { formatDateTime } from "@/utils/format";
 
 defineOptions({ name: "AegisCameras" });
 
@@ -28,6 +29,8 @@ const zonesTree = ref<ZoneTreeNode[]>([]);
 const selectedZoneId = ref<string>("");
 const cameras = ref<CameraItem[]>([]);
 const selectedCameraIds = ref<string[]>([]);
+const filterKeyword = ref("");
+const filterStatus = ref("");
 
 // Flatten zone tree for dropdowns and table lookup
 const flatZones = computed(() => {
@@ -51,6 +54,16 @@ const zoneNameMap = computed(() => {
   const m = new Map<string, string>();
   for (const z of flatZones.value) m.set(z.id, z.name);
   return m;
+});
+
+const filteredCameras = computed(() => {
+  const kw = filterKeyword.value.trim().toLowerCase();
+  return cameras.value.filter(cam => {
+    if (filterStatus.value && cam.status !== filterStatus.value) return false;
+    if (!kw) return true;
+    const hay = `${cam.name} ${cam.workstation_code || ""} ${(cam.tags || []).join(" ")}`.toLowerCase();
+    return hay.includes(kw);
+  });
 });
 
 // Zone CRUD modal
@@ -305,118 +318,204 @@ onMounted(loadAll);
 </script>
 
 <template>
-  <div class="p-4 flex gap-4 h-full">
-    <!-- Left Spatial Zone Tree -->
-    <el-card shadow="never" class="w-72 shrink-0 flex flex-col">
-      <template #header>
-        <div class="flex items-center justify-between">
+  <div class="aegis-page">
+    <div class="aegis-split-layout">
+      <!-- Left Spatial Zone Tree -->
+      <aside class="aegis-panel flex flex-col gap-3">
+        <div class="flex items-center justify-between gap-2 pb-2 border-b border-[var(--el-border-color-extra-light)]">
           <span class="font-semibold text-sm">{{ t("aegis.cameras.zone") }}</span>
           <el-button size="small" type="primary" link @click="openCreateZone('')">
             + {{ t("aegis.cameras.addZone") }}
           </el-button>
         </div>
-      </template>
 
-      <el-button
-        size="small"
-        :type="selectedZoneId === '' ? 'primary' : 'default'"
-        plain
-        class="w-full mb-2"
-        @click="clearZoneFilter"
-      >
-        {{ t("aegis.cameras.allZones") }}
-      </el-button>
+        <el-button
+          size="small"
+          :type="selectedZoneId === '' ? 'primary' : 'default'"
+          plain
+          class="w-full"
+          @click="clearZoneFilter"
+        >
+          {{ t("aegis.cameras.allZones") }}
+        </el-button>
 
-      <el-tree
-        :data="zonesTree"
-        node-key="id"
-        default-expand-all
-        highlight-current
-        :expand-on-click-node="false"
-        @node-click="selectZone"
-      >
-        <template #default="{ data }">
-          <div class="flex items-center justify-between w-full pr-1 text-xs group">
-            <span class="truncate">
-              {{ data.name }}
-              <span class="text-zinc-400">({{ data.online_camera_count }}/{{ data.camera_count }})</span>
-            </span>
-            <span class="hidden group-hover:flex gap-1 shrink-0">
-              <el-button link type="primary" size="small" @click.stop="openCreateZone(data.id)">+</el-button>
-              <el-button link type="primary" size="small" @click.stop="openEditZone(data)">✎</el-button>
-              <el-button link type="danger" size="small" @click.stop="onDeleteZone(data)">×</el-button>
-            </span>
-          </div>
-        </template>
-      </el-tree>
-    </el-card>
-
-    <!-- Right Camera Assets Table -->
-    <el-card shadow="never" class="flex-1 min-w-0">
-      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div class="flex flex-wrap gap-2">
-          <el-button type="primary" @click="openCreateCamera">{{ t("aegis.common.create") }}</el-button>
-          <el-button @click="importResult = null; importDialogVisible = true">
-            {{ t("aegis.cameras.importCsv") }}
-          </el-button>
-          <el-button :disabled="selectedCameraIds.length === 0" @click="runBatchEnable(true)">
-            {{ t("aegis.cameras.batchEnable") }}
-          </el-button>
-          <el-button :disabled="selectedCameraIds.length === 0" @click="runBatchEnable(false)">
-            {{ t("aegis.cameras.batchDisable") }}
-          </el-button>
-          <el-button :disabled="selectedCameraIds.length === 0" @click="openMoveZone">
-            {{ t("aegis.cameras.batchMoveZone") }}
-          </el-button>
+        <div class="aegis-scroll-region max-h-[calc(100dvh-260px)]">
+          <el-tree
+            :data="zonesTree"
+            node-key="id"
+            default-expand-all
+            highlight-current
+            :expand-on-click-node="false"
+            @node-click="selectZone"
+          >
+            <template #default="{ data }">
+              <div class="zone-tree-row">
+                <span class="zone-tree-row__label" :title="data.name">
+                  {{ data.name }}
+                  <span class="text-zinc-400 aegis-tabular">({{ data.online_camera_count }}/{{ data.camera_count }})</span>
+                </span>
+                <span class="zone-tree-row__actions">
+                  <button
+                    type="button"
+                    class="zone-action-btn"
+                    :title="t('aegis.cameras.addChildZone')"
+                    :aria-label="t('aegis.cameras.addChildZone')"
+                    @click.stop="openCreateZone(data.id)"
+                  >
+                    +
+                  </button>
+                  <button
+                    type="button"
+                    class="zone-action-btn"
+                    :title="t('aegis.common.edit')"
+                    :aria-label="t('aegis.common.edit')"
+                    @click.stop="openEditZone(data)"
+                  >
+                    {{ t("aegis.common.edit") }}
+                  </button>
+                  <button
+                    type="button"
+                    class="zone-action-btn zone-action-btn--danger"
+                    :title="t('aegis.common.delete')"
+                    :aria-label="t('aegis.common.delete')"
+                    @click.stop="onDeleteZone(data)"
+                  >
+                    {{ t("aegis.common.delete") }}
+                  </button>
+                </span>
+              </div>
+            </template>
+          </el-tree>
         </div>
-        <el-button @click="loadAll">{{ t("aegis.common.refresh") }}</el-button>
-      </div>
+      </aside>
 
-      <el-table
-        v-loading="loading"
-        :data="cameras"
-        border
-        stripe
-        @selection-change="onSelectionChange"
-      >
-        <el-table-column type="selection" width="46" />
-        <el-table-column prop="name" :label="t('aegis.cameras.name')" min-width="140" />
-        <el-table-column prop="workstation_code" :label="t('aegis.cameras.workstationCode')" width="120" />
-        <el-table-column :label="t('aegis.cameras.zone')" min-width="120">
-          <template #default="{ row }">
-            {{ row.zone_id ? zoneNameMap.get(row.zone_id) || "-" : "-" }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="codec_hint" :label="t('aegis.cameras.codecHint')" width="85" />
-        <el-table-column :label="t('aegis.common.status')" width="95">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'online' ? 'success' : 'info'" size="small">
-              {{ row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.common.enabled')" width="85">
-          <template #default="{ row }">
-            <el-tag :type="row.enabled ? 'success' : 'danger'" size="small">
-              {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('aegis.common.actions')" width="250" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="router.push(`/cameras/${row.id}/config`)">
-              {{ t("aegis.cameras.configRoiRules") }}
+      <!-- Right Camera Assets Panel -->
+      <section class="aegis-panel">
+        <header class="aegis-page-header">
+          <div class="aegis-page-title-group">
+            <div class="flex items-center gap-2">
+              <h1 class="aegis-page-title">{{ t("menus.aegisCameras") }}</h1>
+              <el-tag v-if="selectedZoneId" size="small" closable @close="clearZoneFilter">
+                {{ zoneNameMap.get(selectedZoneId) || selectedZoneId }}
+              </el-tag>
+            </div>
+          </div>
+          <div class="aegis-header-actions">
+            <el-button type="primary" @click="openCreateCamera">{{ t("aegis.common.create") }}</el-button>
+            <el-button @click="importResult = null; importDialogVisible = true">
+              {{ t("aegis.cameras.importCsv") }}
             </el-button>
-            <el-button link type="primary" @click="openEditCamera(row)">
-              {{ t("aegis.common.edit") }}
+            <el-button @click="loadAll">{{ t("aegis.common.refresh") }}</el-button>
+          </div>
+        </header>
+
+        <div class="aegis-filter-bar">
+          <el-input
+            v-model="filterKeyword"
+            clearable
+            :placeholder="t('aegis.monitor.searchCamera')"
+            style="width: 210px"
+          />
+          <el-select
+            v-model="filterStatus"
+            clearable
+            :placeholder="t('aegis.common.status')"
+            style="width: 125px"
+          >
+            <el-option label="online" value="online" />
+            <el-option label="offline" value="offline" />
+          </el-select>
+
+          <div class="aegis-filter-bar__end">
+            <el-button size="small" :disabled="selectedCameraIds.length === 0" @click="runBatchEnable(true)">
+              {{ t("aegis.cameras.batchEnable") }}
             </el-button>
-            <el-button link type="danger" @click="onDeleteCamera(row.id)">
-              {{ t("aegis.common.delete") }}
+            <el-button size="small" :disabled="selectedCameraIds.length === 0" @click="runBatchEnable(false)">
+              {{ t("aegis.cameras.batchDisable") }}
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+            <el-button size="small" :disabled="selectedCameraIds.length === 0" @click="openMoveZone">
+              {{ t("aegis.cameras.batchMoveZone") }}
+            </el-button>
+          </div>
+        </div>
+
+        <div
+          class="aegis-table-wrap"
+          tabindex="0"
+          role="region"
+          :aria-label="t('menus.aegisCameras')"
+        >
+          <el-table
+            v-loading="loading"
+            :data="filteredCameras"
+            border
+            stripe
+            @selection-change="onSelectionChange"
+          >
+            <el-table-column type="selection" width="46" />
+            <el-table-column :label="t('aegis.cameras.name')" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">
+                <div class="font-medium truncate">{{ row.name }}</div>
+                <div v-if="row.tags?.length" class="flex flex-wrap gap-1 mt-0.5">
+                  <el-tag v-for="tag in row.tags.slice(0, 3)" :key="tag" size="small" type="info" effect="plain">
+                    {{ tag }}
+                  </el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.cameras.workstationCode')" width="118" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="aegis-mono-id">{{ row.workstation_code || "—" }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.cameras.zone')" min-width="125" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.zone_id ? zoneNameMap.get(row.zone_id) || "—" : "—" }}
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.cameras.codecHint')" width="86">
+              <template #default="{ row }">
+                <el-tag size="small" type="info" effect="plain">
+                  {{ (row.codec_hint || "h264").toUpperCase() }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.common.status')" width="92">
+              <template #default="{ row }">
+                <el-tag :type="row.status === 'online' ? 'success' : 'info'" size="small">
+                  {{ row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.common.enabled')" width="86">
+              <template #default="{ row }">
+                <el-tag :type="row.enabled ? 'success' : 'danger'" size="small" effect="plain">
+                  {{ row.enabled ? t("aegis.common.enabled") : t("aegis.common.disabled") }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.cameras.lastOnline')" width="164">
+              <template #default="{ row }">
+                <span class="aegis-tabular">{{ formatDateTime(row.last_online_at) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('aegis.common.actions')" width="235" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="router.push(`/cameras/${row.id}/config`)">
+                  {{ t("aegis.cameras.configRoiRules") }}
+                </el-button>
+                <el-button link type="primary" @click="openEditCamera(row)">
+                  {{ t("aegis.common.edit") }}
+                </el-button>
+                <el-button link type="danger" @click="onDeleteCamera(row.id)">
+                  {{ t("aegis.common.delete") }}
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </section>
+    </div>
 
     <!-- Zone CRUD Dialog -->
     <el-dialog v-model="zoneDialogVisible" :title="editingZoneId ? t('aegis.common.edit') : t('aegis.cameras.addZone')" width="460px">
@@ -515,3 +614,63 @@ onMounted(loadAll);
     </el-dialog>
   </div>
 </template>
+
+<style scoped lang="scss">
+.zone-tree-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding-inline-end: 4px;
+  font-size: 12px;
+}
+
+.zone-tree-row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-inline-size: 0;
+}
+
+.zone-tree-row__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.zone-tree-row:hover .zone-tree-row__actions,
+.zone-tree-row:focus-within .zone-tree-row__actions {
+  opacity: 1;
+}
+
+.zone-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: 24px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--el-color-primary);
+  font-size: 11px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--el-color-primary-light-9);
+  }
+}
+
+.zone-action-btn--danger {
+  color: var(--el-color-danger);
+
+  &:hover {
+    background: var(--el-color-danger-light-9);
+  }
+}
+</style>

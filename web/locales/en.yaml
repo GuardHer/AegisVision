@@ -73,6 +73,10 @@ menus:
   purePermissionButtonRouter: Route return button permission
   purePermissionButtonLogin: Login interface return button permission
   aegisDashboard: Operations Dashboard
+  aegisGroupOps: Monitoring & Alarms
+  aegisGroupAssets: Assets & Arming
+  aegisGroupAI: AI & Compute
+  aegisGroupSystem: System Governance
   aegisMonitor: Duty Monitor Center
   aegisAlarms: Alarm Console
   aegisAnalytics: Analytics & Reports
@@ -94,6 +98,10 @@ aegis:
     save: Save
     cancel: Cancel
     refresh: Refresh
+    reset: Reset
+    back: Back
+    yes: "Yes"
+    no: "No"
     actions: Actions
     status: Status
     enabled: Enabled
@@ -143,8 +151,38 @@ aegis:
     realtimeAlarms: Realtime Alarms
     noCameraSelected: No camera selected
     selectCamera: Select camera
+    clickTreeToAdd: Click a camera in the zone tree or select here
+    doubleClickSolo: Double-click any video tile to toggle solo view
+    clearSlot: Close Tile
+    exitSolo: Restore Grid
     wsConnected: Realtime WS Connected
     wsDisconnected: Realtime WS Disconnected
+  player:
+    live: LIVE
+    connecting: Connecting low-latency stream…
+    reconnecting: Stream interrupted, reconnecting
+    paused: Stream paused
+    errorTitle: Video stream unavailable
+    retryNow: Reconnect Now
+    pause: Pause
+    resume: Resume Live
+    mute: Mute
+    unmute: Unmute
+    mainStream: Main Stream (HD)
+    subStream: Sub Stream (SD)
+    zoomIn: Digital Zoom
+    zoomReset: Reset Zoom
+    overlayToggle: AI Overlay
+    snapshot: Snapshot
+    statsHud: Stream Telemetry
+    pip: Picture-in-Picture
+    fullscreen: Fullscreen
+    exitFullscreen: Exit Fullscreen
+    closeSlot: Close Tile
+    fps: FPS
+    bitrate: Bitrate
+    latency: RTT
+    resolution: Resolution
   alarms:
     title: Alarm Title
     zone: Workshop / Zone
@@ -196,6 +234,7 @@ aegis:
     subStreamUrl: Sub Stream RTSP URL
     streamPath: MediaMTX Path
     codecHint: Codec
+    lastOnline: Last Online
     configRoiRules: Configure ROI & Rules
     roiSection: ROI Regions
     roiColor: ROI Color
@@ -329,6 +368,7 @@ aegis:
     allZonesAccess: All Zones Access
     allZonesHint: When disabled, user can only view/handle cameras, alarms, and live streams in checked zones
     assignedZones: Assigned Zones
+    lastLogin: Last Login
     scopeSaved: Workshop scope updated and applied immediately
   auditLogs:
     title: System Operation Audit Logs
