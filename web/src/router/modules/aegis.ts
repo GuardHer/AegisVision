@@ -3,6 +3,27 @@ const Layout = () => import("@/layout/index.vue");
 
 export default [
   {
+    path: "/monitor",
+    component: Layout,
+    redirect: "/monitor/index",
+    meta: {
+      icon: "ep/video-camera",
+      title: $t("menus.aegisMonitor"),
+      rank: 1
+    },
+    children: [
+      {
+        path: "/monitor/index",
+        name: "AegisMonitor",
+        component: () => import("@/views/monitor/index.vue"),
+        meta: {
+          title: $t("menus.aegisMonitor"),
+          roles: ["admin", "operator", "viewer"]
+        }
+      }
+    ]
+  },
+  {
     path: "/alarms",
     component: Layout,
     redirect: "/alarms/index",

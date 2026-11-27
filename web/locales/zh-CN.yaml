@@ -72,14 +72,15 @@ menus:
   purePermissionButton: 按钮权限
   purePermissionButtonRouter: 路由返回按钮权限
   purePermissionButtonLogin: 登录接口返回按钮权限
-  aegisMonitor: 实时监控
-  aegisAlarms: 报警中心
-  aegisCameras: 摄像头管理
-  aegisCameraConfig: 区域与规则配置
-  aegisAlgorithms: 算法与版本
-  aegisNodes: 算力节点与任务
-  aegisChannels: 报警通道
-  aegisUsers: 用户与权限
+  aegisDashboard: 运营态势总览
+  aegisMonitor: 实时值班中心
+  aegisAlarms: 告警处置台
+  aegisCameras: 厂区点位管理
+  aegisCameraConfig: 点位智能配置
+  aegisAlgorithms: 算法仓库
+  aegisNodes: 算力集群与任务
+  aegisChannels: 联动通知通道
+  aegisUsers: 用户与车间权限
 aegis:
   common:
     create: 新增
@@ -93,12 +94,45 @@ aegis:
     enabled: 启用
     disabled: 停用
     confirmDelete: 确认删除该记录？
+  dashboard:
+    title: 工厂安全与 SOP 运营态势总览
+    todayAlarms: 今日告警总数
+    vsYesterday: 较昨日
+    unhandledAlarms: 待处理告警
+    confirmedAndFp: 确认率 / 误报率
+    sopCompliance: 近7日 SOP 合规率
+    sopViolationsToday: 今日 SOP 违规
+    camerasOnline: 摄像头在线率
+    computeCluster: 算力节点 / 运行任务
+    trend7d: 近 7 日安全行为与 SOP 违规趋势
+    safetyBehavior: 安全行为违规
+    sopViolation: SOP 违规
+    topZones: 车间告警排行 Top 10
+    behaviorDist: 规则模式分布
+    recentAlerts: 最近高危待处告警
+    viewAll: 查看全部
+    noRecentAlerts: 暂无未处理高危告警
   monitor:
     grid1: 单屏
     grid4: 4 宫格
     grid9: 9 宫格
+    grid16: 16 宫格
     overlayOn: 叠加层：开
     overlayOff: 叠加层：关
+    soundOn: 告警音：开
+    soundOff: 告警音：静音
+    fullscreen: 全屏
+    snapshot: 截帧
+    zoneTree: 点位树
+    presets: 轮巡方案
+    savePreset: 保存当前布局
+    startTour: 开启轮巡
+    stopTour: 停止轮巡
+    presetName: 方案名称
+    sharedPreset: 全厂共享（仅管理员）
+    tourInterval: 轮巡间隔 (秒)
+    searchCamera: 搜索车间或点位
+    allSeverities: 全部级别
     mainStream: 主码流
     subStream: 子码流
     realtimeAlarms: 实时告警流
@@ -108,16 +142,28 @@ aegis:
     wsDisconnected: 实时连接断开
   alarms:
     title: 报警标题
+    zone: 所属车间/工位
     camera: 摄像头
     ruleMode: 规则模式
     severity: 级别
+    keyword: 搜索告警标题
     triggeredAt: 触发时间
     handleStatus: 处理状态
     videoStatus: 视频证据
     detail: 报警详情
     handle: 处理报警
-    confirm: 确认报警
+    confirm: 确认违规
     falsePositive: 标记误报
+    ignored: 忽略归档
+    fpReason: 误报原因
+    fpLighting: 光线反光/阴影
+    fpOcclusion: 遮挡干扰
+    fpSimilarAction: 相似正常动作
+    fpModelDrift: 算法误检/漂移
+    fpOther: 其他原因
+    batchHandle: 批量处置
+    exportCsv: 导出 CSV
+    exportZip: 导出证据包 (ZIP)
     handleNote: 处理备注
     deliveries: 联动投递日志
     retry: 手动重发
@@ -125,7 +171,20 @@ aegis:
     videoClip: 短视频证据
   cameras:
     name: 名称
-    location: 点位/车间
+    zone: 所属区域
+    allZones: 全部区域
+    addZone: 新增区域
+    addChildZone: 新增下级区域
+    zoneType: 区域层级
+    zoneCode: 区域编码
+    workstationCode: 工位编码
+    tags: 标签
+    batchEnable: 批量启用
+    batchDisable: 批量停用
+    batchMoveZone: 批量调区
+    importCsv: CSV 批量导入
+    importHint: "每行格式：名称,主码流RTSP,子码流RTSP(选填),工位编码(选填),区域ID(选填),编码(h264/h265)"
+    location: 点位描述
     rtspUrl: 主码流 RTSP
     subStreamUrl: 子码流 RTSP
     streamPath: MediaMTX 路径

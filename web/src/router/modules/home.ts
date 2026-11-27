@@ -5,19 +5,19 @@ export default {
   path: "/",
   name: "Home",
   component: Layout,
-  redirect: "/monitor",
+  redirect: "/dashboard",
   meta: {
-    icon: "ep/video-camera",
-    title: $t("menus.aegisMonitor"),
+    icon: "ep/data-analysis",
+    title: $t("menus.aegisDashboard"),
     rank: 0
   },
   children: [
     {
-      path: "/monitor",
-      name: "AegisMonitor",
-      component: () => import("@/views/monitor/index.vue"),
+      path: "/dashboard",
+      name: "AegisDashboard",
+      component: () => import("@/views/dashboard/index.vue"),
       meta: {
-        title: $t("menus.aegisMonitor"),
+        title: $t("menus.aegisDashboard"),
         roles: ["admin", "operator", "viewer"]
       }
     }
