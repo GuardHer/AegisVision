@@ -1,0 +1,23 @@
+# Compute-host Dockerfile: pure Go aegis-agent + Python Runtime SDK environment.
+
+FROM golang:1.24-alpine AS go-builder
+ARG GOPROXY=https://goproxy.cn,direct
+ENV GOPROXY=${GOPROXY}
+ENV CGO_ENABLED=0
+
+WORKDIR /src/backend
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ ./
+RUN go build -trimpath -ldflags="-s -w" -o /out/aegis-agent ./cmd/aegis-agent
+
+FROM python:3.11-slim AS runtime
+WORKDIR /app
+
+COPY --from=go-builder /out/aegis-agent /app/aegis-agent
+COPY runtime/python-sdk /app/python-sdk
+RUN pip install --no-cache-dir -e /app/python-sdk
+
+VOLUME ["/data"]
+ENTRYPOINT ["/app/aegis-agent"]
+CMD ["-config", "/etc/aegis/agent.yaml"]

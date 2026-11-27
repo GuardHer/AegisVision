@@ -1,0 +1,18 @@
+# Compute-host aegis-agent configuration template
+node_id: gpu-node-01
+ip_addr: 192.168.0.50
+ingest_addr: 192.168.0.114:9090
+agent_token: aegis-agent-cluster-token-change-me
+max_tasks: 8
+buffer_db_path: /data/agent-buffer.sqlite
+log_level: info
+
+runtimes:
+  py-mock-v1:
+    command: python3
+    args: ["-m", "mock_runtime.main"]
+    work_dir: /app/python-sdk
+    max_tasks: 8
+    idle_grace_period: 60s
+    env:
+      AEGIS_MOCK_MODE: anomaly

@@ -1,0 +1,20 @@
+[Unit]
+Description=AegisVision Agent gRPC Ingest & Rule Engine Service
+After=network-online.target postgresql.service redis-server.service rabbitmq-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegis
+Group=aegis
+WorkingDirectory=/opt/aegisvision
+EnvironmentFile=-/etc/aegisvision/env
+ExecStart=/opt/aegisvision/bin/aegis-ingest -config /etc/aegisvision/config.yaml
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+LimitNOFILE=65536
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

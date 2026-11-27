@@ -1,0 +1,326 @@
+name: aegisvision
+
+services:
+  nginx:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.nginx
+    image: aegisvision/nginx:latest
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+    depends_on:
+      - aegis-api
+      - aegis-ws
+      - mediamtx
+    networks:
+      - aegis-net
+
+  aegis-api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.go
+      args:
+        SERVICE: aegis-api
+    image: aegisvision/aegis-api:latest
+    restart: unless-stopped
+    environment:
+      AEGIS_SERVICE_NAME: aegis-api
+      AEGIS_AUTO_MIGRATE: "true"
+      AEGIS_HTTP_API_ADDR: ":8081"
+      AEGIS_PUBLIC_BASE_URL: ${AEGIS_PUBLIC_BASE_URL:-http://127.0.0.1}
+      AEGIS_POSTGRES_DSN: postgres://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_change_me}@postgres:5432/${POSTGRES_DB:-aegisvision}?sslmode=disable
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_REDIS_PASSWORD: ${REDIS_PASSWORD:-aegis_redis_change_me}
+      AEGIS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-aegis}:${RABBITMQ_PASSWORD:-aegis_mq_change_me}@rabbitmq:5672/
+      AEGIS_STORAGE_DRIVER: s3
+      AEGIS_S3_ENDPOINT: http://minio:9000
+      AEGIS_S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      AEGIS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-aegis}
+      AEGIS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      AEGIS_MEDIAMTX_API_URL: http://mediamtx:9997
+      AEGIS_MEDIAMTX_RTSP_BASE_URL: rtsp://${MEDIAMTX_WEBRTC_ADDITIONAL_HOST:-mediamtx}:8554
+      AEGIS_MEDIAMTX_WHEP_BASE_URL: /whep
+      AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
+      AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
+      AEGIS_AGENT_TOKEN: ${AEGIS_AGENT_TOKEN:-aegis-agent-cluster-token-change-me}
+      AEGIS_INIT_ADMIN_PASSWORD: ${AEGIS_INIT_ADMIN_PASSWORD:-Admin@123456}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - aegis-net
+
+  aegis-scheduler:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.go
+      args:
+        SERVICE: aegis-scheduler
+    image: aegisvision/aegis-scheduler:latest
+    restart: unless-stopped
+    environment:
+      AEGIS_SERVICE_NAME: aegis-scheduler
+      AEGIS_HTTP_SCHEDULER_ADDR: ":8083"
+      AEGIS_POSTGRES_DSN: postgres://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_change_me}@postgres:5432/${POSTGRES_DB:-aegisvision}?sslmode=disable
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_REDIS_PASSWORD: ${REDIS_PASSWORD:-aegis_redis_change_me}
+      AEGIS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-aegis}:${RABBITMQ_PASSWORD:-aegis_mq_change_me}@rabbitmq:5672/
+      AEGIS_STORAGE_DRIVER: s3
+      AEGIS_S3_ENDPOINT: http://minio:9000
+      AEGIS_S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      AEGIS_MEDIAMTX_API_URL: http://mediamtx:9997
+      AEGIS_MEDIAMTX_RTSP_BASE_URL: rtsp://${MEDIAMTX_WEBRTC_ADDITIONAL_HOST:-mediamtx}:8554
+      AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
+      AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+    networks:
+      - aegis-net
+
+  aegis-ingest:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.go
+      args:
+        SERVICE: aegis-ingest
+    image: aegisvision/aegis-ingest:latest
+    restart: unless-stopped
+    ports:
+      - "${INGEST_GRPC_PORT:-9090}:9090"
+    environment:
+      AEGIS_SERVICE_NAME: aegis-ingest
+      AEGIS_GRPC_INGEST_ADDR: ":9090"
+      AEGIS_POSTGRES_DSN: postgres://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_change_me}@postgres:5432/${POSTGRES_DB:-aegisvision}?sslmode=disable
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_REDIS_PASSWORD: ${REDIS_PASSWORD:-aegis_redis_change_me}
+      AEGIS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-aegis}:${RABBITMQ_PASSWORD:-aegis_mq_change_me}@rabbitmq:5672/
+      AEGIS_STORAGE_DRIVER: s3
+      AEGIS_S3_ENDPOINT: http://minio:9000
+      AEGIS_S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      AEGIS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-aegis}
+      AEGIS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
+      AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
+      AEGIS_AGENT_TOKEN: ${AEGIS_AGENT_TOKEN:-aegis-agent-cluster-token-change-me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - aegis-net
+
+  aegis-ws:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.go
+      args:
+        SERVICE: aegis-ws
+    image: aegisvision/aegis-ws:latest
+    restart: unless-stopped
+    environment:
+      AEGIS_SERVICE_NAME: aegis-ws
+      AEGIS_HTTP_WS_ADDR: ":8082"
+      AEGIS_POSTGRES_DSN: postgres://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_change_me}@postgres:5432/${POSTGRES_DB:-aegisvision}?sslmode=disable
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_REDIS_PASSWORD: ${REDIS_PASSWORD:-aegis_redis_change_me}
+      AEGIS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-aegis}:${RABBITMQ_PASSWORD:-aegis_mq_change_me}@rabbitmq:5672/
+      AEGIS_STORAGE_DRIVER: s3
+      AEGIS_S3_ENDPOINT: http://minio:9000
+      AEGIS_S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
+      AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - aegis-net
+
+  aegis-dispatcher:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.go
+      args:
+        SERVICE: aegis-dispatcher
+        INSTALL_FFMPEG: "true"
+    image: aegisvision/aegis-dispatcher:latest
+    restart: unless-stopped
+    environment:
+      AEGIS_SERVICE_NAME: aegis-dispatcher
+      AEGIS_HTTP_DISPATCHER_ADDR: ":8084"
+      AEGIS_PUBLIC_BASE_URL: ${AEGIS_PUBLIC_BASE_URL:-http://127.0.0.1}
+      AEGIS_POSTGRES_DSN: postgres://${POSTGRES_USER:-aegis}:${POSTGRES_PASSWORD:-aegis_dev_change_me}@postgres:5432/${POSTGRES_DB:-aegisvision}?sslmode=disable
+      AEGIS_REDIS_ADDR: redis:6379
+      AEGIS_REDIS_PASSWORD: ${REDIS_PASSWORD:-aegis_redis_change_me}
+      AEGIS_RABBITMQ_URL: amqp://${RABBITMQ_USER:-aegis}:${RABBITMQ_PASSWORD:-aegis_mq_change_me}@rabbitmq:5672/
+      AEGIS_STORAGE_DRIVER: s3
+      AEGIS_S3_ENDPOINT: http://minio:9000
+      AEGIS_S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      AEGIS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-aegis}
+      AEGIS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      AEGIS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
+      AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mediamtx:
+        condition: service_started
+    networks:
+      - aegis-net
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-aegisvision}
+      POSTGRES_USER: ${POSTGRES_USER:-aegis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aegis_dev_change_me}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - aegis_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aegis} -d ${POSTGRES_DB:-aegisvision}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - "${REDIS_PASSWORD:-aegis_redis_change_me}"
+    volumes:
+      - aegis_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-aegis_redis_change_me}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-aegis}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-aegis_mq_change_me}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - aegis_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - aegis_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - aegis-net
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-aegis}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
+      S3_BUCKET: ${S3_BUCKET:-aegis-evidence}
+      S3_IMAGES_RETENTION_DAYS: ${S3_IMAGES_RETENTION_DAYS:-90}
+      S3_VIDEOS_RETENTION_DAYS: ${S3_VIDEOS_RETENTION_DAYS:-30}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set none "local/$$S3_BUCKET"
+        EXISTING="$$(mc ilm rule ls "local/$$S3_BUCKET" 2>/dev/null || true)"
+        case "$$EXISTING" in
+          *"images/"*) ;;
+          *) mc ilm rule add --prefix "images/" --expire-days "$$S3_IMAGES_RETENTION_DAYS" "local/$$S3_BUCKET" ;;
+        esac
+        case "$$EXISTING" in
+          *"videos/"*) ;;
+          *) mc ilm rule add --prefix "videos/" --expire-days "$$S3_VIDEOS_RETENTION_DAYS" "local/$$S3_BUCKET" ;;
+        esac
+    restart: "no"
+    networks:
+      - aegis-net
+
+  mediamtx:
+    image: bluenviron/mediamtx:1.12.2
+    restart: unless-stopped
+    environment:
+      MTX_WEBRTCADDITIONALHOSTS: ${MEDIAMTX_WEBRTC_ADDITIONAL_HOST:-127.0.0.1}
+      MTX_AUTHMETHOD: ${MEDIAMTX_AUTH_METHOD:-http}
+      MTX_AUTHHTTPADDRESS: ${MEDIAMTX_AUTH_HTTP_ADDRESS:-http://aegis-api:8081/internal/mediamtx/auth}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MEDIAMTX_RTSP_PORT:-8554}:8554"
+      - "${MEDIAMTX_WEBRTC_MUX_PORT:-8189}:8189/udp"
+      - "${MEDIAMTX_WEBRTC_MUX_PORT:-8189}:8189/tcp"
+    volumes:
+      - ../mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - aegis_mediamtx_recordings:/recordings
+    networks:
+      - aegis-net
+
+volumes:
+  aegis_postgres_data:
+  aegis_redis_data:
+  aegis_rabbitmq_data:
+  aegis_minio_data:
+  aegis_mediamtx_recordings:
+
+networks:
+  aegis-net:
+    name: aegis-net
+    driver: bridge
