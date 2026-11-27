@@ -255,6 +255,8 @@ func (h *CamerasHandler) CreateCamera(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "camera", "created", cam.ID.String())
+	notifyAllScopesChanged(c.Request.Context(), h.cache)
+	recordAudit(c, h.store, h.log, "camera.create", "camera", cam.ID.String(), "Created camera "+cam.Name, map[string]any{"name": cam.Name, "rtsp_url": req.RtspURL, "zone_id": req.ZoneID})
 	respondCreated(c, cam)
 }
 
@@ -307,6 +309,8 @@ func (h *CamerasHandler) UpdateCamera(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "camera", "updated", cam.ID.String())
+	notifyAllScopesChanged(c.Request.Context(), h.cache)
+	recordAudit(c, h.store, h.log, "camera.update", "camera", cam.ID.String(), "Updated camera "+cam.Name, map[string]any{"name": cam.Name, "rtsp_url": req.RtspURL, "zone_id": req.ZoneID, "enabled": req.Enabled})
 	respondOK(c, cam)
 }
 
@@ -322,6 +326,8 @@ func (h *CamerasHandler) DeleteCamera(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "camera", "deleted", id.String())
+	notifyAllScopesChanged(c.Request.Context(), h.cache)
+	recordAudit(c, h.store, h.log, "camera.delete", "camera", id.String(), "Deleted camera", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 
@@ -374,6 +380,10 @@ func (h *CamerasHandler) BatchUpdate(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(ctx, h.pub, h.log, "camera", "batch_"+req.Action, "")
+	if req.Action == "move_zone" {
+		notifyAllScopesChanged(ctx, h.cache)
+	}
+	recordAudit(c, h.store, h.log, "camera.batch_"+req.Action, "camera", "", "Batch updated cameras", map[string]any{"action": req.Action, "count": affected, "zone_id": req.ZoneID})
 	respondOK(c, gin.H{"updated_count": affected})
 }
 
@@ -487,6 +497,8 @@ func (h *CamerasHandler) ImportCSV(c *gin.Context) {
 
 	if len(created) > 0 {
 		emitConfigEvent(ctx, h.pub, h.log, "camera", "imported", "")
+		notifyAllScopesChanged(ctx, h.cache)
+		recordAudit(c, h.store, h.log, "camera.import_csv", "camera", "", "Imported cameras via CSV", map[string]any{"created_count": len(created), "error_count": len(rowErrors)})
 	}
 	respondOK(c, gin.H{
 		"created_count": len(created),

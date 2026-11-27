@@ -33,7 +33,12 @@ type SoundLightNotifier struct {
 // NewSoundLightNotifier constructs a SoundLightNotifier.
 func NewSoundLightNotifier(client *http.Client) *SoundLightNotifier {
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 	return &SoundLightNotifier{client: client}
 }

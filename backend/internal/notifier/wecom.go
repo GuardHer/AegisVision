@@ -35,7 +35,12 @@ type WeComNotifier struct {
 // NewWeComNotifier constructs a WeComNotifier.
 func NewWeComNotifier(client *http.Client) *WeComNotifier {
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 	return &WeComNotifier{client: client}
 }
@@ -105,11 +110,20 @@ func (w *WeComNotifier) Send(ctx context.Context, rawConfig []byte, msg Notifica
 		return SendResult{LatencyMs: latencyMs}, fmt.Errorf("send wecom: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 
 	res := SendResult{StatusCode: resp.StatusCode, LatencyMs: latencyMs}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return res, fmt.Errorf("wecom returned HTTP %d", resp.StatusCode)
+	}
+	if len(respBody) > 0 {
+		var apiResp struct {
+			ErrCode int    `json:"errcode"`
+			ErrMsg  string `json:"errmsg"`
+		}
+		if json.Unmarshal(respBody, &apiResp) == nil && apiResp.ErrCode != 0 {
+			return res, fmt.Errorf("wecom error code %d: %s", apiResp.ErrCode, apiResp.ErrMsg)
+		}
 	}
 	return res, nil
 }

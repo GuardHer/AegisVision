@@ -19,6 +19,7 @@ type Querier interface {
 	CountAlarms(ctx context.Context, arg CountAlarmsParams) (int64, error)
 	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountCamerasInZone(ctx context.Context, zoneID uuid.NullUUID) (int64, error)
+	CountChannelRulesInZones(ctx context.Context, arg CountChannelRulesInZonesParams) (int64, error)
 	CountChildZones(ctx context.Context, parentID uuid.NullUUID) (int64, error)
 	CountFalsePositiveAlarms(ctx context.Context, arg CountFalsePositiveAlarmsParams) (int64, error)
 	CountRulesUsingSchedule(ctx context.Context, scheduleID uuid.NullUUID) (int64, error)

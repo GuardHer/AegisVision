@@ -145,7 +145,8 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		return
 	}
 
-	u, err := h.store.Queries().UpdateUser(c.Request.Context(), sqlcgen.UpdateUserParams{
+	ctx := c.Request.Context()
+	u, err := h.store.Queries().UpdateUser(ctx, sqlcgen.UpdateUserParams{
 		ID:          id,
 		DisplayName: req.DisplayName,
 		Role:        req.Role,
@@ -155,6 +156,10 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	if !u.Enabled {
+		_ = h.store.Queries().RevokeAllUserRefreshTokens(ctx, id)
+	}
+	notifyUserScopeChanged(ctx, h.cache, id.String())
 	recordAudit(c, h.store, nil, "user.update", "user", u.ID.String(), "Updated user "+u.Username, map[string]any{
 		"display_name": req.DisplayName,
 		"role":         req.Role,
@@ -163,17 +168,19 @@ func (h *UsersHandler) Update(c *gin.Context) {
 	respondOK(c, toUserProfile(u))
 }
 
-// Delete removes a user account.
+// Delete removes a user account and immediately revokes its WS/scope cache.
 func (h *UsersHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid user id", err))
 		return
 	}
-	if err := h.store.Queries().DeleteUser(c.Request.Context(), id); err != nil {
+	ctx := c.Request.Context()
+	if err := h.store.Queries().DeleteUser(ctx, id); err != nil {
 		respondErr(c, err)
 		return
 	}
+	notifyUserScopeChanged(ctx, h.cache, id.String())
 	recordAudit(c, h.store, nil, "user.delete", "user", id.String(), "Deleted user", nil)
 	respondOK(c, gin.H{"deleted": true})
 }

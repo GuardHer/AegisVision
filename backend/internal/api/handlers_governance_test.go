@@ -52,7 +52,7 @@ func TestGovernanceAuditRedactionSettingsHealthAndAlgoStats(t *testing.T) {
 		t.Fatalf("create admin user: %v", err)
 	}
 	adminTok, _, _, _ := tokens.IssueAccessToken(adminUser.ID.String(), adminName, domain.RoleAdmin)
-	viewerTok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "gov_vw_"+suffix, domain.RoleViewer)
+	_, viewerTok := seedTestUserToken(t, store, tokens, domain.RoleViewer)
 
 	// 1. Trigger audited user create, reset-password, and channel create containing sensitive values.
 	secretPass := "SuperSecretPass!999"
@@ -146,7 +146,7 @@ func TestGovernanceAuditRedactionSettingsHealthAndAlgoStats(t *testing.T) {
 			t.Fatalf("expected audit action %q in response: %s", action, auditBody)
 		}
 	}
-	for _, leaked := range []string{secretPass, secretNewPass, secretChanKey} {
+	for _, leaked := range []string{secretPass, secretNewPass, secretChanKey, "access_token=abc"} {
 		if strings.Contains(auditBody, leaked) {
 			t.Fatalf("SENSITIVE SECRET LEAKED into audit_logs: %q", leaked)
 		}

@@ -40,7 +40,12 @@ type DingTalkNotifier struct {
 // NewDingTalkNotifier constructs a DingTalkNotifier.
 func NewDingTalkNotifier(client *http.Client) *DingTalkNotifier {
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 	return &DingTalkNotifier{client: client}
 }
@@ -131,11 +136,20 @@ func (d *DingTalkNotifier) Send(ctx context.Context, rawConfig []byte, msg Notif
 		return SendResult{LatencyMs: latencyMs}, fmt.Errorf("send dingtalk: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 
 	res := SendResult{StatusCode: resp.StatusCode, LatencyMs: latencyMs}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return res, fmt.Errorf("dingtalk returned HTTP %d", resp.StatusCode)
+	}
+	if len(respBody) > 0 {
+		var apiResp struct {
+			ErrCode int    `json:"errcode"`
+			ErrMsg  string `json:"errmsg"`
+		}
+		if json.Unmarshal(respBody, &apiResp) == nil && apiResp.ErrCode != 0 {
+			return res, fmt.Errorf("dingtalk error code %d: %s", apiResp.ErrCode, apiResp.ErrMsg)
+		}
 	}
 	return res, nil
 }

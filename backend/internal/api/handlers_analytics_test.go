@@ -19,7 +19,7 @@ import (
 
 func TestAnalyticsSummaryZeroSafetySOPComplianceAndCSVExport(t *testing.T) {
 	router, store, tokens := setupEnterpriseAPITest(t)
-	tok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "viewer", domain.RoleViewer)
+	_, tok := seedTestUserToken(t, store, tokens, domain.RoleViewer)
 	ctx := context.Background()
 
 	// 1. Review Focus #5: Empty future range returns finite 0.0 rates & non-null arrays.

@@ -70,6 +70,7 @@ func (h *NodesTasksHandler) UpdateNodeStatus(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "node", "status_changed", nodeID)
+	recordAudit(c, h.store, h.log, "node.update_status", "node", nodeID, "Changed node status to "+req.Status, map[string]any{"status": req.Status})
 	respondOK(c, node)
 }
 
@@ -95,5 +96,6 @@ func (h *NodesTasksHandler) RescheduleTask(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "task", "reschedule", taskID.String())
+	recordAudit(c, h.store, h.log, "task.reschedule", "node", taskID.String(), "Requested task reschedule", nil)
 	respondOK(c, gin.H{"reschedule_requested": true, "task_id": taskID})
 }

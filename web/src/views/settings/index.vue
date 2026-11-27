@@ -42,6 +42,8 @@ async function loadSettings() {
     if (res?.data) {
       Object.assign(form, res.data);
     }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load settings");
   } finally {
     loadingSettings.value = false;
   }
@@ -52,6 +54,8 @@ async function loadHealth() {
   try {
     const res = await getSystemHealth();
     health.value = res?.data ?? null;
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load system health");
   } finally {
     loadingHealth.value = false;
   }
@@ -65,6 +69,8 @@ async function saveSettings() {
       Object.assign(form, res.data);
     }
     ElMessage.success(t("aegis.settings.saved"));
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to save settings");
   } finally {
     savingSettings.value = false;
   }

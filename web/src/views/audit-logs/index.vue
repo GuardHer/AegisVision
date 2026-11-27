@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { ElMessage } from "element-plus";
 import { listAuditLogs, type AuditLogItem } from "@/api/aegis";
 
 defineOptions({ name: "AegisAuditLogs" });
@@ -24,6 +25,9 @@ const resourceOptions = [
   "zone",
   "camera",
   "rule",
+  "schedule",
+  "algorithm",
+  "node",
   "alarm",
   "alarm_channel",
   "system_settings"
@@ -46,6 +50,8 @@ async function loadData() {
     const res = await listAuditLogs(params);
     items.value = res?.data?.items ?? [];
     total.value = res?.data?.total ?? 0;
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load audit logs");
   } finally {
     loading.value = false;
   }

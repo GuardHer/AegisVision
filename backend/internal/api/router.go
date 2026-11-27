@@ -96,7 +96,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
 	usersH := NewUsersHandler(deps.Store, deps.Cache)
-	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
+	zonesH := NewZonesHandler(deps.Store, deps.Cache, deps.Publisher, deps.Logger)
 	schedulesH := NewSchedulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	presetsH := NewPresetsHandler(deps.Store)
 	dashboardH := NewDashboardHandler(deps.Store)

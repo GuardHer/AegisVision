@@ -18,7 +18,7 @@ import (
 
 func TestDashboardOverviewShapeAndZeroSafety(t *testing.T) {
 	router, store, tokens := setupEnterpriseAPITest(t)
-	tok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "viewer", domain.RoleViewer)
+	_, tok := seedTestUserToken(t, store, tokens, domain.RoleViewer)
 
 	// Invalid tz returns 400 cleanly.
 	if wBad := doAPIReq(t, router, http.MethodGet, "/api/v1/dashboard/overview?tz=Not/A_Zone", tok, nil); wBad.Code != http.StatusBadRequest {

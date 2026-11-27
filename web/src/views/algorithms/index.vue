@@ -42,34 +42,48 @@ async function loadData() {
   try {
     const res = await listAlgorithms();
     algorithms.value = res?.data ?? [];
-    for (const a of algorithms.value) {
-      const vRes = await listAlgorithmVersions(a.id);
-      versionsByAlgo[a.id] = vRes?.data ?? [];
-    }
+    await Promise.all(
+      algorithms.value.map(async a => {
+        const vRes = await listAlgorithmVersions(a.id);
+        versionsByAlgo[a.id] = vRes?.data ?? [];
+      })
+    );
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load algorithms");
   } finally {
     loading.value = false;
   }
 }
 
 async function submitAlgo() {
-  await createAlgorithm({
-    algorithm_key: algoForm.algorithm_key,
-    name: algoForm.name,
-    description: algoForm.description,
-    supported_labels: algoForm.supported_labels
-      .split(",")
-      .map(s => s.trim())
-      .filter(Boolean)
-  });
-  algoDialog.value = false;
-  ElMessage.success("OK");
-  await loadData();
+  try {
+    await createAlgorithm({
+      algorithm_key: algoForm.algorithm_key,
+      name: algoForm.name,
+      description: algoForm.description,
+      supported_labels: algoForm.supported_labels
+        .split(",")
+        .map(s => s.trim())
+        .filter(Boolean)
+    });
+    algoDialog.value = false;
+    ElMessage.success("OK");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to create algorithm");
+  }
 }
 
 async function removeAlgo(id: string) {
-  await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
-  await deleteAlgorithm(id);
-  await loadData();
+  try {
+    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await deleteAlgorithm(id);
+    await loadData();
+  } catch (err: any) {
+    if (err !== "cancel" && err !== "close") {
+      ElMessage.error(err?.message || "Failed to delete algorithm");
+    }
+  }
 }
 
 function openAddVersion(algoId: string) {
@@ -85,26 +99,34 @@ async function submitVersion() {
     ElMessage.error("Invalid JSON in default_params");
     return;
   }
-  await createAlgorithmVersion(targetAlgoId.value, {
-    version: verForm.version,
-    runtime_key: verForm.runtime_key,
-    default_params: defaultParams,
-    status: verForm.status
-  });
-  verDialog.value = false;
-  ElMessage.success("OK");
-  await loadData();
+  try {
+    await createAlgorithmVersion(targetAlgoId.value, {
+      version: verForm.version,
+      runtime_key: verForm.runtime_key,
+      default_params: defaultParams,
+      status: verForm.status
+    });
+    verDialog.value = false;
+    ElMessage.success("OK");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to create algorithm version");
+  }
 }
 
 async function toggleVersionStatus(v: AlgorithmVersionItem) {
-  const nextStatus = v.status === "active" ? "deprecated" : "active";
-  await updateAlgorithmVersion(v.id, {
-    runtime_key: v.runtime_key,
-    launch_spec: v.launch_spec ?? {},
-    default_params: v.default_params ?? {},
-    status: nextStatus
-  });
-  await loadData();
+  try {
+    const nextStatus = v.status === "active" ? "deprecated" : "active";
+    await updateAlgorithmVersion(v.id, {
+      runtime_key: v.runtime_key,
+      launch_spec: v.launch_spec ?? {},
+      default_params: v.default_params ?? {},
+      status: nextStatus
+    });
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to update version status");
+  }
 }
 
 onMounted(loadData);

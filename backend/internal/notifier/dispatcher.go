@@ -100,6 +100,13 @@ type Dispatcher struct {
 	publicBaseURL string
 	evidenceTTL   time.Duration
 	log           *slog.Logger
+
+	resetMu       sync.Mutex
+	pendingResets map[uuid.UUID]*pendingAutoReset
+}
+
+type pendingAutoReset struct {
+	cancel context.CancelFunc
 }
 
 // NewDispatcher constructs a Dispatcher.
@@ -123,6 +130,7 @@ func NewDispatcher(deps DispatcherDeps) *Dispatcher {
 		publicBaseURL: deps.PublicBaseURL,
 		evidenceTTL:   deps.EvidenceTTL,
 		log:           deps.Logger,
+		pendingResets: make(map[uuid.UUID]*pendingAutoReset),
 	}
 }
 
@@ -285,12 +293,23 @@ func (d *Dispatcher) buildNotification(alarm AlarmContext, deliveryID uuid.UUID)
 	}
 }
 
+func (d *Dispatcher) cancelPendingAutoReset(channelID uuid.UUID) {
+	d.resetMu.Lock()
+	if prev, ok := d.pendingResets[channelID]; ok {
+		prev.cancel()
+		delete(d.pendingResets, channelID)
+	}
+	d.resetMu.Unlock()
+}
+
 func (d *Dispatcher) handleChannelReset(ctx context.Context, rawChannelID string) error {
 	chID, err := uuid.Parse(rawChannelID)
 	if err != nil {
 		d.log.Warn("drop reset_channel with invalid channel_id", "channel_id", rawChannelID)
 		return nil
 	}
+	// Cancel any pending auto-reset timer for this channel since a manual/handle reset is running now.
+	d.cancelPendingAutoReset(chID)
 	reader, ok := d.store.(ChannelConfigReader)
 	if !ok {
 		return nil
@@ -325,15 +344,32 @@ func (d *Dispatcher) maybeScheduleAutoReset(plugin Notifier, channelID uuid.UUID
 	}
 	cfgCopy := append([]byte(nil), rawConfig...)
 	delay := time.Duration(cfg.AutoResetSeconds) * time.Second
+
+	// Supersede any earlier pending auto-reset timer for the same channel so newer alarms reset on their own window.
+	timerCtx, cancel := context.WithCancel(d.bgCtx)
+	entry := &pendingAutoReset{cancel: cancel}
+	d.resetMu.Lock()
+	if prev, exists := d.pendingResets[channelID]; exists {
+		prev.cancel()
+	}
+	d.pendingResets[channelID] = entry
+	d.resetMu.Unlock()
+
 	go func() {
+		defer cancel()
 		timer := time.NewTimer(delay)
 		defer timer.Stop()
 		select {
-		case <-d.bgCtx.Done():
+		case <-timerCtx.Done():
 			return
 		case <-timer.C:
-			rCtx, cancel := context.WithTimeout(d.bgCtx, 10*time.Second)
-			defer cancel()
+			d.resetMu.Lock()
+			if d.pendingResets[channelID] == entry {
+				delete(d.pendingResets, channelID)
+			}
+			d.resetMu.Unlock()
+			rCtx, rCancel := context.WithTimeout(d.bgCtx, 10*time.Second)
+			defer rCancel()
 			if _, err := resettable.Reset(rCtx, cfgCopy); err != nil {
 				d.log.Warn("sound_light auto reset failed", "channel_id", channelID, "err", err)
 			}

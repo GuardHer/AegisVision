@@ -62,6 +62,8 @@ async function loadData() {
     });
     items.value = res?.data?.items ?? [];
     total.value = res?.data?.total ?? 0;
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load false-positive samples");
   } finally {
     loading.value = false;
   }
@@ -85,8 +87,10 @@ async function handleExportZip() {
     a.href = url;
     a.download = `aegis-fp-dataset-${new Date().toISOString().slice(0, 10)}.zip`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
     ElMessage.success(t("aegis.datasets.exportSuccess"));
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to export training dataset");
   } finally {
     exporting.value = false;
   }

@@ -18,13 +18,14 @@ import (
 // ZonesHandler manages the Factory -> Workshop -> Line -> Workstation spatial hierarchy.
 type ZonesHandler struct {
 	store *postgres.Store
+	cache CacheStore
 	pub   EventPublisher
 	log   *slog.Logger
 }
 
 // NewZonesHandler constructs a ZonesHandler.
-func NewZonesHandler(store *postgres.Store, pub EventPublisher, log *slog.Logger) *ZonesHandler {
-	return &ZonesHandler{store: store, pub: pub, log: log}
+func NewZonesHandler(store *postgres.Store, cache CacheStore, pub EventPublisher, log *slog.Logger) *ZonesHandler {
+	return &ZonesHandler{store: store, cache: cache, pub: pub, log: log}
 }
 
 // ZoneTreeNode is a recursive spatial node with rolled-up camera counts.
@@ -266,6 +267,7 @@ func (h *ZonesHandler) Update(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "zone", "updated", updated.ID.String())
+	notifyAllScopesChanged(c.Request.Context(), h.cache)
 	recordAudit(c, h.store, h.log, "zone.update", "zone", updated.ID.String(), "Updated zone "+updated.Name, map[string]any{"zone_type": updated.ZoneType})
 	respondOK(c, updated)
 }
@@ -307,6 +309,8 @@ func (h *ZonesHandler) Delete(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(ctx, h.pub, h.log, "zone", "deleted", id.String())
+	notifyAllScopesChanged(ctx, h.cache)
+	recordAudit(c, h.store, h.log, "zone.delete", "zone", id.String(), "Deleted zone", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 

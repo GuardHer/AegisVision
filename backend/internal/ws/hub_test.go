@@ -234,9 +234,10 @@ func TestWSHubWorkshopScopeFilteringAndInstantRevocation(t *testing.T) {
 	default:
 	}
 
-	// Alarms MUST be filtered by zone_id / camera_id.
+	// Alarms MUST be filtered by zone_id (even if camera_id was previously in AllowedCameras before a move!).
 	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-ok","zone_id":"zone-a","camera_id":"cam-a"}`))
 	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-leak","zone_id":"zone-b","camera_id":"cam-b"}`))
+	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-moved-cam-leak","zone_id":"zone-b","camera_id":"cam-a"}`))
 
 	select {
 	case msg := <-clientA.AlarmChan():

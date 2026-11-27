@@ -22,6 +22,27 @@ func (q *Queries) ClearRuleAlarmChannels(ctx context.Context, ruleID uuid.UUID) 
 	return err
 }
 
+const countChannelRulesInZones = `-- name: CountChannelRulesInZones :one
+SELECT COUNT(*)::bigint
+FROM rule_alarm_channels rac
+JOIN roi_algorithm_rules r ON r.id = rac.rule_id
+JOIN cameras c ON c.id = r.camera_id
+WHERE rac.channel_id = $1
+  AND c.zone_id = ANY($2::uuid[])
+`
+
+type CountChannelRulesInZonesParams struct {
+	ChannelID uuid.UUID   `json:"channel_id"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
+}
+
+func (q *Queries) CountChannelRulesInZones(ctx context.Context, arg CountChannelRulesInZonesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countChannelRulesInZones, arg.ChannelID, arg.ZoneIds)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createAlarmChannel = `-- name: CreateAlarmChannel :one
 INSERT INTO alarm_channels (id, name, channel_type, config, routing_rules, enabled)
 VALUES ($1, $2, $3, $4, COALESCE($6::jsonb, '{"auto_route":false}'::jsonb), $5)

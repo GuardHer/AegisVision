@@ -144,16 +144,19 @@ func TestWeComDingTalkAndSoundLightNotifiersAndReset(t *testing.T) {
 		t.Fatalf("expected 1 sound_light trigger hit, got %d", triggerHits.Load())
 	}
 
-	// Manual reset_channel command -> immediately calls /reset
+	// Manual reset_channel command -> immediately calls /reset AND cancels pending auto_reset timer.
 	resetJob, _ := json.Marshal(map[string]any{"action": "reset_channel", "channel_id": chID.String()})
 	if err := disp.HandleMessage(context.Background(), resetJob); err != nil {
 		t.Fatalf("HandleMessage reset_channel: %v", err)
 	}
-	if resetHits.Load() < 1 {
-		t.Fatalf("expected immediate manual reset hit, got %d", resetHits.Load())
+	if resetHits.Load() != 1 {
+		t.Fatalf("expected immediate manual reset hit=1, got %d", resetHits.Load())
 	}
 
-	// Wait for 1s auto_reset timer -> 2nd reset hit
+	// Re-trigger alarm without manual reset -> 1s auto_reset timer MUST fire /reset (2nd reset hit).
+	if err := disp.HandleMessage(context.Background(), job); err != nil {
+		t.Fatalf("HandleMessage second trigger: %v", err)
+	}
 	deadline := time.Now().Add(2500 * time.Millisecond)
 	for time.Now().Before(deadline) && resetHits.Load() < 2 {
 		time.Sleep(50 * time.Millisecond)

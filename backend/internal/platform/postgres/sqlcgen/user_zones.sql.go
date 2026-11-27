@@ -21,19 +21,25 @@ func (q *Queries) DeleteUserZonesByUser(ctx context.Context, userID uuid.UUID) e
 }
 
 const getUserZoneScopeFlags = `-- name: GetUserZoneScopeFlags :one
-SELECT id, role, all_zones_access FROM users WHERE id = $1
+SELECT id, role, enabled, all_zones_access FROM users WHERE id = $1
 `
 
 type GetUserZoneScopeFlagsRow struct {
 	ID             uuid.UUID `json:"id"`
 	Role           string    `json:"role"`
+	Enabled        bool      `json:"enabled"`
 	AllZonesAccess bool      `json:"all_zones_access"`
 }
 
 func (q *Queries) GetUserZoneScopeFlags(ctx context.Context, id uuid.UUID) (GetUserZoneScopeFlagsRow, error) {
 	row := q.db.QueryRow(ctx, getUserZoneScopeFlags, id)
 	var i GetUserZoneScopeFlagsRow
-	err := row.Scan(&i.ID, &i.Role, &i.AllZonesAccess)
+	err := row.Scan(
+		&i.ID,
+		&i.Role,
+		&i.Enabled,
+		&i.AllZonesAccess,
+	)
 	return i, err
 }
 

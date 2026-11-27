@@ -82,3 +82,11 @@ FROM alarm_channels c
 INNER JOIN rule_alarm_channels rac ON rac.channel_id = c.id
 WHERE rac.rule_id = $1 AND c.enabled = TRUE
 ORDER BY c.created_at ASC;
+
+-- name: CountChannelRulesInZones :one
+SELECT COUNT(*)::bigint
+FROM rule_alarm_channels rac
+JOIN roi_algorithm_rules r ON r.id = rac.rule_id
+JOIN cameras c ON c.id = r.camera_id
+WHERE rac.channel_id = $1
+  AND c.zone_id = ANY(sqlc.arg('zone_ids')::uuid[]);

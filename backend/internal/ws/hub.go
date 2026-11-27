@@ -32,14 +32,12 @@ func (s ClientScope) allowsAlarm(zoneID, cameraID string) bool {
 		return true
 	}
 	if zoneID != "" {
-		if _, ok := s.AllowedZones[zoneID]; ok {
-			return true
-		}
+		_, ok := s.AllowedZones[zoneID]
+		return ok
 	}
 	if cameraID != "" {
-		if _, ok := s.AllowedCameras[cameraID]; ok {
-			return true
-		}
+		_, ok := s.AllowedCameras[cameraID]
+		return ok
 	}
 	return false
 }
@@ -184,6 +182,18 @@ func (h *Hub) SetSubscriptions(clientID string, cameraIDs []string) {
 		bucket[clientID] = client
 	}
 	h.clientSubs[clientID] = newSubs
+}
+
+// ActiveUserIDs returns all distinct user IDs with active WebSocket sessions in the hub.
+func (h *Hub) ActiveUserIDs() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	ids := make([]string, 0, len(h.userClients))
+	for uid := range h.userClients {
+		ids = append(ids, uid)
+	}
+	return ids
 }
 
 // UpdateUserScope atomically updates the active scope for every live connection belonging to userID

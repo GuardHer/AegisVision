@@ -15,7 +15,7 @@ import (
 
 func TestSchedulesCRUDDeleteGuardAndSOPRuleBinding(t *testing.T) {
 	router, store, tokens := setupEnterpriseAPITest(t)
-	adminTok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "admin", domain.RoleAdmin)
+	_, adminTok := seedTestUserToken(t, store, tokens, domain.RoleAdmin)
 
 	suffix := uuid.Must(uuid.NewV7()).String()[24:]
 	ctx := context.Background()

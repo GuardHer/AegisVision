@@ -175,6 +175,21 @@ func main() {
 				if resolveScope == nil {
 					continue
 				}
+				if userID == "*" {
+					// Camera or zone topology changed: refresh every connected user's scope from DB.
+					_ = redisClient.DeleteAllUserScopeCaches(gCtx)
+					for _, activeUID := range hub.ActiveUserIDs() {
+						refreshCtx, cancel := context.WithTimeout(gCtx, 5*time.Second)
+						fresh, rErr := resolveScope(refreshCtx, activeUID, "")
+						cancel()
+						if rErr != nil {
+							log.Warn("refresh ws topology scope failed; revoking active scope", "user_id", activeUID, "err", rErr)
+							fresh = ws.ClientScope{UserID: activeUID, Unrestricted: false}
+						}
+						hub.UpdateUserScope(activeUID, fresh)
+					}
+					continue
+				}
 				refreshCtx, cancel := context.WithTimeout(gCtx, 5*time.Second)
 				fresh, rErr := resolveScope(refreshCtx, userID, "")
 				cancel()
@@ -198,10 +213,7 @@ func buildScopeResolver(pgStore *postgres.Store, redisClient *platformredis.Clie
 	if pgStore == nil {
 		return nil
 	}
-	return func(ctx context.Context, userID, role string) (ws.ClientScope, error) {
-		if role == domain.RoleAdmin {
-			return ws.ClientScope{UserID: userID, Unrestricted: true}, nil
-		}
+	return func(ctx context.Context, userID, _ string) (ws.ClientScope, error) {
 		if redisClient != nil {
 			if cached, err := redisClient.GetUserScopeCache(ctx, userID); err == nil && cached != nil {
 				return payloadToClientScope(userID, *cached), nil
@@ -217,6 +229,9 @@ func buildScopeResolver(pgStore *postgres.Store, redisClient *platformredis.Clie
 				return ws.ClientScope{UserID: userID, Unrestricted: false}, nil
 			}
 			return ws.ClientScope{UserID: userID, Unrestricted: false}, err
+		}
+		if !flags.Enabled {
+			return ws.ClientScope{UserID: userID, Unrestricted: false}, nil
 		}
 		if flags.Role == domain.RoleAdmin || flags.AllZonesAccess {
 			payload := platformredis.UserScopeCachePayload{Unrestricted: true}

@@ -50,7 +50,7 @@ func TestWorkshopDataScopeRBACEnforcement(t *testing.T) {
 	})
 
 	suffix := uuid.Must(uuid.NewV7()).String()[24:]
-	adminTok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "admin_"+suffix, domain.RoleAdmin)
+	_, adminTok := seedTestUserToken(t, store, tokens, domain.RoleAdmin)
 
 	// Create Workshop A -> Station A1, and Workshop B -> Station B1
 	factoryID := uuid.Must(uuid.NewV7())
@@ -185,5 +185,43 @@ func TestWorkshopDataScopeRBACEnforcement(t *testing.T) {
 	wZeroCams := doAPIReq(t, router, http.MethodGet, "/api/v1/cameras", opTok, nil)
 	if wZeroCams.Code != http.StatusOK || strings.Contains(wZeroCams.Body.String(), camAID.String()) {
 		t.Fatalf("expected empty cameras after full revocation, got %s", wZeroCams.Body.String())
+	}
+
+	// 7. Review Focus (Finding #4): Restricted operator CANNOT reset another workshop's sound_light channel!
+	wGrantA := doAPIReq(t, router, http.MethodPut, "/api/v1/users/"+opUser.ID.String()+"/zones", adminTok, map[string]any{
+		"all_zones_access": false,
+		"zone_ids":         []string{wsAID.String()},
+	})
+	if wGrantA.Code != http.StatusOK {
+		t.Fatalf("re-grant WS-A failed: %d", wGrantA.Code)
+	}
+	chBID := uuid.Must(uuid.NewV7())
+	routingB, _ := json.Marshal(map[string]any{"auto_route": true, "zone_ids": []string{wsBID.String()}})
+	_, _ = store.Queries().CreateAlarmChannel(ctx, sqlcgen.CreateAlarmChannelParams{
+		ID: chBID, Name: "Siren-B-" + suffix, ChannelType: "sound_light",
+		Config: json.RawMessage(`{"trigger_url":"http://127.0.0.1/on","reset_url":"http://127.0.0.1/off"}`), RoutingRules: routingB, Enabled: true,
+	})
+	t.Cleanup(func() { _ = store.Queries().DeleteAlarmChannel(context.Background(), chBID) })
+	if w := doAPIReq(t, router, http.MethodPost, "/api/v1/channels/"+chBID.String()+"/reset", opTok, nil); w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when WS-A operator tries to reset WS-B sound_light channel, got %d (%s)", w.Code, w.Body.String())
+	}
+
+	// 8. Review Focus (Finding #1): Disabled or deleted user MUST fail closed with 401 (never escalate to unrestricted)!
+	wDisable := doAPIReq(t, router, http.MethodPut, "/api/v1/users/"+opUser.ID.String(), adminTok, map[string]any{
+		"display_name": "Disabled Op",
+		"role":         domain.RoleOperator,
+		"enabled":      false,
+	})
+	if wDisable.Code != http.StatusOK {
+		t.Fatalf("disable user failed: %d", wDisable.Code)
+	}
+	if w := doAPIReq(t, router, http.MethodGet, "/api/v1/cameras", opTok, nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for disabled user, got %d (%s)", w.Code, w.Body.String())
+	}
+	if w := doAPIReq(t, router, http.MethodDelete, "/api/v1/users/"+opUser.ID.String(), adminTok, nil); w.Code != http.StatusOK {
+		t.Fatalf("delete user failed: %d", w.Code)
+	}
+	if w := doAPIReq(t, router, http.MethodGet, "/api/v1/cameras", opTok, nil); w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for deleted user, got %d (%s)", w.Code, w.Body.String())
 	}
 }

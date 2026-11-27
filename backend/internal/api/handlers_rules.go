@@ -330,6 +330,7 @@ func (h *RulesHandler) Create(c *gin.Context) {
 	}
 
 	emitConfigEvent(ctx, h.pub, h.log, "rule", "created", created.ID.String())
+	recordAudit(c, h.store, h.log, "rule.create", "rule", created.ID.String(), "Created rule "+created.Name, map[string]any{"rule_mode": created.RuleMode, "camera_id": created.CameraID.String()})
 	respondCreated(c, created)
 }
 
@@ -446,6 +447,7 @@ func (h *RulesHandler) Update(c *gin.Context) {
 	}
 
 	emitConfigEvent(ctx, h.pub, h.log, "rule", "updated", updated.ID.String())
+	recordAudit(c, h.store, h.log, "rule.update", "rule", updated.ID.String(), "Updated rule "+updated.Name, map[string]any{"rule_mode": updated.RuleMode, "enabled": updated.Enabled})
 	respondOK(c, updated)
 }
 
@@ -461,5 +463,6 @@ func (h *RulesHandler) Delete(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "rule", "deleted", ruleID.String())
+	recordAudit(c, h.store, h.log, "rule.delete", "rule", ruleID.String(), "Deleted rule", nil)
 	respondOK(c, gin.H{"deleted": true})
 }

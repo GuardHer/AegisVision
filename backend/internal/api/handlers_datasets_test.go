@@ -51,8 +51,8 @@ func TestFalsePositiveDatasetsListAndZIPExport(t *testing.T) {
 	})
 
 	suffix := uuid.Must(uuid.NewV7()).String()[24:]
-	opTok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "op_"+suffix, domain.RoleOperator)
-	viewerTok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "vw_"+suffix, domain.RoleViewer)
+	_, opTok := seedTestUserToken(t, store, tokens, domain.RoleOperator)
+	_, viewerTok := seedTestUserToken(t, store, tokens, domain.RoleViewer)
 
 	// Viewer MUST get 403 on dataset endpoints.
 	if w := doAPIReq(t, router, http.MethodGet, "/api/v1/datasets/false-positives", viewerTok, nil); w.Code != http.StatusForbidden {

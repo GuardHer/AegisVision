@@ -35,7 +35,12 @@ type ChannelsHandler struct {
 // NewChannelsHandler constructs a ChannelsHandler.
 func NewChannelsHandler(store *postgres.Store, pub EventPublisher, httpClient *http.Client, log *slog.Logger) *ChannelsHandler {
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 5 * time.Second}
+		httpClient = &http.Client{
+			Timeout: 5 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 	return &ChannelsHandler{
 		store:      store,
@@ -62,12 +67,78 @@ type updateChannelRequest struct {
 }
 
 type channelTestConfig struct {
-	URL        string            `json:"url"`
-	WebhookURL string            `json:"webhook_url"`
-	TriggerURL string            `json:"trigger_url"`
-	Method     string            `json:"method"`
-	Headers    map[string]string `json:"headers"`
-	Secret     string            `json:"secret"`
+	URL              string            `json:"url"`
+	WebhookURL       string            `json:"webhook_url"`
+	TriggerURL       string            `json:"trigger_url"`
+	ResetURL         string            `json:"reset_url"`
+	Method           string            `json:"method"`
+	Headers          map[string]string `json:"headers"`
+	Secret           string            `json:"secret"`
+	AutoResetSeconds int               `json:"auto_reset_seconds"`
+}
+
+type channelRoutingRulesSpec struct {
+	AutoRoute  bool     `json:"auto_route"`
+	Severities []string `json:"severities"`
+	ZoneIDs    []string `json:"zone_ids"`
+	RuleModes  []string `json:"rule_modes"`
+}
+
+func isValidHTTPMethod(m string) bool {
+	switch strings.ToUpper(strings.TrimSpace(m)) {
+	case "", http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateChannelPayload(channelType string, rawConfig, rawRouting json.RawMessage) error {
+	var cfg channelTestConfig
+	if err := json.Unmarshal(rawConfig, &cfg); err != nil {
+		return domain.NewInvalidArgumentError("invalid channel config json", err)
+	}
+	if !isValidHTTPMethod(cfg.Method) {
+		return domain.NewInvalidArgumentError("channel method must be GET, POST, PUT, or PATCH", nil)
+	}
+	switch channelType {
+	case "webhook":
+		if _, err := validateHTTPURL(cfg.URL); err != nil {
+			return err
+		}
+	case "wecom", "dingtalk":
+		target := strings.TrimSpace(cfg.WebhookURL)
+		if target == "" {
+			target = strings.TrimSpace(cfg.URL)
+		}
+		if _, err := validateHTTPURL(target); err != nil {
+			return err
+		}
+	case "sound_light":
+		if _, err := validateHTTPURL(cfg.TriggerURL); err != nil {
+			return err
+		}
+		if strings.TrimSpace(cfg.ResetURL) != "" {
+			if _, err := validateHTTPURL(cfg.ResetURL); err != nil {
+				return err
+			}
+		}
+		if cfg.AutoResetSeconds < 0 || cfg.AutoResetSeconds > 86400 {
+			return domain.NewInvalidArgumentError("auto_reset_seconds must be between 0 and 86400", nil)
+		}
+	}
+	if len(rawRouting) > 0 {
+		var rr channelRoutingRulesSpec
+		if err := json.Unmarshal(rawRouting, &rr); err != nil {
+			return domain.NewInvalidArgumentError("invalid routing_rules json", err)
+		}
+		for _, zid := range rr.ZoneIDs {
+			if _, err := uuid.Parse(strings.TrimSpace(zid)); err != nil {
+				return domain.NewInvalidArgumentError("routing_rules.zone_ids must contain valid UUIDs", err)
+			}
+		}
+	}
+	return nil
 }
 
 func isValidChannelType(ct string) bool {
@@ -106,6 +177,10 @@ func (h *ChannelsHandler) Create(c *gin.Context) {
 	}
 	if !isValidChannelType(req.ChannelType) {
 		respondErr(c, domain.NewInvalidArgumentError("channel_type must be webhook, wecom, dingtalk, or sound_light", nil))
+		return
+	}
+	if err := validateChannelPayload(req.ChannelType, req.Config, req.RoutingRules); err != nil {
+		respondErr(c, err)
 		return
 	}
 	enabled := true
@@ -153,6 +228,10 @@ func (h *ChannelsHandler) Update(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("channel_type must be webhook, wecom, dingtalk, or sound_light", nil))
 		return
 	}
+	if err := validateChannelPayload(req.ChannelType, req.Config, req.RoutingRules); err != nil {
+		respondErr(c, err)
+		return
+	}
 
 	item, err := h.store.Queries().UpdateAlarmChannel(c.Request.Context(), sqlcgen.UpdateAlarmChannelParams{
 		ID:           id,
@@ -196,7 +275,13 @@ func (h *ChannelsHandler) Reset(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid channel id", err))
 		return
 	}
-	ch, err := h.store.Queries().GetAlarmChannelByID(c.Request.Context(), id)
+	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	ch, err := h.store.Queries().GetAlarmChannelByID(ctx, id)
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -204,6 +289,35 @@ func (h *ChannelsHandler) Reset(c *gin.Context) {
 	if ch.ChannelType != "sound_light" {
 		respondErr(c, domain.NewInvalidArgumentError("reset is only supported for sound_light channels", nil))
 		return
+	}
+	if !scope.Unrestricted {
+		allowed := false
+		if len(ch.RoutingRules) > 0 {
+			var rr channelRoutingRulesSpec
+			if json.Unmarshal(ch.RoutingRules, &rr) == nil {
+				for _, rawZ := range rr.ZoneIDs {
+					if zid, pErr := uuid.Parse(strings.TrimSpace(rawZ)); pErr == nil {
+						if _, ok := scope.AllowedZoneSet[zid]; ok {
+							allowed = true
+							break
+						}
+					}
+				}
+			}
+		}
+		if !allowed && len(scope.AllowedZoneIDs) > 0 {
+			cnt, cErr := h.store.Queries().CountChannelRulesInZones(ctx, sqlcgen.CountChannelRulesInZonesParams{
+				ChannelID: ch.ID,
+				ZoneIds:   scope.AllowedZoneIDs,
+			})
+			if cErr == nil && cnt > 0 {
+				allowed = true
+			}
+		}
+		if !allowed {
+			respondErr(c, domain.NewForbiddenError("sound_light channel outside assigned workshops", nil))
+			return
+		}
 	}
 	if h.pub != nil {
 		body, _ := json.Marshal(map[string]any{
@@ -296,12 +410,22 @@ func (h *ChannelsHandler) Test(c *gin.Context) {
 		parsedURL.RawQuery = q.Encode()
 	}
 
-	req, err := http.NewRequestWithContext(c.Request.Context(), method, parsedURL.String(), bytes.NewReader(payload))
+	if !isValidHTTPMethod(method) {
+		respondErr(c, domain.NewInvalidArgumentError("unsupported channel http method", nil))
+		return
+	}
+	var reqBody io.Reader
+	if method != http.MethodGet {
+		reqBody = bytes.NewReader(payload)
+	}
+	req, err := http.NewRequestWithContext(c.Request.Context(), method, parsedURL.String(), reqBody)
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid channel url", err))
 		return
 	}
-	req.Header.Set("Content-Type", "application/json")
+	if method != http.MethodGet {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if ch.ChannelType == "webhook" {
 		tsStr := strconv.FormatInt(time.Now().UTC().Unix(), 10)
 		req.Header.Set("X-Aegis-Event", "channel.test")

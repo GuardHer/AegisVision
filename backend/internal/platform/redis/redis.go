@@ -305,6 +305,27 @@ func (c *Client) DeleteUserScopeCache(ctx context.Context, userID string) error 
 	return c.rdb.Del(ctx, UserScopeKeyPrefix+userID).Err()
 }
 
+// DeleteAllUserScopeCaches evicts all cached user workshop scopes after camera/zone topology changes.
+func (c *Client) DeleteAllUserScopeCaches(ctx context.Context) error {
+	var cursor uint64
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, UserScopeKeyPrefix+"*", 100).Result()
+		if err != nil {
+			return err
+		}
+		if len(keys) > 0 {
+			if delErr := c.rdb.Del(ctx, keys...).Err(); delErr != nil {
+				return delErr
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
+}
+
 // PublishScopeChanged notifies aegis-ws instances that userID's workshop scope changed.
 func (c *Client) PublishScopeChanged(ctx context.Context, userID string) error {
 	return c.rdb.Publish(ctx, ChannelAuthScopeChanged, userID).Err()

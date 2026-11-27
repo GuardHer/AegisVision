@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -15,17 +16,73 @@ import (
 	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
 
-func isSensitiveAuditKey(key string) bool {
+func normalizeAuditKey(key string) string {
 	k := strings.ToLower(strings.TrimSpace(key))
+	k = strings.ReplaceAll(k, "-", "")
+	k = strings.ReplaceAll(k, "_", "")
+	return k
+}
+
+func isSensitiveAuditKey(key string) bool {
+	k := normalizeAuditKey(key)
 	return strings.Contains(k, "password") ||
 		strings.Contains(k, "secret") ||
 		strings.Contains(k, "token") ||
 		strings.Contains(k, "authorization") ||
-		strings.Contains(k, "api_key") ||
-		strings.Contains(k, "private_key")
+		strings.Contains(k, "apikey") ||
+		strings.Contains(k, "privatekey") ||
+		strings.Contains(k, "accesskey") ||
+		strings.Contains(k, "authkey")
 }
 
-// SanitizeAuditDetail recursively strips sensitive credential/secret/token keys from audit metadata.
+func isSensitiveQueryParam(param string) bool {
+	p := normalizeAuditKey(param)
+	return p == "key" ||
+		p == "sig" ||
+		p == "signature" ||
+		p == "auth" ||
+		strings.Contains(p, "token") ||
+		strings.Contains(p, "secret") ||
+		strings.Contains(p, "password") ||
+		strings.Contains(p, "apikey") ||
+		strings.Contains(p, "accesskey")
+}
+
+func redactURLSecrets(raw string) string {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.Contains(trimmed, "://") {
+		return raw
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	changed := false
+	if u.User != nil {
+		if _, hasPass := u.User.Password(); hasPass {
+			u.User = url.UserPassword(u.User.Username(), "***")
+			changed = true
+		}
+	}
+	if u.RawQuery != "" {
+		q := u.Query()
+		for k := range q {
+			if isSensitiveQueryParam(k) {
+				q.Set(k, "***")
+				changed = true
+			}
+		}
+		if changed {
+			u.RawQuery = q.Encode()
+		}
+	}
+	if !changed {
+		return raw
+	}
+	return u.String()
+}
+
+// SanitizeAuditDetail recursively strips sensitive credential/secret/token keys and masks embedded URL secrets.
 func SanitizeAuditDetail(in map[string]any) map[string]any {
 	if in == nil {
 		return map[string]any{}
@@ -42,8 +99,25 @@ func SanitizeAuditDetail(in map[string]any) map[string]any {
 
 func sanitizeAuditValue(v any) any {
 	switch tv := v.(type) {
+	case string:
+		return redactURLSecrets(tv)
 	case map[string]any:
 		return SanitizeAuditDetail(tv)
+	case map[string]string:
+		out := make(map[string]string, len(tv))
+		for k, val := range tv {
+			if isSensitiveAuditKey(k) {
+				continue
+			}
+			out[k] = redactURLSecrets(val)
+		}
+		return out
+	case []string:
+		res := make([]string, len(tv))
+		for i, item := range tv {
+			res[i] = redactURLSecrets(item)
+		}
+		return res
 	case []any:
 		res := make([]any, 0, len(tv))
 		for _, item := range tv {
@@ -104,7 +178,6 @@ func recordAudit(
 		RequestID:     reqID,
 	}
 	if _, err := store.Queries().CreateAuditLog(c.Request.Context(), params); err != nil {
-		// If actor_user_id was deleted while JWT remained valid, fall back to NULL actor_user_id so audit record is preserved.
 		var pgErr *pgconn.PgError
 		if actorID.Valid && errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			params.ActorUserID = uuid.NullUUID{}

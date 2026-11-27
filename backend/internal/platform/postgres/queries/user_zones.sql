@@ -1,5 +1,5 @@
 -- name: GetUserZoneScopeFlags :one
-SELECT id, role, all_zones_access FROM users WHERE id = $1;
+SELECT id, role, enabled, all_zones_access FROM users WHERE id = $1;
 
 -- name: ListUserZoneIDs :many
 SELECT zone_id FROM user_zones WHERE user_id = $1;

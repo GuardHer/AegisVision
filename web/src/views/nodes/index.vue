@@ -25,22 +25,32 @@ async function loadData() {
     const [nRes, tRes] = await Promise.all([listNodes(), listTasks()]);
     nodes.value = nRes?.data ?? [];
     tasks.value = tRes?.data ?? [];
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load compute cluster");
   } finally {
     loading.value = false;
   }
 }
 
 async function toggleDrain(node: AgentNodeItem) {
-  const next = node.status === "draining" ? "online" : "draining";
-  await updateNodeStatus(node.node_id, next);
-  ElMessage.success(`Node ${node.node_id} -> ${next}`);
-  await loadData();
+  try {
+    const next = node.status === "draining" ? "online" : "draining";
+    await updateNodeStatus(node.node_id, next);
+    ElMessage.success(`Node ${node.node_id} -> ${next}`);
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to update node status");
+  }
 }
 
 async function onReschedule(taskId: string) {
-  await rescheduleTask(taskId);
-  ElMessage.success("Reschedule requested");
-  await loadData();
+  try {
+    await rescheduleTask(taskId);
+    ElMessage.success("Reschedule requested");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to reschedule task");
+  }
 }
 
 function pct(val: any): number {

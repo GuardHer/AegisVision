@@ -96,6 +96,7 @@ func (h *AlgorithmsHandler) CreateAlgorithm(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "algorithm.create", "algorithm", item.ID.String(), "Created algorithm "+item.Name, map[string]any{"algorithm_key": item.AlgorithmKey})
 	respondCreated(c, item)
 }
 
@@ -140,6 +141,7 @@ func (h *AlgorithmsHandler) DeleteAlgorithm(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "algorithm.delete", "algorithm", id.String(), "Deleted algorithm", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 
@@ -172,7 +174,11 @@ func (h *AlgorithmsHandler) ListVersions(c *gin.Context) {
 	}
 	statsRows, statsErr := h.store.Queries().ListAlgorithmVersionStats30d(ctx, algoID)
 	statsByID := make(map[uuid.UUID]AlgorithmVersionStats30d, len(statsRows))
-	if statsErr == nil {
+	if statsErr != nil {
+		if h.log != nil {
+			h.log.Warn("load 30d algorithm version stats failed", "algorithm_id", algoID, "err", statsErr)
+		}
+	} else {
 		for _, r := range statsRows {
 			statsByID[r.AlgorithmVersionID] = AlgorithmVersionStats30d{
 				TotalAlarms:        r.TotalAlarms,
@@ -223,6 +229,7 @@ func (h *AlgorithmsHandler) CreateVersion(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "algorithm_version", "created", item.ID.String())
+	recordAudit(c, h.store, h.log, "algorithm_version.create", "algorithm", item.ID.String(), "Created algorithm version "+item.Version, map[string]any{"runtime_key": item.RuntimeKey, "status": item.Status})
 	respondCreated(c, item)
 }
 
@@ -251,5 +258,6 @@ func (h *AlgorithmsHandler) UpdateVersion(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "algorithm_version", "updated", item.ID.String())
+	recordAudit(c, h.store, h.log, "algorithm_version.update", "algorithm", item.ID.String(), "Updated algorithm version", map[string]any{"runtime_key": item.RuntimeKey, "status": item.Status})
 	respondOK(c, item)
 }

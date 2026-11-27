@@ -22,6 +22,7 @@ const channels = ref<AlarmChannelItem[]>([]);
 const zones = ref<ZoneTreeNode[]>([]);
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
+const editingRawConfig = ref<Record<string, any>>({});
 
 const form = reactive({
   name: "",
@@ -70,6 +71,8 @@ async function loadData() {
     const [chRes, zRes] = await Promise.all([listChannels(), getZonesTree().catch(() => ({ data: [] }))]);
     channels.value = chRes?.data ?? [];
     zones.value = zRes?.data ?? [];
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load channels");
   } finally {
     loading.value = false;
   }
@@ -77,6 +80,7 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = null;
+  editingRawConfig.value = {};
   Object.assign(form, {
     name: "",
     channel_type: "webhook",
@@ -99,6 +103,7 @@ function openCreate() {
 
 function openEdit(row: AlarmChannelItem) {
   editingId.value = row.id;
+  editingRawConfig.value = { ...(row.config ?? {}) };
   const rr = row.routing_rules ?? {};
   Object.assign(form, {
     name: row.name,
@@ -121,14 +126,17 @@ function openEdit(row: AlarmChannelItem) {
 }
 
 function buildConfig(): Record<string, any> {
+  const base = editingId.value ? { ...editingRawConfig.value } : {};
   if (form.channel_type === "wecom") {
     return {
+      ...base,
       webhook_url: form.webhook_url.trim(),
       timeout_ms: form.timeout_ms
     };
   }
   if (form.channel_type === "dingtalk") {
     return {
+      ...base,
       webhook_url: form.webhook_url.trim(),
       secret: form.secret.trim(),
       timeout_ms: form.timeout_ms
@@ -136,16 +144,18 @@ function buildConfig(): Record<string, any> {
   }
   if (form.channel_type === "sound_light") {
     return {
+      ...base,
       trigger_url: form.trigger_url.trim(),
       reset_url: form.reset_url.trim(),
-      method: "POST",
+      method: base.method || "POST",
       auto_reset_seconds: form.auto_reset_seconds,
       timeout_ms: form.timeout_ms
     };
   }
   return {
+    ...base,
     url: form.url.trim(),
-    method: "POST",
+    method: base.method || "POST",
     secret: form.secret.trim(),
     timeout_ms: form.timeout_ms,
     include_evidence_urls: form.include_evidence_urls
@@ -153,42 +163,65 @@ function buildConfig(): Record<string, any> {
 }
 
 async function submit() {
-  const payload = {
-    name: form.name.trim(),
-    channel_type: form.channel_type,
-    config: buildConfig(),
-    routing_rules: {
-      auto_route: form.auto_route,
-      severities: form.severities,
-      zone_ids: form.zone_ids,
-      rule_modes: form.rule_modes
-    },
-    enabled: form.enabled
-  };
-  if (editingId.value) {
-    await updateChannel(editingId.value, payload);
-  } else {
-    await createChannel(payload);
+  try {
+    const payload = {
+      name: form.name.trim(),
+      channel_type: form.channel_type,
+      config: buildConfig(),
+      routing_rules: {
+        auto_route: form.auto_route,
+        severities: form.severities,
+        zone_ids: form.zone_ids,
+        rule_modes: form.rule_modes
+      },
+      enabled: form.enabled
+    };
+    if (editingId.value) {
+      await updateChannel(editingId.value, payload);
+    } else {
+      await createChannel(payload);
+    }
+    dialogVisible.value = false;
+    ElMessage.success("OK");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to save channel");
   }
-  dialogVisible.value = false;
-  ElMessage.success("OK");
-  await loadData();
 }
 
 async function onTest(id: string) {
-  const res = await testChannel(id);
-  ElMessage.info(`HTTP ${res?.data?.status_code} (${res?.data?.latency_ms}ms)`);
+  try {
+    const res = await testChannel(id);
+    const msg = `HTTP ${res?.data?.status_code} (${res?.data?.latency_ms}ms)`;
+    if (res?.data?.ok) {
+      ElMessage.success(msg);
+    } else {
+      ElMessage.error(msg);
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Channel test failed");
+  }
 }
 
 async function onReset(id: string) {
-  await resetChannel(id);
-  ElMessage.success(t("aegis.channels.resetQueued"));
+  try {
+    await resetChannel(id);
+    ElMessage.success(t("aegis.channels.resetQueued"));
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Channel reset failed");
+  }
 }
 
 async function onDelete(id: string) {
-  await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
-  await deleteChannel(id);
-  await loadData();
+  try {
+    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await deleteChannel(id);
+    await loadData();
+  } catch (err: any) {
+    if (err !== "cancel" && err !== "close") {
+      ElMessage.error(err?.message || "Failed to delete channel");
+    }
+  }
 }
 
 onMounted(loadData);
