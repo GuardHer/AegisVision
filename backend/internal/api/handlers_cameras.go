@@ -158,6 +158,7 @@ func (h *CamerasHandler) CreateCamera(c *gin.Context) {
 		CodecHint:    codec,
 		Status:       "offline",
 		Enabled:      enabled,
+		Tags:         []byte(`[]`),
 	})
 	if err != nil {
 		respondErr(c, err)
@@ -192,6 +193,7 @@ func (h *CamerasHandler) UpdateCamera(c *gin.Context) {
 		SubStreamUrl: req.SubStreamURL,
 		CodecHint:    codec,
 		Enabled:      req.Enabled,
+		Tags:         []byte(`[]`),
 	})
 	if err != nil {
 		respondErr(c, err)

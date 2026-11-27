@@ -11,22 +11,65 @@ import (
 	"github.com/google/uuid"
 )
 
+const batchUpdateCamerasEnabled = `-- name: BatchUpdateCamerasEnabled :execrows
+UPDATE cameras
+SET enabled = $1,
+    updated_at = NOW()
+WHERE id = ANY($2::uuid[])
+`
+
+type BatchUpdateCamerasEnabledParams struct {
+	Enabled bool        `json:"enabled"`
+	Ids     []uuid.UUID `json:"ids"`
+}
+
+func (q *Queries) BatchUpdateCamerasEnabled(ctx context.Context, arg BatchUpdateCamerasEnabledParams) (int64, error) {
+	result, err := q.db.Exec(ctx, batchUpdateCamerasEnabled, arg.Enabled, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const batchUpdateCamerasZone = `-- name: BatchUpdateCamerasZone :execrows
+UPDATE cameras
+SET zone_id = $1,
+    updated_at = NOW()
+WHERE id = ANY($2::uuid[])
+`
+
+type BatchUpdateCamerasZoneParams struct {
+	ZoneID uuid.NullUUID `json:"zone_id"`
+	Ids    []uuid.UUID   `json:"ids"`
+}
+
+func (q *Queries) BatchUpdateCamerasZone(ctx context.Context, arg BatchUpdateCamerasZoneParams) (int64, error) {
+	result, err := q.db.Exec(ctx, batchUpdateCamerasZone, arg.ZoneID, arg.Ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const createCamera = `-- name: CreateCamera :one
-INSERT INTO cameras (id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at
+INSERT INTO cameras (id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, zone_id, workstation_code, tags)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, COALESCE($12::jsonb, '[]'::jsonb))
+RETURNING id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at, zone_id, workstation_code, tags, last_online_at
 `
 
 type CreateCameraParams struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Location     string    `json:"location"`
-	RtspUrl      string    `json:"rtsp_url"`
-	SubStreamUrl string    `json:"sub_stream_url"`
-	StreamPath   string    `json:"stream_path"`
-	CodecHint    string    `json:"codec_hint"`
-	Status       string    `json:"status"`
-	Enabled      bool      `json:"enabled"`
+	ID              uuid.UUID     `json:"id"`
+	Name            string        `json:"name"`
+	Location        string        `json:"location"`
+	RtspUrl         string        `json:"rtsp_url"`
+	SubStreamUrl    string        `json:"sub_stream_url"`
+	StreamPath      string        `json:"stream_path"`
+	CodecHint       string        `json:"codec_hint"`
+	Status          string        `json:"status"`
+	Enabled         bool          `json:"enabled"`
+	ZoneID          uuid.NullUUID `json:"zone_id"`
+	WorkstationCode string        `json:"workstation_code"`
+	Tags            []byte        `json:"tags"`
 }
 
 func (q *Queries) CreateCamera(ctx context.Context, arg CreateCameraParams) (Camera, error) {
@@ -40,6 +83,9 @@ func (q *Queries) CreateCamera(ctx context.Context, arg CreateCameraParams) (Cam
 		arg.CodecHint,
 		arg.Status,
 		arg.Enabled,
+		arg.ZoneID,
+		arg.WorkstationCode,
+		arg.Tags,
 	)
 	var i Camera
 	err := row.Scan(
@@ -54,14 +100,18 @@ func (q *Queries) CreateCamera(ctx context.Context, arg CreateCameraParams) (Cam
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ZoneID,
+		&i.WorkstationCode,
+		&i.Tags,
+		&i.LastOnlineAt,
 	)
 	return i, err
 }
 
 const createCameraROI = `-- name: CreateCameraROI :one
-INSERT INTO camera_rois (id, camera_id, name, roi_type, points, enabled)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, camera_id, name, roi_type, points, enabled, created_at, updated_at
+INSERT INTO camera_rois (id, camera_id, name, roi_type, points, enabled, color)
+VALUES ($1, $2, $3, $4, $5, $6, COALESCE(NULLIF($7::varchar, ''), '#38bdf8'))
+RETURNING id, camera_id, name, roi_type, points, enabled, created_at, updated_at, color
 `
 
 type CreateCameraROIParams struct {
@@ -71,6 +121,7 @@ type CreateCameraROIParams struct {
 	RoiType  string    `json:"roi_type"`
 	Points   []byte    `json:"points"`
 	Enabled  bool      `json:"enabled"`
+	Color    string    `json:"color"`
 }
 
 func (q *Queries) CreateCameraROI(ctx context.Context, arg CreateCameraROIParams) (CameraRoi, error) {
@@ -81,6 +132,7 @@ func (q *Queries) CreateCameraROI(ctx context.Context, arg CreateCameraROIParams
 		arg.RoiType,
 		arg.Points,
 		arg.Enabled,
+		arg.Color,
 	)
 	var i CameraRoi
 	err := row.Scan(
@@ -92,6 +144,7 @@ func (q *Queries) CreateCameraROI(ctx context.Context, arg CreateCameraROIParams
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
@@ -115,7 +168,7 @@ func (q *Queries) DeleteCameraROI(ctx context.Context, id uuid.UUID) error {
 }
 
 const getCameraByID = `-- name: GetCameraByID :one
-SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at FROM cameras WHERE id = $1
+SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at, zone_id, workstation_code, tags, last_online_at FROM cameras WHERE id = $1
 `
 
 func (q *Queries) GetCameraByID(ctx context.Context, id uuid.UUID) (Camera, error) {
@@ -133,12 +186,16 @@ func (q *Queries) GetCameraByID(ctx context.Context, id uuid.UUID) (Camera, erro
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ZoneID,
+		&i.WorkstationCode,
+		&i.Tags,
+		&i.LastOnlineAt,
 	)
 	return i, err
 }
 
 const getCameraByStreamPath = `-- name: GetCameraByStreamPath :one
-SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at FROM cameras WHERE stream_path = $1
+SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at, zone_id, workstation_code, tags, last_online_at FROM cameras WHERE stream_path = $1
 `
 
 func (q *Queries) GetCameraByStreamPath(ctx context.Context, streamPath string) (Camera, error) {
@@ -156,12 +213,16 @@ func (q *Queries) GetCameraByStreamPath(ctx context.Context, streamPath string) 
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ZoneID,
+		&i.WorkstationCode,
+		&i.Tags,
+		&i.LastOnlineAt,
 	)
 	return i, err
 }
 
 const getCameraROIByID = `-- name: GetCameraROIByID :one
-SELECT id, camera_id, name, roi_type, points, enabled, created_at, updated_at FROM camera_rois WHERE id = $1
+SELECT id, camera_id, name, roi_type, points, enabled, created_at, updated_at, color FROM camera_rois WHERE id = $1
 `
 
 func (q *Queries) GetCameraROIByID(ctx context.Context, id uuid.UUID) (CameraRoi, error) {
@@ -176,12 +237,13 @@ func (q *Queries) GetCameraROIByID(ctx context.Context, id uuid.UUID) (CameraRoi
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
 
 const listCameraROIsByCamera = `-- name: ListCameraROIsByCamera :many
-SELECT id, camera_id, name, roi_type, points, enabled, created_at, updated_at FROM camera_rois
+SELECT id, camera_id, name, roi_type, points, enabled, created_at, updated_at, color FROM camera_rois
 WHERE camera_id = $1
 ORDER BY created_at ASC
 `
@@ -204,6 +266,7 @@ func (q *Queries) ListCameraROIsByCamera(ctx context.Context, cameraID uuid.UUID
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Color,
 		); err != nil {
 			return nil, err
 		}
@@ -216,7 +279,7 @@ func (q *Queries) ListCameraROIsByCamera(ctx context.Context, cameraID uuid.UUID
 }
 
 const listCameras = `-- name: ListCameras :many
-SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at FROM cameras ORDER BY created_at DESC
+SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at, zone_id, workstation_code, tags, last_online_at FROM cameras ORDER BY created_at DESC
 `
 
 func (q *Queries) ListCameras(ctx context.Context) ([]Camera, error) {
@@ -240,6 +303,10 @@ func (q *Queries) ListCameras(ctx context.Context) ([]Camera, error) {
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ZoneID,
+			&i.WorkstationCode,
+			&i.Tags,
+			&i.LastOnlineAt,
 		); err != nil {
 			return nil, err
 		}
@@ -252,7 +319,7 @@ func (q *Queries) ListCameras(ctx context.Context) ([]Camera, error) {
 }
 
 const listEnabledCameras = `-- name: ListEnabledCameras :many
-SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at FROM cameras WHERE enabled = TRUE ORDER BY created_at ASC
+SELECT id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at, zone_id, workstation_code, tags, last_online_at FROM cameras WHERE enabled = TRUE ORDER BY created_at ASC
 `
 
 func (q *Queries) ListEnabledCameras(ctx context.Context) ([]Camera, error) {
@@ -276,6 +343,10 @@ func (q *Queries) ListEnabledCameras(ctx context.Context) ([]Camera, error) {
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ZoneID,
+			&i.WorkstationCode,
+			&i.Tags,
+			&i.LastOnlineAt,
 		); err != nil {
 			return nil, err
 		}
@@ -295,19 +366,25 @@ SET name = $2,
     sub_stream_url = $5,
     codec_hint = $6,
     enabled = $7,
+    zone_id = $8,
+    workstation_code = $9,
+    tags = COALESCE($10::jsonb, '[]'::jsonb),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at
+RETURNING id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint, status, enabled, created_at, updated_at, zone_id, workstation_code, tags, last_online_at
 `
 
 type UpdateCameraParams struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Location     string    `json:"location"`
-	RtspUrl      string    `json:"rtsp_url"`
-	SubStreamUrl string    `json:"sub_stream_url"`
-	CodecHint    string    `json:"codec_hint"`
-	Enabled      bool      `json:"enabled"`
+	ID              uuid.UUID     `json:"id"`
+	Name            string        `json:"name"`
+	Location        string        `json:"location"`
+	RtspUrl         string        `json:"rtsp_url"`
+	SubStreamUrl    string        `json:"sub_stream_url"`
+	CodecHint       string        `json:"codec_hint"`
+	Enabled         bool          `json:"enabled"`
+	ZoneID          uuid.NullUUID `json:"zone_id"`
+	WorkstationCode string        `json:"workstation_code"`
+	Tags            []byte        `json:"tags"`
 }
 
 func (q *Queries) UpdateCamera(ctx context.Context, arg UpdateCameraParams) (Camera, error) {
@@ -319,6 +396,9 @@ func (q *Queries) UpdateCamera(ctx context.Context, arg UpdateCameraParams) (Cam
 		arg.SubStreamUrl,
 		arg.CodecHint,
 		arg.Enabled,
+		arg.ZoneID,
+		arg.WorkstationCode,
+		arg.Tags,
 	)
 	var i Camera
 	err := row.Scan(
@@ -333,6 +413,10 @@ func (q *Queries) UpdateCamera(ctx context.Context, arg UpdateCameraParams) (Cam
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ZoneID,
+		&i.WorkstationCode,
+		&i.Tags,
+		&i.LastOnlineAt,
 	)
 	return i, err
 }
@@ -343,9 +427,10 @@ SET name = $2,
     roi_type = $3,
     points = $4,
     enabled = $5,
+    color = COALESCE(NULLIF($6::varchar, ''), '#38bdf8'),
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, camera_id, name, roi_type, points, enabled, created_at, updated_at
+RETURNING id, camera_id, name, roi_type, points, enabled, created_at, updated_at, color
 `
 
 type UpdateCameraROIParams struct {
@@ -354,6 +439,7 @@ type UpdateCameraROIParams struct {
 	RoiType string    `json:"roi_type"`
 	Points  []byte    `json:"points"`
 	Enabled bool      `json:"enabled"`
+	Color   string    `json:"color"`
 }
 
 func (q *Queries) UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams) (CameraRoi, error) {
@@ -363,6 +449,7 @@ func (q *Queries) UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams
 		arg.RoiType,
 		arg.Points,
 		arg.Enabled,
+		arg.Color,
 	)
 	var i CameraRoi
 	err := row.Scan(
@@ -374,6 +461,7 @@ func (q *Queries) UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Color,
 	)
 	return i, err
 }
@@ -381,6 +469,7 @@ func (q *Queries) UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams
 const updateCameraStatus = `-- name: UpdateCameraStatus :exec
 UPDATE cameras
 SET status = $2,
+    last_online_at = CASE WHEN $2 = 'online' THEN NOW() ELSE last_online_at END,
     updated_at = NOW()
 WHERE id = $1
 `
