@@ -94,11 +94,12 @@ func main() {
 	})
 
 	recorder := evidence.NewRecorder(evidence.RecorderDeps{
-		Repo:        evidence.NewPostgresVideoRepo(pgStore),
-		Storage:     objStore,
-		Tokens:      redisClient,
-		RTSPBaseURL: cfg.MediaMTX.RTSPBaseURL,
-		Logger:      log,
+		Repo:          evidence.NewPostgresVideoRepo(pgStore),
+		Storage:       objStore,
+		Tokens:        redisClient,
+		RTSPBaseURL:   cfg.MediaMTX.RTSPBaseURL,
+		RecordingsDir: cfg.MediaMTX.RecordingsDir,
+		Logger:        log,
 	})
 
 	health := telemetry.NewHealth("aegis-dispatcher")

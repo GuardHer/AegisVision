@@ -177,8 +177,11 @@ services:
       AEGIS_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-aegis}
       AEGIS_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-aegis_minio_change_me}
       AEGIS_MEDIAMTX_RTSP_BASE_URL: rtsp://mediamtx:8554
+      AEGIS_MEDIAMTX_RECORDINGS_DIR: /recordings
       AEGIS_JWT_SECRET: ${AEGIS_JWT_SECRET:-aegis-dev-jwt-secret-change-in-prod-32chars}
       AEGIS_EVIDENCE_SIGN_SECRET: ${AEGIS_EVIDENCE_SIGN_SECRET:-aegis-dev-sign-secret-change-in-prod-32chars}
+    volumes:
+      - aegis_mediamtx_recordings:/recordings:ro
     depends_on:
       postgres:
         condition: service_healthy

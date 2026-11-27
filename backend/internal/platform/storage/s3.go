@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 
 	"aegisvision/backend/internal/config"
 )
@@ -105,6 +106,9 @@ func (s *S3Storage) GetObject(ctx context.Context, key string, rangeHeader strin
 		if isS3NotFound(err) {
 			return nil, ObjectMeta{}, ErrNotFound
 		}
+		if isS3InvalidRange(err) {
+			return nil, ObjectMeta{}, ErrInvalidRange
+		}
 		return nil, ObjectMeta{}, fmt.Errorf("s3 get object %q: %w", cleanKey, err)
 	}
 
@@ -151,6 +155,21 @@ func isS3NotFound(err error) bool {
 	if errors.As(err, &apiErr) {
 		code := apiErr.ErrorCode()
 		return code == "NoSuchKey" || code == "NotFound" || code == "404"
+	}
+	return false
+}
+
+func isS3InvalidRange(err error) bool {
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		code := apiErr.ErrorCode()
+		if code == "InvalidRange" || code == "416" {
+			return true
+		}
+	}
+	var respErr *smithyhttp.ResponseError
+	if errors.As(err, &respErr) && respErr.HTTPStatusCode() == 416 {
+		return true
 	}
 	return false
 }
