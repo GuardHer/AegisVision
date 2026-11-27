@@ -202,6 +202,7 @@ func (h *ZonesHandler) Create(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "zone", "created", created.ID.String())
+	recordAudit(c, h.store, h.log, "zone.create", "zone", created.ID.String(), "Created zone "+created.Name, map[string]any{"zone_type": created.ZoneType})
 	respondCreated(c, created)
 }
 
@@ -265,6 +266,7 @@ func (h *ZonesHandler) Update(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "zone", "updated", updated.ID.String())
+	recordAudit(c, h.store, h.log, "zone.update", "zone", updated.ID.String(), "Updated zone "+updated.Name, map[string]any{"zone_type": updated.ZoneType})
 	respondOK(c, updated)
 }
 

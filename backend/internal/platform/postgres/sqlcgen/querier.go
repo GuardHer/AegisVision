@@ -17,6 +17,7 @@ type Querier interface {
 	BatchUpdateCamerasZone(ctx context.Context, arg BatchUpdateCamerasZoneParams) (int64, error)
 	ClearRuleAlarmChannels(ctx context.Context, ruleID uuid.UUID) error
 	CountAlarms(ctx context.Context, arg CountAlarmsParams) (int64, error)
+	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountCamerasInZone(ctx context.Context, zoneID uuid.NullUUID) (int64, error)
 	CountChildZones(ctx context.Context, parentID uuid.NullUUID) (int64, error)
 	CountFalsePositiveAlarms(ctx context.Context, arg CountFalsePositiveAlarmsParams) (int64, error)
@@ -28,6 +29,7 @@ type Querier interface {
 	CreateAlgorithm(ctx context.Context, arg CreateAlgorithmParams) (Algorithm, error)
 	CreateAlgorithmVersion(ctx context.Context, arg CreateAlgorithmVersionParams) (AlgorithmVersion, error)
 	CreateArmingSchedule(ctx context.Context, arg CreateArmingScheduleParams) (ArmingSchedule, error)
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	CreateCamera(ctx context.Context, arg CreateCameraParams) (Camera, error)
 	CreateCameraROI(ctx context.Context, arg CreateCameraROIParams) (CameraRoi, error)
 	CreateInferenceTask(ctx context.Context, arg CreateInferenceTaskParams) (InferenceTask, error)
@@ -89,10 +91,12 @@ type Querier interface {
 	ListAlarmChannels(ctx context.Context) ([]AlarmChannel, error)
 	ListAlarms(ctx context.Context, arg ListAlarmsParams) ([]Alarm, error)
 	ListAlarmsForExport(ctx context.Context, arg ListAlarmsForExportParams) ([]ListAlarmsForExportRow, error)
+	ListAlgorithmVersionStats30d(ctx context.Context, algorithmID uuid.UUID) ([]ListAlgorithmVersionStats30dRow, error)
 	ListAlgorithmVersionsByAlgorithm(ctx context.Context, algorithmID uuid.UUID) ([]AlgorithmVersion, error)
 	ListAlgorithms(ctx context.Context) ([]Algorithm, error)
 	ListAllAlgorithmVersions(ctx context.Context) ([]AlgorithmVersion, error)
 	ListArmingSchedules(ctx context.Context) ([]ListArmingSchedulesRow, error)
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	ListCameraCountsByZone(ctx context.Context) ([]ListCameraCountsByZoneRow, error)
 	ListCameraROIsByCamera(ctx context.Context, cameraID uuid.UUID) ([]CameraRoi, error)
 	ListCameras(ctx context.Context) ([]Camera, error)
@@ -108,6 +112,7 @@ type Querier interface {
 	ListRecentHighSeverityAlarms(ctx context.Context, zoneIds []uuid.UUID) ([]ListRecentHighSeverityAlarmsRow, error)
 	ListRulesByCamera(ctx context.Context, cameraID uuid.UUID) ([]RoiAlgorithmRule, error)
 	ListRunningInferenceTasks(ctx context.Context) ([]InferenceTask, error)
+	ListSystemSettings(ctx context.Context) ([]SystemSetting, error)
 	ListUserZoneIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListZones(ctx context.Context) ([]Zone, error)
@@ -138,6 +143,7 @@ type Querier interface {
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateZone(ctx context.Context, arg UpdateZoneParams) (Zone, error)
 	UpsertAgentNode(ctx context.Context, arg UpsertAgentNodeParams) (AgentNode, error)
+	UpsertSystemSetting(ctx context.Context, arg UpsertSystemSettingParams) (SystemSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)

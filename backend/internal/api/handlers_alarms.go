@@ -317,6 +317,10 @@ func (h *AlarmsHandler) Handle(c *gin.Context) {
 		return
 	}
 	h.enqueueSoundLightResetForAlarms(c.Request.Context(), []uuid.UUID{id})
+	recordAudit(c, h.store, h.log, "alarm.handle", "alarm", id.String(), "Handled alarm as "+req.HandleStatus, map[string]any{
+		"handle_status":         req.HandleStatus,
+		"false_positive_reason": fpReason,
+	})
 	respondOK(c, updated)
 }
 
@@ -375,6 +379,10 @@ func (h *AlarmsHandler) BatchHandle(c *gin.Context) {
 		return
 	}
 	h.enqueueSoundLightResetForAlarms(c.Request.Context(), ids)
+	recordAudit(c, h.store, h.log, "alarm.batch_handle", "alarm", "", "Batch handled alarms as "+req.HandleStatus, map[string]any{
+		"count":         affected,
+		"handle_status": req.HandleStatus,
+	})
 	respondOK(c, gin.H{"updated_count": affected})
 }
 

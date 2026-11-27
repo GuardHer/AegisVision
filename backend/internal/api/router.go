@@ -107,6 +107,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	nodesH := NewNodesTasksHandler(deps.Store, deps.Publisher, deps.Logger)
 	alarmsH := NewAlarmsHandler(deps.Store, deps.Storage, deps.Publisher, deps.Logger)
 	datasetsH := NewDatasetsHandler(deps.Store, deps.Storage, deps.Logger)
+	governanceH := NewGovernanceHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Storage, deps.Logger)
 	channelsH := NewChannelsHandler(deps.Store, deps.Publisher, nil, deps.Logger)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
 	evidenceH.SetScopeStore(deps.Store)
@@ -219,6 +220,12 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.DELETE("/channels/:id", adminOnly, channelsH.Delete)
 	authed.POST("/channels/:id/test", adminOnly, channelsH.Test)
 	authed.POST("/channels/:id/reset", opRoles, channelsH.Reset)
+
+	// Governance: audit logs, global settings, and system health
+	authed.GET("/audit-logs", adminOnly, governanceH.ListAuditLogs)
+	authed.GET("/settings", allRoles, governanceH.GetSettings)
+	authed.PUT("/settings", adminOnly, governanceH.UpdateSettings)
+	authed.GET("/system/health", adminOnly, governanceH.SystemHealth)
 
 	return r
 }

@@ -129,6 +129,11 @@ func (h *ChannelsHandler) Create(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "channel.create", "alarm_channel", item.ID.String(), "Created channel "+item.Name, map[string]any{
+		"name":         item.Name,
+		"channel_type": item.ChannelType,
+		"config":       req.Config,
+	})
 	respondCreated(c, item)
 }
 
@@ -161,6 +166,11 @@ func (h *ChannelsHandler) Update(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "channel.update", "alarm_channel", item.ID.String(), "Updated channel "+item.Name, map[string]any{
+		"name":         item.Name,
+		"channel_type": item.ChannelType,
+		"config":       req.Config,
+	})
 	respondOK(c, item)
 }
 
@@ -175,6 +185,7 @@ func (h *ChannelsHandler) Delete(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "channel.delete", "alarm_channel", id.String(), "Deleted channel", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 
@@ -204,6 +215,7 @@ func (h *ChannelsHandler) Reset(c *gin.Context) {
 			return
 		}
 	}
+	recordAudit(c, h.store, h.log, "channel.reset", "alarm_channel", ch.ID.String(), "Triggered manual reset on "+ch.Name, map[string]any{"channel_type": ch.ChannelType})
 	respondOK(c, gin.H{"reset_enqueued": true, "channel_id": ch.ID.String()})
 }
 

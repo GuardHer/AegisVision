@@ -119,6 +119,12 @@ func (h *UsersHandler) Create(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, nil, "user.create", "user", u.ID.String(), "Created user "+u.Username, map[string]any{
+		"username":     req.Username,
+		"display_name": req.DisplayName,
+		"role":         req.Role,
+		"password":     req.Password,
+	})
 	respondCreated(c, toUserProfile(u))
 }
 
@@ -149,6 +155,11 @@ func (h *UsersHandler) Update(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, nil, "user.update", "user", u.ID.String(), "Updated user "+u.Username, map[string]any{
+		"display_name": req.DisplayName,
+		"role":         req.Role,
+		"enabled":      req.Enabled,
+	})
 	respondOK(c, toUserProfile(u))
 }
 
@@ -163,6 +174,7 @@ func (h *UsersHandler) Delete(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, nil, "user.delete", "user", id.String(), "Deleted user", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 
@@ -197,6 +209,9 @@ func (h *UsersHandler) ResetPassword(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, nil, "user.reset_password", "user", id.String(), "Reset user password", map[string]any{
+		"new_password": req.NewPassword,
+	})
 	respondOK(c, gin.H{"reset": true})
 }
 
@@ -284,6 +299,10 @@ func (h *UsersHandler) UpdateZones(c *gin.Context) {
 		_ = inv.DeleteUserScopeCache(ctx, id.String())
 		_ = inv.PublishScopeChanged(ctx, id.String())
 	}
+	recordAudit(c, h.store, nil, "user.update_zones", "user", id.String(), "Updated user workshop scope", map[string]any{
+		"all_zones_access": req.AllZonesAccess,
+		"zone_count":       len(zoneIDs),
+	})
 
 	respondOK(c, gin.H{
 		"user_id":          id,
