@@ -1,6 +1,12 @@
+let lastChimeAt = 0;
+const CHIME_COOLDOWN_MS = 1500;
+
 // Synthesizes a short offline two-tone duty room alert chime using Web Audio API (zero external assets).
 export function playDutyAlertChime(): void {
   if (typeof window === "undefined") return;
+  const nowMs = Date.now();
+  if (nowMs - lastChimeAt < CHIME_COOLDOWN_MS) return;
+  lastChimeAt = nowMs;
   const AudioCtx =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext?: typeof AudioContext })

@@ -113,6 +113,7 @@ func TestZonesTreeHierarchyDeleteGuardAndCameraBatchImport(t *testing.T) {
 	csvBody := "name,rtsp_url,sub_stream_url,workstation_code,zone_id,codec_hint\n" +
 		"Cam1-" + suffix + ",rtsp://127.0.0.1/c1,,WS-01," + stID.String() + ",h264\n" +
 		"Cam2-" + suffix + ",rtsp://127.0.0.1/c2,,WS-02," + stID.String() + ",h264\n" +
+		"BadZoneCam-" + suffix + ",rtsp://127.0.0.1/bad,,WS-03," + uuid.Must(uuid.NewV7()).String() + ",h264\n" +
 		",rtsp://invalid-missing-name,,,,\n"
 	wImp := doAPIReq(t, router, http.MethodPost, "/api/v1/cameras/import", adminTok, map[string]any{"csv": csvBody})
 	if wImp.Code != http.StatusOK {
@@ -126,8 +127,25 @@ func TestZonesTreeHierarchyDeleteGuardAndCameraBatchImport(t *testing.T) {
 		} `json:"data"`
 	}
 	_ = json.Unmarshal(wImp.Body.Bytes(), &impResp)
-	if impResp.Data.CreatedCount != 2 || len(impResp.Data.Errors) != 1 {
+	if impResp.Data.CreatedCount != 2 || len(impResp.Data.Errors) != 2 {
 		t.Fatalf("unexpected import result: created=%d errors=%v", impResp.Data.CreatedCount, impResp.Data.Errors)
+	}
+	// Verify JSONB tags serialize as a real JSON array (not Base64 string) and DB errors are sanitized.
+	var rawImp struct {
+		Data struct {
+			Cameras []struct {
+				Tags []string `json:"tags"`
+			} `json:"cameras"`
+			Errors []string `json:"errors"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(wImp.Body.Bytes(), &rawImp); err != nil {
+		t.Fatalf("camera.tags must serialize as JSON array, got body=%s err=%v", wImp.Body.String(), err)
+	}
+	for _, e := range rawImp.Data.Errors {
+		if bytes.Contains([]byte(e), []byte("SQLSTATE")) || bytes.Contains([]byte(e), []byte("fk_")) {
+			t.Fatalf("CSV import leaked raw SQL error: %q", e)
+		}
 	}
 	for _, c := range impResp.Data.Cameras {
 		createdCams = append(createdCams, c.ID)

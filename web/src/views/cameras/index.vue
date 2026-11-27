@@ -148,24 +148,29 @@ function openEditZone(node: ZoneTreeNode) {
 
 async function submitZone() {
   if (!zoneForm.name.trim()) return;
-  if (editingZoneId.value) {
-    await updateZone(editingZoneId.value, { ...zoneForm });
-  } else {
-    await createZone({ ...zoneForm });
+  try {
+    if (editingZoneId.value) {
+      await updateZone(editingZoneId.value, { ...zoneForm });
+    } else {
+      await createZone({ ...zoneForm });
+    }
+    ElMessage.success("OK");
+    zoneDialogVisible.value = false;
+    await loadZones();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save zone");
   }
-  ElMessage.success("OK");
-  zoneDialogVisible.value = false;
-  await loadZones();
 }
 
 async function onDeleteZone(node: ZoneTreeNode) {
-  await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
   try {
+    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
     await deleteZone(node.id);
     if (selectedZoneId.value === node.id) selectedZoneId.value = "";
     ElMessage.success("OK");
     await loadAll();
   } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
     ElMessage.error(err?.response?.data?.message || "Cannot delete non-empty zone");
   }
 }
@@ -217,21 +222,30 @@ async function submitCamera() {
     codec_hint: form.codec_hint,
     enabled: form.enabled
   };
-  if (editingId.value) {
-    await updateCamera(editingId.value, payload);
-  } else {
-    await createCamera(payload);
+  try {
+    if (editingId.value) {
+      await updateCamera(editingId.value, payload);
+    } else {
+      await createCamera(payload);
+    }
+    ElMessage.success("OK");
+    dialogVisible.value = false;
+    await loadAll();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save camera");
   }
-  ElMessage.success("OK");
-  dialogVisible.value = false;
-  await loadAll();
 }
 
 async function onDeleteCamera(id: string) {
-  await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
-  await deleteCamera(id);
-  ElMessage.success("OK");
-  await loadAll();
+  try {
+    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await deleteCamera(id);
+    ElMessage.success("OK");
+    await loadAll();
+  } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to delete camera");
+  }
 }
 
 function onSelectionChange(rows: CameraItem[]) {
@@ -240,12 +254,16 @@ function onSelectionChange(rows: CameraItem[]) {
 
 async function runBatchEnable(enabled: boolean) {
   if (selectedCameraIds.value.length === 0) return;
-  await batchUpdateCameras({
-    camera_ids: selectedCameraIds.value,
-    action: enabled ? "enable" : "disable"
-  });
-  ElMessage.success("OK");
-  await loadAll();
+  try {
+    await batchUpdateCameras({
+      camera_ids: selectedCameraIds.value,
+      action: enabled ? "enable" : "disable"
+    });
+    ElMessage.success("OK");
+    await loadAll();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Batch update failed");
+  }
 }
 
 function openMoveZone() {
@@ -255,24 +273,32 @@ function openMoveZone() {
 }
 
 async function submitMoveZone() {
-  await batchUpdateCameras({
-    camera_ids: selectedCameraIds.value,
-    action: "move_zone",
-    zone_id: moveTargetZoneId.value
-  });
-  moveDialogVisible.value = false;
-  ElMessage.success("OK");
-  await loadAll();
+  try {
+    await batchUpdateCameras({
+      camera_ids: selectedCameraIds.value,
+      action: "move_zone",
+      zone_id: moveTargetZoneId.value
+    });
+    moveDialogVisible.value = false;
+    ElMessage.success("OK");
+    await loadAll();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Batch move failed");
+  }
 }
 
 async function submitImportCSV() {
-  const res = await importCamerasCSV(importCSVText.value);
-  importResult.value = {
-    created_count: res?.data?.created_count ?? 0,
-    errors: res?.data?.errors ?? []
-  };
-  ElMessage.success(`Imported ${importResult.value.created_count} cameras`);
-  await loadAll();
+  try {
+    const res = await importCamerasCSV(importCSVText.value);
+    importResult.value = {
+      created_count: res?.data?.created_count ?? 0,
+      errors: res?.data?.errors ?? []
+    };
+    ElMessage.success(`Imported ${importResult.value.created_count} cameras`);
+    await loadAll();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "CSV import failed");
+  }
 }
 
 onMounted(loadAll);

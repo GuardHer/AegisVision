@@ -144,12 +144,16 @@ async function loadData() {
 }
 
 async function quickHandle(alarmId: string, status: "confirmed" | "false_positive") {
-  await handleAlarm(alarmId, {
-    handle_status: status,
-    handle_note: "Dashboard quick action"
-  });
-  ElMessage.success("OK");
-  await loadData();
+  try {
+    await handleAlarm(alarmId, {
+      handle_status: status,
+      handle_note: "Dashboard quick action"
+    });
+    ElMessage.success("OK");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Action failed");
+  }
 }
 
 onMounted(() => {

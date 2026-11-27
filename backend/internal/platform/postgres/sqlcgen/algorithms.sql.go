@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -18,11 +19,11 @@ RETURNING id, algorithm_key, name, description, supported_labels, created_at, up
 `
 
 type CreateAlgorithmParams struct {
-	ID              uuid.UUID `json:"id"`
-	AlgorithmKey    string    `json:"algorithm_key"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	SupportedLabels []byte    `json:"supported_labels"`
+	ID              uuid.UUID       `json:"id"`
+	AlgorithmKey    string          `json:"algorithm_key"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	SupportedLabels json.RawMessage `json:"supported_labels"`
 }
 
 func (q *Queries) CreateAlgorithm(ctx context.Context, arg CreateAlgorithmParams) (Algorithm, error) {
@@ -53,13 +54,13 @@ RETURNING id, algorithm_id, version, runtime_key, launch_spec, default_params, s
 `
 
 type CreateAlgorithmVersionParams struct {
-	ID            uuid.UUID `json:"id"`
-	AlgorithmID   uuid.UUID `json:"algorithm_id"`
-	Version       string    `json:"version"`
-	RuntimeKey    string    `json:"runtime_key"`
-	LaunchSpec    []byte    `json:"launch_spec"`
-	DefaultParams []byte    `json:"default_params"`
-	Status        string    `json:"status"`
+	ID            uuid.UUID       `json:"id"`
+	AlgorithmID   uuid.UUID       `json:"algorithm_id"`
+	Version       string          `json:"version"`
+	RuntimeKey    string          `json:"runtime_key"`
+	LaunchSpec    json.RawMessage `json:"launch_spec"`
+	DefaultParams json.RawMessage `json:"default_params"`
+	Status        string          `json:"status"`
 }
 
 func (q *Queries) CreateAlgorithmVersion(ctx context.Context, arg CreateAlgorithmVersionParams) (AlgorithmVersion, error) {
@@ -268,10 +269,10 @@ RETURNING id, algorithm_key, name, description, supported_labels, created_at, up
 `
 
 type UpdateAlgorithmParams struct {
-	ID              uuid.UUID `json:"id"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	SupportedLabels []byte    `json:"supported_labels"`
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	SupportedLabels json.RawMessage `json:"supported_labels"`
 }
 
 func (q *Queries) UpdateAlgorithm(ctx context.Context, arg UpdateAlgorithmParams) (Algorithm, error) {
@@ -306,11 +307,11 @@ RETURNING id, algorithm_id, version, runtime_key, launch_spec, default_params, s
 `
 
 type UpdateAlgorithmVersionParams struct {
-	ID            uuid.UUID `json:"id"`
-	RuntimeKey    string    `json:"runtime_key"`
-	LaunchSpec    []byte    `json:"launch_spec"`
-	DefaultParams []byte    `json:"default_params"`
-	Status        string    `json:"status"`
+	ID            uuid.UUID       `json:"id"`
+	RuntimeKey    string          `json:"runtime_key"`
+	LaunchSpec    json.RawMessage `json:"launch_spec"`
+	DefaultParams json.RawMessage `json:"default_params"`
+	Status        string          `json:"status"`
 }
 
 func (q *Queries) UpdateAlgorithmVersion(ctx context.Context, arg UpdateAlgorithmVersionParams) (AlgorithmVersion, error) {

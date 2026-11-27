@@ -8,7 +8,7 @@ import {
   watch
 } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage, ElNotification } from "element-plus";
+import { ElMessage, ElMessageBox, ElNotification } from "element-plus";
 import {
   buildRealtimeWSURL,
   createMonitorPreset,
@@ -28,6 +28,7 @@ import {
 import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
 import { playDutyAlertChime } from "@/utils/alertSound";
+import { computeContainedVideoRect } from "@/utils/videoRect";
 import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
@@ -72,7 +73,8 @@ const presetDialogVisible = ref(false);
 const presetForm = reactive({
   name: "",
   is_shared: false,
-  tour_interval_seconds: 0
+  tour_interval_seconds: 0,
+  camera_ids: [] as string[]
 });
 
 const liveFrames = reactive<
@@ -101,6 +103,7 @@ const recentAlerts = ref<RealtimeAlert[]>([]);
 const wsConnected = ref(false);
 let ws: WebSocket | null = null;
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let unmounted = false;
 
 const cameraMap = computed(() => {
   const m = new Map<string, CameraItem>();
@@ -119,43 +122,44 @@ interface TreeItem {
 
 const combinedTree = computed<TreeItem[]>(() => {
   const q = treeSearch.value.trim().toLowerCase();
-  const camsByZone = new Map<string, CameraItem[]>();
+  const allCamsByZone = new Map<string, CameraItem[]>();
   const unassigned: CameraItem[] = [];
 
+  const camMatches = (cam: CameraItem) =>
+    !q ||
+    cam.name.toLowerCase().includes(q) ||
+    (cam.workstation_code || "").toLowerCase().includes(q) ||
+    (cam.location || "").toLowerCase().includes(q);
+
   for (const cam of cameras.value) {
-    if (
-      q &&
-      !cam.name.toLowerCase().includes(q) &&
-      !(cam.workstation_code || "").toLowerCase().includes(q) &&
-      !(cam.location || "").toLowerCase().includes(q)
-    ) {
-      continue;
-    }
     if (cam.zone_id) {
-      const list = camsByZone.get(cam.zone_id) ?? [];
+      const list = allCamsByZone.get(cam.zone_id) ?? [];
       list.push(cam);
-      camsByZone.set(cam.zone_id, list);
-    } else {
+      allCamsByZone.set(cam.zone_id, list);
+    } else if (camMatches(cam)) {
       unassigned.push(cam);
     }
   }
 
-  const mapZone = (node: ZoneTreeNode): TreeItem | null => {
+  const mapZone = (node: ZoneTreeNode, ancestorMatched: boolean): TreeItem | null => {
+    const selfMatch = Boolean(q && node.name.toLowerCase().includes(q));
+    const branchMatched = ancestorMatched || selfMatch;
     const childZones = (node.children ?? [])
-      .map(mapZone)
+      .map(ch => mapZone(ch, branchMatched))
       .filter((x): x is TreeItem => x !== null);
-    const zoneCams: TreeItem[] = (camsByZone.get(node.id) ?? []).map(cam => ({
-      id: `cam:${cam.id}`,
-      label: cam.workstation_code
-        ? `${cam.name} [${cam.workstation_code}]`
-        : cam.name,
-      isCamera: true,
-      camera: cam,
-      status: cam.status
-    }));
+    const zoneCams: TreeItem[] = (allCamsByZone.get(node.id) ?? [])
+      .filter(cam => branchMatched || camMatches(cam))
+      .map(cam => ({
+        id: `cam:${cam.id}`,
+        label: cam.workstation_code
+          ? `${cam.name} [${cam.workstation_code}]`
+          : cam.name,
+        isCamera: true,
+        camera: cam,
+        status: cam.status
+      }));
     const children = [...childZones, ...zoneCams];
-    const selfMatch = q && node.name.toLowerCase().includes(q);
-    if (q && !selfMatch && children.length === 0) return null;
+    if (q && !branchMatched && children.length === 0) return null;
     return {
       id: `zone:${node.id}`,
       label: `${node.name} (${node.online_camera_count}/${node.camera_count})`,
@@ -165,7 +169,7 @@ const combinedTree = computed<TreeItem[]>(() => {
   };
 
   const roots = zonesTree.value
-    .map(mapZone)
+    .map(z => mapZone(z, false))
     .filter((x): x is TreeItem => x !== null);
 
   if (unassigned.length > 0) {
@@ -207,6 +211,7 @@ const filteredAlerts = computed(() => {
 
 function setSlotRef(idx: number, el: unknown) {
   const prev = slotElements.get(idx);
+  if (el === prev) return;
   if (prev && slotResizeObserver) {
     slotResizeObserver.unobserve(prev);
   }
@@ -214,7 +219,10 @@ function setSlotRef(idx: number, el: unknown) {
     slotElements.set(idx, el);
     const rect = el.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      slotDims[idx] = { width: rect.width, height: rect.height };
+      const cur = slotDims[idx];
+      if (!cur || Math.abs(cur.width - rect.width) > 0.5 || Math.abs(cur.height - rect.height) > 0.5) {
+        slotDims[idx] = { width: rect.width, height: rect.height };
+      }
     }
     if (slotResizeObserver) {
       slotResizeObserver.observe(el);
@@ -305,6 +313,7 @@ function openSavePreset() {
   presetForm.name = "";
   presetForm.is_shared = false;
   presetForm.tour_interval_seconds = 0;
+  presetForm.camera_ids = Array.from(new Set(selectedSlots.value.filter(Boolean)));
   presetDialogVisible.value = true;
 }
 
@@ -313,24 +322,35 @@ async function submitPreset() {
     ElMessage.warning(t("aegis.monitor.presetName"));
     return;
   }
-  await createMonitorPreset({
-    name: presetForm.name.trim(),
-    is_shared: isAdmin.value ? presetForm.is_shared : false,
-    grid_size: gridSize.value,
-    camera_ids: visibleSlots.value.filter(Boolean),
-    tour_interval_seconds: presetForm.tour_interval_seconds
-  });
-  presetDialogVisible.value = false;
-  ElMessage.success("OK");
-  const res = await listMonitorPresets();
-  presets.value = res?.data ?? [];
+  try {
+    await createMonitorPreset({
+      name: presetForm.name.trim(),
+      is_shared: isAdmin.value ? presetForm.is_shared : false,
+      grid_size: gridSize.value,
+      camera_ids: presetForm.camera_ids,
+      tour_interval_seconds: presetForm.tour_interval_seconds
+    });
+    presetDialogVisible.value = false;
+    ElMessage.success("OK");
+    const res = await listMonitorPresets();
+    presets.value = res?.data ?? [];
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save preset");
+  }
 }
 
 async function removePreset(id: string) {
-  await deleteMonitorPreset(id);
-  if (activeTourPreset.value?.id === id) stopTour();
-  const res = await listMonitorPresets();
-  presets.value = res?.data ?? [];
+  try {
+    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await deleteMonitorPreset(id);
+    if (activeTourPreset.value?.id === id) stopTour();
+    const res = await listMonitorPresets();
+    presets.value = res?.data ?? [];
+    ElMessage.success("OK");
+  } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to delete preset");
+  }
 }
 
 function toggleFullscreen() {
@@ -360,8 +380,9 @@ function captureSlotSnapshot(idx: number, camId: string) {
   if (video && video.readyState >= 2) {
     ctx.drawImage(video, 0, 0, w, h);
   }
-  if (overlay && showOverlay.value) {
-    ctx.drawImage(overlay, 0, 0, w, h);
+  if (overlay && showOverlay.value && overlay.width > 0 && overlay.height > 0) {
+    const crop = computeContainedVideoRect(overlay.width, overlay.height, w, h);
+    ctx.drawImage(overlay, crop.x, crop.y, crop.width, crop.height, 0, 0, w, h);
   }
   const link = document.createElement("a");
   const camName = cameraMap.value.get(camId)?.name || camId;
@@ -374,12 +395,16 @@ async function quickHandleAlert(
   alert: RealtimeAlert,
   status: "confirmed" | "false_positive"
 ) {
-  await handleAlarm(alert.alarm_id, {
-    handle_status: status,
-    handle_note: "Duty monitor quick handle"
-  });
-  alert.handled = true;
-  ElMessage.success("OK");
+  try {
+    await handleAlarm(alert.alarm_id, {
+      handle_status: status,
+      handle_note: "Duty monitor quick handle"
+    });
+    alert.handled = true;
+    ElMessage.success("OK");
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Action failed");
+  }
 }
 
 function sendSubscribe() {
@@ -393,11 +418,23 @@ function sendSubscribe() {
   }
 }
 
-function connectWS() {
+function closeWS() {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+    wsReconnectTimer = null;
+  }
   if (ws) {
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onclose = null;
     ws.close();
     ws = null;
   }
+}
+
+function connectWS() {
+  if (unmounted) return;
+  closeWS();
   const socket = new WebSocket(buildRealtimeWSURL());
   ws = socket;
 
@@ -437,6 +474,7 @@ function connectWS() {
 
   socket.onclose = () => {
     wsConnected.value = false;
+    if (unmounted) return;
     wsReconnectTimer = setTimeout(connectWS, 3000);
   };
 }
@@ -451,16 +489,19 @@ watch(subscribedCameraIds, ids => {
 });
 
 onMounted(() => {
+  unmounted = false;
   if (typeof ResizeObserver !== "undefined") {
     slotResizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
         const el = entry.target as HTMLElement;
         for (const [idx, mapped] of slotElements.entries()) {
           if (mapped === el) {
-            slotDims[idx] = {
-              width: entry.contentRect.width,
-              height: entry.contentRect.height
-            };
+            const w = entry.contentRect.width;
+            const h = entry.contentRect.height;
+            const cur = slotDims[idx];
+            if (!cur || Math.abs(cur.width - w) > 0.5 || Math.abs(cur.height - h) > 0.5) {
+              slotDims[idx] = { width: w, height: h };
+            }
             break;
           }
         }
@@ -475,13 +516,13 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  unmounted = true;
   stopTour();
   if (slotResizeObserver) {
     slotResizeObserver.disconnect();
     slotResizeObserver = null;
   }
-  if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
-  if (ws) ws.close();
+  closeWS();
 });
 </script>
 
@@ -606,6 +647,7 @@ onBeforeUnmount(() => {
                 <div class="flex items-center justify-between text-zinc-400">
                   <span>{{ p.is_shared ? "Shared" : "Private" }}</span>
                   <el-button
+                    v-if="!p.is_shared || isAdmin"
                     link
                     type="danger"
                     size="small"
@@ -736,10 +778,27 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Save Tour Preset Dialog -->
-    <el-dialog v-model="presetDialogVisible" :title="t('aegis.monitor.savePreset')" width="420px">
+    <el-dialog v-model="presetDialogVisible" :title="t('aegis.monitor.savePreset')" width="480px">
       <el-form label-width="120px" size="small">
         <el-form-item :label="t('aegis.monitor.presetName')">
           <el-input v-model="presetForm.name" />
+        </el-form-item>
+        <el-form-item :label="t('aegis.monitor.selectCamera')">
+          <el-select
+            v-model="presetForm.camera_ids"
+            multiple
+            filterable
+            collapse-tags
+            collapse-tags-tooltip
+            class="w-full"
+          >
+            <el-option
+              v-for="c in cameras"
+              :key="c.id"
+              :label="c.workstation_code ? `${c.name} [${c.workstation_code}]` : c.name"
+              :value="c.id"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item :label="t('aegis.monitor.tourInterval')">
           <el-input-number v-model="presetForm.tour_interval_seconds" :min="0" :max="600" />

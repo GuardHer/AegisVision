@@ -154,41 +154,54 @@ async function openDetail(row: AlarmItem) {
   handleForm.false_positive_reason = row.false_positive_reason || "lighting";
   handleForm.handle_note = row.handle_note || "";
   drawerVisible.value = true;
-  const delRes = await listAlarmDeliveries(row.id);
-  deliveries.value = delRes?.data ?? [];
+  try {
+    const delRes = await listAlarmDeliveries(row.id);
+    deliveries.value = delRes?.data ?? [];
+  } catch (err: any) {
+    deliveries.value = [];
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load deliveries");
+  }
 }
 
 async function submitHandle() {
   if (!selectedAlarm.value) return;
-  const res = await handleAlarm(selectedAlarm.value.id, {
-    handle_status: handleForm.handle_status,
-    false_positive_reason:
-      handleForm.handle_status === "false_positive"
-        ? handleForm.false_positive_reason
-        : "",
-    handle_note: handleForm.handle_note
-  });
-  if (res?.code === 0) {
-    ElMessage.success("OK");
-    selectedAlarm.value = res.data;
-    await loadData();
+  try {
+    const res = await handleAlarm(selectedAlarm.value.id, {
+      handle_status: handleForm.handle_status,
+      false_positive_reason:
+        handleForm.handle_status === "false_positive"
+          ? handleForm.false_positive_reason
+          : "",
+      handle_note: handleForm.handle_note
+    });
+    if (res?.code === 0) {
+      ElMessage.success("OK");
+      selectedAlarm.value = res.data;
+      await loadData();
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to handle alarm");
   }
 }
 
 async function submitBatchHandle() {
   if (selectedAlarmIds.value.length === 0) return;
-  await batchHandleAlarms({
-    alarm_ids: selectedAlarmIds.value,
-    handle_status: batchForm.handle_status,
-    false_positive_reason:
-      batchForm.handle_status === "false_positive"
-        ? batchForm.false_positive_reason
-        : "",
-    handle_note: batchForm.handle_note
-  });
-  batchDialogVisible.value = false;
-  ElMessage.success("OK");
-  await loadData();
+  try {
+    await batchHandleAlarms({
+      alarm_ids: selectedAlarmIds.value,
+      handle_status: batchForm.handle_status,
+      false_positive_reason:
+        batchForm.handle_status === "false_positive"
+          ? batchForm.false_positive_reason
+          : "",
+      handle_note: batchForm.handle_note
+    });
+    batchDialogVisible.value = false;
+    ElMessage.success("OK");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Batch handle failed");
+  }
 }
 
 async function triggerExport(format: "csv" | "zip") {
@@ -211,7 +224,7 @@ async function triggerExport(format: "csv" | "zip") {
         ? `aegis-alarms-${Date.now()}.csv`
         : `aegis-evidence-${Date.now()}.zip`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   } catch (err: any) {
     ElMessage.error(err?.message || "Export failed");
   } finally {
@@ -220,13 +233,29 @@ async function triggerExport(format: "csv" | "zip") {
 }
 
 async function onRetryDelivery(deliveryId: string) {
-  await retryDelivery(deliveryId);
-  ElMessage.success("Retry enqueued");
-  if (selectedAlarm.value) {
-    const delRes = await listAlarmDeliveries(selectedAlarm.value.id);
-    deliveries.value = delRes?.data ?? [];
+  try {
+    await retryDelivery(deliveryId);
+    ElMessage.success("Retry enqueued");
+    if (selectedAlarm.value) {
+      const delRes = await listAlarmDeliveries(selectedAlarm.value.id);
+      deliveries.value = delRes?.data ?? [];
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.message || err?.message || "Retry failed");
   }
 }
+
+watch(
+  () => route.query.handle_status,
+  val => {
+    const next = typeof val === "string" ? val : "";
+    if (query.handle_status !== next) {
+      query.handle_status = next;
+      query.page = 1;
+      void loadData();
+    }
+  }
+);
 
 onMounted(async () => {
   if (typeof route.query.handle_status === "string") {

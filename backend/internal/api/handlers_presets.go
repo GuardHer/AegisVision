@@ -74,6 +74,11 @@ func (h *PresetsHandler) Create(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid monitor preset payload", err))
 		return
 	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		respondErr(c, domain.NewInvalidArgumentError("preset name is required", nil))
+		return
+	}
 	if !isValidGridSize(req.GridSize) {
 		respondErr(c, domain.NewInvalidArgumentError("grid_size must be 1, 4, 9, or 16", nil))
 		return
@@ -95,7 +100,7 @@ func (h *PresetsHandler) Create(c *gin.Context) {
 	created, err := h.store.Queries().CreateMonitorPreset(c.Request.Context(), sqlcgen.CreateMonitorPresetParams{
 		ID:                  uuid.Must(uuid.NewV7()),
 		OwnerUserID:         ownerID,
-		Name:                strings.TrimSpace(req.Name),
+		Name:                name,
 		IsShared:            req.IsShared,
 		GridSize:            req.GridSize,
 		CameraIds:           camsJSON,
@@ -135,6 +140,11 @@ func (h *PresetsHandler) Update(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid monitor preset payload", err))
 		return
 	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		respondErr(c, domain.NewInvalidArgumentError("preset name is required", nil))
+		return
+	}
 	if !isValidGridSize(req.GridSize) {
 		respondErr(c, domain.NewInvalidArgumentError("grid_size must be 1, 4, 9, or 16", nil))
 		return
@@ -156,7 +166,7 @@ func (h *PresetsHandler) Update(c *gin.Context) {
 
 	updated, err := h.store.Queries().UpdateMonitorPreset(c.Request.Context(), sqlcgen.UpdateMonitorPresetParams{
 		ID:                  id,
-		Name:                strings.TrimSpace(req.Name),
+		Name:                name,
 		IsShared:            req.IsShared,
 		GridSize:            req.GridSize,
 		CameraIds:           camsJSON,

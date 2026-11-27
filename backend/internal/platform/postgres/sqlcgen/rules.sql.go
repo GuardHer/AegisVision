@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -28,11 +29,11 @@ RETURNING id, name, channel_type, config, enabled, created_at, updated_at, routi
 `
 
 type CreateAlarmChannelParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	ChannelType string    `json:"channel_type"`
-	Config      []byte    `json:"config"`
-	Enabled     bool      `json:"enabled"`
+	ID          uuid.UUID       `json:"id"`
+	Name        string          `json:"name"`
+	ChannelType string          `json:"channel_type"`
+	Config      json.RawMessage `json:"config"`
+	Enabled     bool            `json:"enabled"`
 }
 
 func (q *Queries) CreateAlarmChannel(ctx context.Context, arg CreateAlarmChannelParams) (AlarmChannel, error) {
@@ -68,20 +69,20 @@ RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, 
 `
 
 type CreateROIAlgorithmRuleParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	CameraID           uuid.UUID   `json:"camera_id"`
-	RoiID              uuid.UUID   `json:"roi_id"`
-	AlgorithmVersionID uuid.UUID   `json:"algorithm_version_id"`
-	Name               string      `json:"name"`
-	RuleMode           string      `json:"rule_mode"`
-	Params             []byte      `json:"params"`
-	AlgoParamsOverride []byte      `json:"algo_params_override"`
-	ScheduleMode       string      `json:"schedule_mode"`
-	PinnedNodeID       pgtype.Text `json:"pinned_node_id"`
-	RecordVideo        bool        `json:"record_video"`
-	VideoPreSeconds    int32       `json:"video_pre_seconds"`
-	VideoPostSeconds   int32       `json:"video_post_seconds"`
-	Enabled            bool        `json:"enabled"`
+	ID                 uuid.UUID       `json:"id"`
+	CameraID           uuid.UUID       `json:"camera_id"`
+	RoiID              uuid.UUID       `json:"roi_id"`
+	AlgorithmVersionID uuid.UUID       `json:"algorithm_version_id"`
+	Name               string          `json:"name"`
+	RuleMode           string          `json:"rule_mode"`
+	Params             json.RawMessage `json:"params"`
+	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
+	ScheduleMode       string          `json:"schedule_mode"`
+	PinnedNodeID       pgtype.Text     `json:"pinned_node_id"`
+	RecordVideo        bool            `json:"record_video"`
+	VideoPreSeconds    int32           `json:"video_pre_seconds"`
+	VideoPostSeconds   int32           `json:"video_post_seconds"`
+	Enabled            bool            `json:"enabled"`
 }
 
 func (q *Queries) CreateROIAlgorithmRule(ctx context.Context, arg CreateROIAlgorithmRuleParams) (RoiAlgorithmRule, error) {
@@ -377,11 +378,11 @@ RETURNING id, name, channel_type, config, enabled, created_at, updated_at, routi
 `
 
 type UpdateAlarmChannelParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	ChannelType string    `json:"channel_type"`
-	Config      []byte    `json:"config"`
-	Enabled     bool      `json:"enabled"`
+	ID          uuid.UUID       `json:"id"`
+	Name        string          `json:"name"`
+	ChannelType string          `json:"channel_type"`
+	Config      json.RawMessage `json:"config"`
+	Enabled     bool            `json:"enabled"`
 }
 
 func (q *Queries) UpdateAlarmChannel(ctx context.Context, arg UpdateAlarmChannelParams) (AlarmChannel, error) {
@@ -424,17 +425,17 @@ RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, 
 `
 
 type UpdateROIAlgorithmRuleParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	Name               string      `json:"name"`
-	RuleMode           string      `json:"rule_mode"`
-	Params             []byte      `json:"params"`
-	AlgoParamsOverride []byte      `json:"algo_params_override"`
-	ScheduleMode       string      `json:"schedule_mode"`
-	PinnedNodeID       pgtype.Text `json:"pinned_node_id"`
-	RecordVideo        bool        `json:"record_video"`
-	VideoPreSeconds    int32       `json:"video_pre_seconds"`
-	VideoPostSeconds   int32       `json:"video_post_seconds"`
-	Enabled            bool        `json:"enabled"`
+	ID                 uuid.UUID       `json:"id"`
+	Name               string          `json:"name"`
+	RuleMode           string          `json:"rule_mode"`
+	Params             json.RawMessage `json:"params"`
+	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
+	ScheduleMode       string          `json:"schedule_mode"`
+	PinnedNodeID       pgtype.Text     `json:"pinned_node_id"`
+	RecordVideo        bool            `json:"record_video"`
+	VideoPreSeconds    int32           `json:"video_pre_seconds"`
+	VideoPostSeconds   int32           `json:"video_post_seconds"`
+	Enabled            bool            `json:"enabled"`
 }
 
 func (q *Queries) UpdateROIAlgorithmRule(ctx context.Context, arg UpdateROIAlgorithmRuleParams) (RoiAlgorithmRule, error) {

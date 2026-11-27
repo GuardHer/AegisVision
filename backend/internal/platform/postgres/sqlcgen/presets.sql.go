@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -18,13 +19,13 @@ RETURNING id, owner_user_id, name, is_shared, grid_size, camera_ids, tour_interv
 `
 
 type CreateMonitorPresetParams struct {
-	ID                  uuid.UUID     `json:"id"`
-	OwnerUserID         uuid.NullUUID `json:"owner_user_id"`
-	Name                string        `json:"name"`
-	IsShared            bool          `json:"is_shared"`
-	GridSize            int32         `json:"grid_size"`
-	CameraIds           []byte        `json:"camera_ids"`
-	TourIntervalSeconds int32         `json:"tour_interval_seconds"`
+	ID                  uuid.UUID       `json:"id"`
+	OwnerUserID         uuid.NullUUID   `json:"owner_user_id"`
+	Name                string          `json:"name"`
+	IsShared            bool            `json:"is_shared"`
+	GridSize            int32           `json:"grid_size"`
+	CameraIds           json.RawMessage `json:"camera_ids"`
+	TourIntervalSeconds int32           `json:"tour_interval_seconds"`
 }
 
 func (q *Queries) CreateMonitorPreset(ctx context.Context, arg CreateMonitorPresetParams) (MonitorPreset, error) {
@@ -131,12 +132,12 @@ RETURNING id, owner_user_id, name, is_shared, grid_size, camera_ids, tour_interv
 `
 
 type UpdateMonitorPresetParams struct {
-	ID                  uuid.UUID `json:"id"`
-	Name                string    `json:"name"`
-	IsShared            bool      `json:"is_shared"`
-	GridSize            int32     `json:"grid_size"`
-	CameraIds           []byte    `json:"camera_ids"`
-	TourIntervalSeconds int32     `json:"tour_interval_seconds"`
+	ID                  uuid.UUID       `json:"id"`
+	Name                string          `json:"name"`
+	IsShared            bool            `json:"is_shared"`
+	GridSize            int32           `json:"grid_size"`
+	CameraIds           json.RawMessage `json:"camera_ids"`
+	TourIntervalSeconds int32           `json:"tour_interval_seconds"`
 }
 
 func (q *Queries) UpdateMonitorPreset(ctx context.Context, arg UpdateMonitorPresetParams) (MonitorPreset, error) {

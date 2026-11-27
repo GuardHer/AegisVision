@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,24 +96,24 @@ RETURNING id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id,
 `
 
 type CreateAlarmParams struct {
-	ID                 uuid.UUID     `json:"id"`
-	EventDedupKey      pgtype.Text   `json:"event_dedup_key"`
-	CameraID           uuid.UUID     `json:"camera_id"`
-	ZoneID             uuid.NullUUID `json:"zone_id"`
-	RoiID              uuid.NullUUID `json:"roi_id"`
-	RuleID             uuid.NullUUID `json:"rule_id"`
-	AlgorithmVersionID uuid.NullUUID `json:"algorithm_version_id"`
-	RuleMode           string        `json:"rule_mode"`
-	Title              string        `json:"title"`
-	Severity           string        `json:"severity"`
-	TriggeredAt        time.Time     `json:"triggered_at"`
-	DetectedCount      int32         `json:"detected_count"`
-	DetectionsSnapshot []byte        `json:"detections_snapshot"`
-	RoiSnapshot        []byte        `json:"roi_snapshot"`
-	ImageObjectKey     string        `json:"image_object_key"`
-	VideoObjectKey     string        `json:"video_object_key"`
-	VideoStatus        string        `json:"video_status"`
-	SopTrace           []byte        `json:"sop_trace"`
+	ID                 uuid.UUID       `json:"id"`
+	EventDedupKey      pgtype.Text     `json:"event_dedup_key"`
+	CameraID           uuid.UUID       `json:"camera_id"`
+	ZoneID             uuid.NullUUID   `json:"zone_id"`
+	RoiID              uuid.NullUUID   `json:"roi_id"`
+	RuleID             uuid.NullUUID   `json:"rule_id"`
+	AlgorithmVersionID uuid.NullUUID   `json:"algorithm_version_id"`
+	RuleMode           string          `json:"rule_mode"`
+	Title              string          `json:"title"`
+	Severity           string          `json:"severity"`
+	TriggeredAt        time.Time       `json:"triggered_at"`
+	DetectedCount      int32           `json:"detected_count"`
+	DetectionsSnapshot json.RawMessage `json:"detections_snapshot"`
+	RoiSnapshot        json.RawMessage `json:"roi_snapshot"`
+	ImageObjectKey     string          `json:"image_object_key"`
+	VideoObjectKey     string          `json:"video_object_key"`
+	VideoStatus        string          `json:"video_status"`
+	SopTrace           json.RawMessage `json:"sop_trace"`
 }
 
 func (q *Queries) CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm, error) {
@@ -477,32 +478,32 @@ type ListAlarmsForExportParams struct {
 }
 
 type ListAlarmsForExportRow struct {
-	ID                  uuid.UUID     `json:"id"`
-	EventDedupKey       pgtype.Text   `json:"event_dedup_key"`
-	CameraID            uuid.UUID     `json:"camera_id"`
-	RoiID               uuid.NullUUID `json:"roi_id"`
-	RuleID              uuid.NullUUID `json:"rule_id"`
-	AlgorithmVersionID  uuid.NullUUID `json:"algorithm_version_id"`
-	RuleMode            string        `json:"rule_mode"`
-	Title               string        `json:"title"`
-	Severity            string        `json:"severity"`
-	TriggeredAt         time.Time     `json:"triggered_at"`
-	DetectedCount       int32         `json:"detected_count"`
-	DetectionsSnapshot  []byte        `json:"detections_snapshot"`
-	RoiSnapshot         []byte        `json:"roi_snapshot"`
-	ImageObjectKey      string        `json:"image_object_key"`
-	VideoObjectKey      string        `json:"video_object_key"`
-	VideoStatus         string        `json:"video_status"`
-	HandleStatus        string        `json:"handle_status"`
-	HandledBy           uuid.NullUUID `json:"handled_by"`
-	HandledAt           *time.Time    `json:"handled_at"`
-	HandleNote          string        `json:"handle_note"`
-	CreatedAt           time.Time     `json:"created_at"`
-	ZoneID              uuid.NullUUID `json:"zone_id"`
-	FalsePositiveReason string        `json:"false_positive_reason"`
-	SopTrace            []byte        `json:"sop_trace"`
-	CameraName          string        `json:"camera_name"`
-	ZoneName            string        `json:"zone_name"`
+	ID                  uuid.UUID       `json:"id"`
+	EventDedupKey       pgtype.Text     `json:"event_dedup_key"`
+	CameraID            uuid.UUID       `json:"camera_id"`
+	RoiID               uuid.NullUUID   `json:"roi_id"`
+	RuleID              uuid.NullUUID   `json:"rule_id"`
+	AlgorithmVersionID  uuid.NullUUID   `json:"algorithm_version_id"`
+	RuleMode            string          `json:"rule_mode"`
+	Title               string          `json:"title"`
+	Severity            string          `json:"severity"`
+	TriggeredAt         time.Time       `json:"triggered_at"`
+	DetectedCount       int32           `json:"detected_count"`
+	DetectionsSnapshot  json.RawMessage `json:"detections_snapshot"`
+	RoiSnapshot         json.RawMessage `json:"roi_snapshot"`
+	ImageObjectKey      string          `json:"image_object_key"`
+	VideoObjectKey      string          `json:"video_object_key"`
+	VideoStatus         string          `json:"video_status"`
+	HandleStatus        string          `json:"handle_status"`
+	HandledBy           uuid.NullUUID   `json:"handled_by"`
+	HandledAt           *time.Time      `json:"handled_at"`
+	HandleNote          string          `json:"handle_note"`
+	CreatedAt           time.Time       `json:"created_at"`
+	ZoneID              uuid.NullUUID   `json:"zone_id"`
+	FalsePositiveReason string          `json:"false_positive_reason"`
+	SopTrace            json.RawMessage `json:"sop_trace"`
+	CameraName          string          `json:"camera_name"`
+	ZoneName            string          `json:"zone_name"`
 }
 
 func (q *Queries) ListAlarmsForExport(ctx context.Context, arg ListAlarmsForExportParams) ([]ListAlarmsForExportRow, error) {

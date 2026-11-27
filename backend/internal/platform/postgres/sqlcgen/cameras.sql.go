@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -58,18 +59,18 @@ RETURNING id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint,
 `
 
 type CreateCameraParams struct {
-	ID              uuid.UUID     `json:"id"`
-	Name            string        `json:"name"`
-	Location        string        `json:"location"`
-	RtspUrl         string        `json:"rtsp_url"`
-	SubStreamUrl    string        `json:"sub_stream_url"`
-	StreamPath      string        `json:"stream_path"`
-	CodecHint       string        `json:"codec_hint"`
-	Status          string        `json:"status"`
-	Enabled         bool          `json:"enabled"`
-	ZoneID          uuid.NullUUID `json:"zone_id"`
-	WorkstationCode string        `json:"workstation_code"`
-	Tags            []byte        `json:"tags"`
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Location        string          `json:"location"`
+	RtspUrl         string          `json:"rtsp_url"`
+	SubStreamUrl    string          `json:"sub_stream_url"`
+	StreamPath      string          `json:"stream_path"`
+	CodecHint       string          `json:"codec_hint"`
+	Status          string          `json:"status"`
+	Enabled         bool            `json:"enabled"`
+	ZoneID          uuid.NullUUID   `json:"zone_id"`
+	WorkstationCode string          `json:"workstation_code"`
+	Tags            json.RawMessage `json:"tags"`
 }
 
 func (q *Queries) CreateCamera(ctx context.Context, arg CreateCameraParams) (Camera, error) {
@@ -115,13 +116,13 @@ RETURNING id, camera_id, name, roi_type, points, enabled, created_at, updated_at
 `
 
 type CreateCameraROIParams struct {
-	ID       uuid.UUID `json:"id"`
-	CameraID uuid.UUID `json:"camera_id"`
-	Name     string    `json:"name"`
-	RoiType  string    `json:"roi_type"`
-	Points   []byte    `json:"points"`
-	Enabled  bool      `json:"enabled"`
-	Color    string    `json:"color"`
+	ID       uuid.UUID       `json:"id"`
+	CameraID uuid.UUID       `json:"camera_id"`
+	Name     string          `json:"name"`
+	RoiType  string          `json:"roi_type"`
+	Points   json.RawMessage `json:"points"`
+	Enabled  bool            `json:"enabled"`
+	Color    string          `json:"color"`
 }
 
 func (q *Queries) CreateCameraROI(ctx context.Context, arg CreateCameraROIParams) (CameraRoi, error) {
@@ -375,16 +376,16 @@ RETURNING id, name, location, rtsp_url, sub_stream_url, stream_path, codec_hint,
 `
 
 type UpdateCameraParams struct {
-	ID              uuid.UUID     `json:"id"`
-	Name            string        `json:"name"`
-	Location        string        `json:"location"`
-	RtspUrl         string        `json:"rtsp_url"`
-	SubStreamUrl    string        `json:"sub_stream_url"`
-	CodecHint       string        `json:"codec_hint"`
-	Enabled         bool          `json:"enabled"`
-	ZoneID          uuid.NullUUID `json:"zone_id"`
-	WorkstationCode string        `json:"workstation_code"`
-	Tags            []byte        `json:"tags"`
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Location        string          `json:"location"`
+	RtspUrl         string          `json:"rtsp_url"`
+	SubStreamUrl    string          `json:"sub_stream_url"`
+	CodecHint       string          `json:"codec_hint"`
+	Enabled         bool            `json:"enabled"`
+	ZoneID          uuid.NullUUID   `json:"zone_id"`
+	WorkstationCode string          `json:"workstation_code"`
+	Tags            json.RawMessage `json:"tags"`
 }
 
 func (q *Queries) UpdateCamera(ctx context.Context, arg UpdateCameraParams) (Camera, error) {
@@ -434,12 +435,12 @@ RETURNING id, camera_id, name, roi_type, points, enabled, created_at, updated_at
 `
 
 type UpdateCameraROIParams struct {
-	ID      uuid.UUID `json:"id"`
-	Name    string    `json:"name"`
-	RoiType string    `json:"roi_type"`
-	Points  []byte    `json:"points"`
-	Enabled bool      `json:"enabled"`
-	Color   string    `json:"color"`
+	ID      uuid.UUID       `json:"id"`
+	Name    string          `json:"name"`
+	RoiType string          `json:"roi_type"`
+	Points  json.RawMessage `json:"points"`
+	Enabled bool            `json:"enabled"`
+	Color   string          `json:"color"`
 }
 
 func (q *Queries) UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams) (CameraRoi, error) {

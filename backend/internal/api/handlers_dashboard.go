@@ -2,11 +2,15 @@ package api
 
 import (
 	"math"
+	"strings"
 	"time"
+	// Embed IANA timezone database so time.LoadLocation works on Windows and minimal containers without CGO.
+	_ "time/tzdata"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"aegisvision/backend/internal/domain"
 	"aegisvision/backend/internal/platform/postgres"
 	"aegisvision/backend/internal/platform/postgres/sqlcgen"
 )
@@ -77,11 +81,14 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 	ctx := c.Request.Context()
 	q := h.store.Queries()
 
-	tzName := c.DefaultQuery("tz", "Asia/Shanghai")
+	tzName := strings.TrimSpace(c.Query("tz"))
+	if tzName == "" || strings.EqualFold(tzName, "Local") {
+		tzName = "Asia/Shanghai"
+	}
 	loc, err := time.LoadLocation(tzName)
 	if err != nil {
-		tzName = "UTC"
-		loc = time.UTC
+		respondErr(c, domain.NewInvalidArgumentError("invalid timezone parameter", err))
+		return
 	}
 
 	nowLocal := time.Now().In(loc)

@@ -77,6 +77,32 @@ func isValidHandleStatus(status string) bool {
 		status == domain.HandleStatusIgnored
 }
 
+func isValidFalsePositiveReason(reason string) bool {
+	switch reason {
+	case "",
+		domain.FalsePositiveLighting,
+		domain.FalsePositiveOcclusion,
+		domain.FalsePositiveSimilarAction,
+		domain.FalsePositiveModelDrift,
+		domain.FalsePositiveOther:
+		return true
+	default:
+		return false
+	}
+}
+
+func sanitizeCSVCell(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	default:
+		return s
+	}
+}
+
 func currentHandledBy(c *gin.Context) uuid.NullUUID {
 	if claims, ok := auth.CurrentClaims(c); ok {
 		if uid, err := uuid.Parse(claims.UserID); err == nil {
@@ -89,6 +115,9 @@ func currentHandledBy(c *gin.Context) uuid.NullUUID {
 // List returns paginated alarms with optional zone_id, camera_id, rule_mode, severity, handle_status, keyword, and time filters.
 func (h *AlarmsHandler) List(c *gin.Context) {
 	page := parsePositiveInt(c.Query("page"), 1)
+	if page > 100000 {
+		page = 100000
+	}
 	pageSize := parsePositiveInt(c.Query("page_size"), 20)
 	if pageSize > 200 {
 		pageSize = 200
@@ -218,6 +247,9 @@ func (h *AlarmsHandler) Handle(c *gin.Context) {
 	fpReason := strings.TrimSpace(req.FalsePositiveReason)
 	if req.HandleStatus != domain.HandleStatusFalsePositive {
 		fpReason = ""
+	} else if !isValidFalsePositiveReason(fpReason) {
+		respondErr(c, domain.NewInvalidArgumentError("invalid false_positive_reason", nil))
+		return
 	}
 
 	updated, err := h.store.Queries().HandleAlarm(c.Request.Context(), sqlcgen.HandleAlarmParams{
@@ -254,6 +286,9 @@ func (h *AlarmsHandler) BatchHandle(c *gin.Context) {
 	fpReason := strings.TrimSpace(req.FalsePositiveReason)
 	if req.HandleStatus != domain.HandleStatusFalsePositive {
 		fpReason = ""
+	} else if !isValidFalsePositiveReason(fpReason) {
+		respondErr(c, domain.NewInvalidArgumentError("invalid false_positive_reason", nil))
+		return
 	}
 
 	affected, err := h.store.Queries().BatchHandleAlarms(c.Request.Context(), sqlcgen.BatchHandleAlarmsParams{
@@ -362,21 +397,27 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 			"severity", "title", "detected_count", "handle_status", "false_positive_reason", "handle_note",
 		})
 		for _, r := range rows {
+			if ctx.Err() != nil {
+				break
+			}
 			_ = w.Write([]string{
 				r.ID.String(),
 				r.TriggeredAt.UTC().Format(time.RFC3339),
-				r.ZoneName,
-				r.CameraName,
-				r.RuleMode,
-				r.Severity,
-				r.Title,
+				sanitizeCSVCell(r.ZoneName),
+				sanitizeCSVCell(r.CameraName),
+				sanitizeCSVCell(r.RuleMode),
+				sanitizeCSVCell(r.Severity),
+				sanitizeCSVCell(r.Title),
 				strconv.Itoa(int(r.DetectedCount)),
-				r.HandleStatus,
-				r.FalsePositiveReason,
-				r.HandleNote,
+				sanitizeCSVCell(r.HandleStatus),
+				sanitizeCSVCell(r.FalsePositiveReason),
+				sanitizeCSVCell(r.HandleNote),
 			})
 		}
 		w.Flush()
+		if wErr := w.Error(); wErr != nil && h.log != nil {
+			h.log.Warn("alarm csv export stream error", "err", wErr)
+		}
 		return
 	}
 
@@ -386,7 +427,11 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 	c.Status(http.StatusOK)
 
 	zw := zip.NewWriter(c.Writer)
-	defer func() { _ = zw.Close() }()
+	defer func() {
+		if closeErr := zw.Close(); closeErr != nil && h.log != nil {
+			h.log.Warn("alarm zip export close failed", "err", closeErr)
+		}
+	}()
 
 	type exportMetaItem struct {
 		AlarmID             string          `json:"alarm_id"`
@@ -405,19 +450,33 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 
 	metaItems := make([]exportMetaItem, 0, len(rows))
 	for _, r := range rows {
+		if ctx.Err() != nil {
+			break
+		}
 		imgFile := ""
 		if r.ImageObjectKey != "" && h.storage != nil {
 			rc, _, getErr := h.storage.GetObject(ctx, r.ImageObjectKey, "")
-			if getErr == nil {
+			if getErr != nil {
+				if h.log != nil {
+					h.log.Warn("alarm zip export failed to fetch snapshot", "alarm_id", r.ID, "key", r.ImageObjectKey, "err", getErr)
+				}
+			} else {
 				imgName := fmt.Sprintf("images/%s.jpg", r.ID.String())
-				if fw, zErr := zw.Create(imgName); zErr == nil {
-					_, _ = io.Copy(fw, rc)
+				if fw, zErr := zw.Create(imgName); zErr != nil {
+					if h.log != nil {
+						h.log.Warn("alarm zip export failed to create zip entry", "alarm_id", r.ID, "err", zErr)
+					}
+				} else if _, copyErr := io.Copy(fw, rc); copyErr != nil {
+					if h.log != nil {
+						h.log.Warn("alarm zip export failed to copy snapshot", "alarm_id", r.ID, "err", copyErr)
+					}
+				} else {
 					imgFile = imgName
 				}
 				_ = rc.Close()
 			}
 		}
-		dets := json.RawMessage(r.DetectionsSnapshot)
+		dets := r.DetectionsSnapshot
 		if len(dets) == 0 {
 			dets = json.RawMessage(`[]`)
 		}
@@ -437,10 +496,14 @@ func (h *AlarmsHandler) Export(c *gin.Context) {
 		})
 	}
 
-	if mw, err := zw.Create("metadata.json"); err == nil {
-		enc := json.NewEncoder(mw)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(metaItems)
+	if ctx.Err() == nil {
+		if mw, err := zw.Create("metadata.json"); err == nil {
+			enc := json.NewEncoder(mw)
+			enc.SetIndent("", "  ")
+			if encErr := enc.Encode(metaItems); encErr != nil && h.log != nil {
+				h.log.Warn("alarm zip export failed to write metadata.json", "err", encErr)
+			}
+		}
 	}
 }
 

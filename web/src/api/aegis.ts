@@ -373,21 +373,12 @@ export const batchHandleAlarms = (data: {
   handle_note: string;
 }) => http.request<ApiEnvelope<{ updated_count: number }>>("post", "/api/v1/alarms/batch-handle", { data });
 
-export async function exportAlarmsBlob(payload: Record<string, any>): Promise<Blob> {
-  const token = getToken()?.accessToken ?? "";
-  const resp = await fetch("/api/v1/alarms/export", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: JSON.stringify(payload)
+export const exportAlarmsBlob = (payload: Record<string, any>): Promise<Blob> =>
+  http.request<Blob>("post", "/api/v1/alarms/export", {
+    data: payload,
+    responseType: "blob",
+    timeout: 120000
   });
-  if (!resp.ok) {
-    throw new Error(`Export failed with HTTP ${resp.status}`);
-  }
-  return await resp.blob();
-}
 export const listAlarmDeliveries = (alarmId: string) =>
   http.request<ApiEnvelope<AlarmDeliveryItem[]>>(
     "get",

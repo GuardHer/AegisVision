@@ -128,13 +128,20 @@ func TestAlarmBatchHandleAndStreamingCSVZIPExport(t *testing.T) {
 	}); w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid handle_status, got %d", w.Code)
 	}
+	if w := doAPIReq(t, router, http.MethodPost, "/api/v1/alarms/batch-handle", opTok, map[string]any{
+		"alarm_ids":             []string{a1ID.String()},
+		"handle_status":         domain.HandleStatusFalsePositive,
+		"false_positive_reason": "invalid_reason",
+	}); w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid false_positive_reason, got %d", w.Code)
+	}
 
-	// Valid batch handle with false_positive_reason
+	// Valid batch handle with false_positive_reason (and formula-prefix note to verify CSV neutralization)
 	wBatch := doAPIReq(t, router, http.MethodPost, "/api/v1/alarms/batch-handle", opTok, map[string]any{
 		"alarm_ids":             []string{a1ID.String(), a2ID.String()},
 		"handle_status":         domain.HandleStatusFalsePositive,
 		"false_positive_reason": domain.FalsePositiveLighting,
-		"handle_note":           "sun glare",
+		"handle_note":           "=CMD|sun glare",
 	})
 	if wBatch.Code != http.StatusOK {
 		t.Fatalf("batch-handle failed: status=%d body=%s", wBatch.Code, wBatch.Body.String())
@@ -165,6 +172,9 @@ func TestAlarmBatchHandleAndStreamingCSVZIPExport(t *testing.T) {
 	csvText := wCSV.Body.String()
 	if !strings.Contains(csvText, a1ID.String()) || !strings.Contains(csvText, a2ID.String()) {
 		t.Fatalf("csv export missing alarms: %s", csvText)
+	}
+	if !strings.Contains(csvText, "'=CMD|sun glare") {
+		t.Fatalf("expected formula-prefixed CSV note to be neutralized, got: %s", csvText)
 	}
 
 	// Review Focus #4: Streaming ZIP export succeeds cleanly with 1 snapshot + 1 snapshot-less alarm

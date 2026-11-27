@@ -3,10 +3,10 @@ SELECT
     COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start'))::bigint AS today_alarms,
     COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('yesterday_start') AND triggered_at < sqlc.arg('today_start'))::bigint AS yesterday_alarms,
     COUNT(*) FILTER (WHERE handle_status = 'unhandled')::bigint AS unhandled_alarms,
-    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND handle_status = 'confirmed')::bigint AS today_confirmed,
-    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND handle_status = 'false_positive')::bigint AS today_false_positive,
-    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND handle_status IN ('confirmed', 'false_positive', 'ignored'))::bigint AS today_handled,
-    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND rule_mode = 'sop_sequence')::bigint AS today_sop_violations
+    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND handle_status = 'confirmed')::bigint AS today_confirmed,
+    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND handle_status = 'false_positive')::bigint AS today_false_positive,
+    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND handle_status IN ('confirmed', 'false_positive', 'ignored'))::bigint AS today_handled,
+    COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND rule_mode = 'sop_sequence')::bigint AS today_sop_violations
 FROM alarms;
 
 -- name: GetDashboardSOPCycleCounts :one

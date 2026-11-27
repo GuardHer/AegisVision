@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -288,9 +289,9 @@ WHERE node_id = $1
 `
 
 type UpdateAgentNodeHeartbeatParams struct {
-	NodeID       string `json:"node_id"`
-	RunningTasks int32  `json:"running_tasks"`
-	Meta         []byte `json:"meta"`
+	NodeID       string          `json:"node_id"`
+	RunningTasks int32           `json:"running_tasks"`
+	Meta         json.RawMessage `json:"meta"`
 }
 
 func (q *Queries) UpdateAgentNodeHeartbeat(ctx context.Context, arg UpdateAgentNodeHeartbeatParams) error {
@@ -440,14 +441,14 @@ RETURNING node_id, hostname, ip_addr, runtime_keys, max_tasks, running_tasks, st
 `
 
 type UpsertAgentNodeParams struct {
-	NodeID       string `json:"node_id"`
-	Hostname     string `json:"hostname"`
-	IpAddr       string `json:"ip_addr"`
-	RuntimeKeys  []byte `json:"runtime_keys"`
-	MaxTasks     int32  `json:"max_tasks"`
-	RunningTasks int32  `json:"running_tasks"`
-	Status       string `json:"status"`
-	Meta         []byte `json:"meta"`
+	NodeID       string          `json:"node_id"`
+	Hostname     string          `json:"hostname"`
+	IpAddr       string          `json:"ip_addr"`
+	RuntimeKeys  json.RawMessage `json:"runtime_keys"`
+	MaxTasks     int32           `json:"max_tasks"`
+	RunningTasks int32           `json:"running_tasks"`
+	Status       string          `json:"status"`
+	Meta         json.RawMessage `json:"meta"`
 }
 
 func (q *Queries) UpsertAgentNode(ctx context.Context, arg UpsertAgentNodeParams) (AgentNode, error) {

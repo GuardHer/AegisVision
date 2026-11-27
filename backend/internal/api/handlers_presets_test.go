@@ -73,10 +73,16 @@ func TestMonitorPresetsRBACAndValidation(t *testing.T) {
 	}
 	var privEnv struct {
 		Data struct {
-			ID uuid.UUID `json:"id"`
+			ID        uuid.UUID `json:"id"`
+			CameraIDs []string  `json:"camera_ids"`
 		} `json:"data"`
 	}
-	_ = json.Unmarshal(wPriv.Body.Bytes(), &privEnv)
+	if err := json.Unmarshal(wPriv.Body.Bytes(), &privEnv); err != nil {
+		t.Fatalf("preset camera_ids must serialize as JSON array, body=%s err=%v", wPriv.Body.String(), err)
+	}
+	if len(privEnv.Data.CameraIDs) != 2 || privEnv.Data.CameraIDs[0] != "cam-1" {
+		t.Fatalf("expected camera_ids [cam-1 cam-2], got %v", privEnv.Data.CameraIDs)
+	}
 
 	// 4. Another user (viewer) cannot delete operator's private preset -> 403
 	if w := doAPIReq(t, router, http.MethodDelete, "/api/v1/monitor/presets/"+privEnv.Data.ID.String(), viewerTok, nil); w.Code != http.StatusForbidden {

@@ -20,7 +20,11 @@ import (
 	platformredis "aegisvision/backend/internal/platform/redis"
 )
 
-const streamPlayTokenTTL = 60 * time.Second
+const (
+	streamPlayTokenTTL = 60 * time.Second
+	maxCSVImportBytes  = 2 * 1024 * 1024
+	maxCSVImportRows   = 500
+)
 
 // PointInput represents a normalized [0.0, 1.0] vertex of a camera ROI polygon.
 type PointInput struct {
@@ -359,11 +363,19 @@ func (h *CamerasHandler) ImportCSV(c *gin.Context) {
 			respondErr(c, domain.NewInvalidArgumentError("invalid import payload", err))
 			return
 		}
+		if len(req.CSV) > maxCSVImportBytes {
+			respondErr(c, domain.NewInvalidArgumentError("csv payload exceeds 2MB limit", nil))
+			return
+		}
 		rawCSV = req.CSV
 	} else {
-		bodyBytes, err := io.ReadAll(io.LimitReader(c.Request.Body, 2*1024*1024))
+		bodyBytes, err := io.ReadAll(io.LimitReader(c.Request.Body, maxCSVImportBytes+1))
 		if err != nil {
 			respondErr(c, domain.NewInvalidArgumentError("failed to read csv body", err))
+			return
+		}
+		if len(bodyBytes) > maxCSVImportBytes {
+			respondErr(c, domain.NewInvalidArgumentError("csv payload exceeds 2MB limit", nil))
 			return
 		}
 		rawCSV = string(bodyBytes)
@@ -385,6 +397,10 @@ func (h *CamerasHandler) ImportCSV(c *gin.Context) {
 	startIdx := 0
 	if len(rows[0]) >= 2 && strings.EqualFold(strings.TrimSpace(rows[0][0]), "name") {
 		startIdx = 1
+	}
+	if len(rows)-startIdx > maxCSVImportRows {
+		respondErr(c, domain.NewInvalidArgumentError(fmt.Sprintf("csv exceeds maximum of %d rows", maxCSVImportRows), nil))
+		return
 	}
 
 	ctx := c.Request.Context()
@@ -434,10 +450,13 @@ func (h *CamerasHandler) ImportCSV(c *gin.Context) {
 			Enabled:         true,
 			ZoneID:          zoneID,
 			WorkstationCode: wsCode,
-			Tags:            []byte(`[]`),
+			Tags:            json.RawMessage(`[]`),
 		})
 		if createErr != nil {
-			rowErrors = append(rowErrors, fmt.Sprintf("row %d: %v", i+1, createErr))
+			if h.log != nil {
+				h.log.Warn("camera csv import row failed", "row", i+1, "err", createErr)
+			}
+			rowErrors = append(rowErrors, fmt.Sprintf("row %d: failed to create camera (verify zone_id and stream configuration)", i+1))
 			continue
 		}
 		created = append(created, cam)

@@ -2,11 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"aegisvision/backend/internal/domain"
 	"aegisvision/backend/internal/platform/postgres"
@@ -140,6 +142,11 @@ func (h *ZonesHandler) Create(c *gin.Context) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid zone payload", err))
 		return
 	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		respondErr(c, domain.NewInvalidArgumentError("zone name is required", nil))
+		return
+	}
 	if !isValidZoneType(req.ZoneType) {
 		respondErr(c, domain.NewInvalidArgumentError("zone_type must be factory, workshop, line, or workstation", nil))
 		return
@@ -157,7 +164,7 @@ func (h *ZonesHandler) Create(c *gin.Context) {
 	created, err := h.store.Queries().CreateZone(c.Request.Context(), sqlcgen.CreateZoneParams{
 		ID:          uuid.Must(uuid.NewV7()),
 		ParentID:    parentID,
-		Name:        strings.TrimSpace(req.Name),
+		Name:        name,
 		Code:        strings.TrimSpace(req.Code),
 		ZoneType:    req.ZoneType,
 		SortOrder:   req.SortOrder,
@@ -181,6 +188,11 @@ func (h *ZonesHandler) Update(c *gin.Context) {
 	var req zoneMutationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid zone update payload", err))
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		respondErr(c, domain.NewInvalidArgumentError("zone name is required", nil))
 		return
 	}
 	if !isValidZoneType(req.ZoneType) {
@@ -215,7 +227,7 @@ func (h *ZonesHandler) Update(c *gin.Context) {
 	updated, err := h.store.Queries().UpdateZone(c.Request.Context(), sqlcgen.UpdateZoneParams{
 		ID:          id,
 		ParentID:    parentID,
-		Name:        strings.TrimSpace(req.Name),
+		Name:        name,
 		Code:        strings.TrimSpace(req.Code),
 		ZoneType:    req.ZoneType,
 		SortOrder:   req.SortOrder,
@@ -229,7 +241,7 @@ func (h *ZonesHandler) Update(c *gin.Context) {
 	respondOK(c, updated)
 }
 
-// Delete removes an empty spatial zone; returns 409 Conflict if child zones or cameras remain attached.
+// Delete removes an empty spatial zone transactionally; returns 409 Conflict if child zones or cameras remain attached.
 func (h *ZonesHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -237,34 +249,39 @@ func (h *ZonesHandler) Delete(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	childCount, err := h.store.Queries().CountChildZones(ctx, uuid.NullUUID{UUID: id, Valid: true})
-	if err != nil {
-		respondErr(c, err)
-		return
-	}
-	if childCount > 0 {
-		respondErr(c, domain.NewConflictError("cannot delete zone with existing child zones", nil))
-		return
-	}
-	camCount, err := h.store.Queries().CountCamerasInZone(ctx, uuid.NullUUID{UUID: id, Valid: true})
-	if err != nil {
-		respondErr(c, err)
-		return
-	}
-	if camCount > 0 {
-		respondErr(c, domain.NewConflictError("cannot delete zone with bound cameras", nil))
-		return
-	}
-
-	if err := h.store.Queries().DeleteZone(ctx, id); err != nil {
-		respondErr(c, err)
+	txErr := h.store.WithTx(ctx, func(q *sqlcgen.Queries) error {
+		childCount, qErr := q.CountChildZones(ctx, uuid.NullUUID{UUID: id, Valid: true})
+		if qErr != nil {
+			return qErr
+		}
+		if childCount > 0 {
+			return domain.NewConflictError("cannot delete zone with existing child zones", nil)
+		}
+		camCount, qErr := q.CountCamerasInZone(ctx, uuid.NullUUID{UUID: id, Valid: true})
+		if qErr != nil {
+			return qErr
+		}
+		if camCount > 0 {
+			return domain.NewConflictError("cannot delete zone with bound cameras", nil)
+		}
+		if delErr := q.DeleteZone(ctx, id); delErr != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(delErr, &pgErr) && pgErr.Code == "23503" {
+				return domain.NewConflictError("cannot delete zone while dependent resources exist", delErr)
+			}
+			return delErr
+		}
+		return nil
+	})
+	if txErr != nil {
+		respondErr(c, txErr)
 		return
 	}
 	emitConfigEvent(ctx, h.pub, h.log, "zone", "deleted", id.String())
 	respondOK(c, gin.H{"deleted": true})
 }
 
-// collectZoneDescendants returns rootID plus all recursive child zone IDs.
+// collectZoneDescendants returns rootID plus all recursive child zone IDs (with cycle protection).
 func collectZoneDescendants(ctx context.Context, q *sqlcgen.Queries, rootID uuid.UUID) ([]uuid.UUID, error) {
 	zones, err := q.ListZones(ctx)
 	if err != nil {
@@ -276,10 +293,17 @@ func collectZoneDescendants(ctx context.Context, q *sqlcgen.Queries, rootID uuid
 			childrenMap[z.ParentID.UUID] = append(childrenMap[z.ParentID.UUID], z.ID)
 		}
 	}
+	visited := map[uuid.UUID]struct{}{rootID: {}}
 	out := []uuid.UUID{rootID}
 	for i := 0; i < len(out); i++ {
 		cur := out[i]
-		out = append(out, childrenMap[cur]...)
+		for _, ch := range childrenMap[cur] {
+			if _, seen := visited[ch]; seen {
+				continue
+			}
+			visited[ch] = struct{}{}
+			out = append(out, ch)
+		}
 	}
 	return out, nil
 }
