@@ -18,13 +18,14 @@ import (
 )
 
 type memStateStore struct {
-	mu       sync.Mutex
-	cameras  []scheduler.CameraInfo
-	versions []scheduler.VersionInfo
-	rois     []scheduler.ROIInfo
-	rules    []scheduler.RuleInfo
-	nodes    map[string]scheduler.NodeInfo
-	tasks    map[uuid.UUID]scheduler.ExistingTaskInfo
+	mu                 sync.Mutex
+	cameras            []scheduler.CameraInfo
+	versions           []scheduler.VersionInfo
+	rois               []scheduler.ROIInfo
+	rules              []scheduler.RuleInfo
+	nodes              map[string]scheduler.NodeInfo
+	tasks              map[uuid.UUID]scheduler.ExistingTaskInfo
+	cameraStatusWrites int
 }
 
 func (m *memStateStore) LoadSnapshot(_ context.Context) (scheduler.Snapshot, error) {
@@ -54,6 +55,19 @@ func (m *memStateStore) MarkNodeOffline(_ context.Context, nodeID string) error 
 	if n, ok := m.nodes[nodeID]; ok {
 		n.Status = domain.NodeStatusOffline
 		m.nodes[nodeID] = n
+	}
+	return nil
+}
+
+func (m *memStateStore) UpdateCameraStatus(_ context.Context, cameraID uuid.UUID, status string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cameraStatusWrites++
+	for i := range m.cameras {
+		if m.cameras[i].ID == cameraID {
+			m.cameras[i].Status = status
+			break
+		}
 	}
 	return nil
 }
@@ -96,9 +110,10 @@ func (s *spyCommandBus) PublishAgentCommand(_ context.Context, ingestInstanceID 
 }
 
 type spyMediaMTX struct {
-	mu      sync.Mutex
-	upserts []mediamtx.PathSpec
-	deletes []string
+	mu       sync.Mutex
+	upserts  []mediamtx.PathSpec
+	deletes  []string
+	statuses map[string]bool
 }
 
 func (s *spyMediaMTX) UpsertPath(_ context.Context, spec mediamtx.PathSpec) error {
@@ -113,6 +128,16 @@ func (s *spyMediaMTX) DeletePath(_ context.Context, streamPath string) error {
 	defer s.mu.Unlock()
 	s.deletes = append(s.deletes, streamPath)
 	return nil
+}
+
+func (s *spyMediaMTX) ListPathStatuses(_ context.Context) (map[string]bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]bool, len(s.statuses))
+	for k, v := range s.statuses {
+		out[k] = v
+	}
+	return out, nil
 }
 
 func (s *spyMediaMTX) BuildAuthorizedRTSPURL(streamPath, token string) string {
@@ -394,6 +419,74 @@ func TestReconcilerSubStreamSyncUpdateTaskAndPendingRetry(t *testing.T) {
 	}
 	if len(bus.cmds) != 2 || bus.cmds[1].Envelope.CommandType != scheduler.CmdUpdateTask {
 		t.Fatalf("expected CmdUpdateTask after ROI change on same node, got %+v", bus.cmds)
+	}
+}
+
+func TestReconcilerSyncsCameraOnlineOfflineStatusFromMediaMTX(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rdb, err := platformredis.New(context.Background(), mr.Addr(), "", 0)
+	if err != nil {
+		t.Fatalf("redis.New(): %v", err)
+	}
+	defer func() { _ = rdb.Close() }()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	camOnlineID := uuid.Must(uuid.NewV7())
+	camOfflineID := uuid.Must(uuid.NewV7())
+	camDisabledID := uuid.Must(uuid.NewV7())
+
+	state := &memStateStore{
+		cameras: []scheduler.CameraInfo{
+			{ID: camOnlineID, StreamPath: "cam_ready", SourceURL: "rtsp://cam/1", Status: "offline", Enabled: true},
+			{ID: camOfflineID, StreamPath: "cam_down", SourceURL: "rtsp://cam/2", Status: "online", Enabled: true},
+			{ID: camDisabledID, StreamPath: "cam_disabled", SourceURL: "rtsp://cam/3", Status: "online", Enabled: false},
+		},
+		nodes: map[string]scheduler.NodeInfo{},
+		tasks: map[uuid.UUID]scheduler.ExistingTaskInfo{},
+	}
+	mtx := &spyMediaMTX{
+		statuses: map[string]bool{
+			"cam_ready":    true,
+			"cam_down":     false,
+			"cam_disabled": true, // disabled camera must still be forced offline
+		},
+	}
+
+	rec := scheduler.NewReconciler(scheduler.ReconcilerDeps{
+		InstanceID:  "sched-cam-status",
+		State:       state,
+		Redis:       rdb,
+		Bus:         &spyCommandBus{},
+		MediaMTX:    mtx,
+		Logger:      slog.Default(),
+		LeaseTTL:    30 * time.Second,
+		NodeTimeout: 15 * time.Second,
+		NowFunc:     func() time.Time { return now },
+	})
+
+	if err := rec.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce pass 1 failed: %v", err)
+	}
+	if state.cameras[0].Status != "online" {
+		t.Errorf("cam_ready status = %q, want online", state.cameras[0].Status)
+	}
+	if state.cameras[1].Status != "offline" {
+		t.Errorf("cam_down status = %q, want offline", state.cameras[1].Status)
+	}
+	if state.cameras[2].Status != "offline" {
+		t.Errorf("cam_disabled status = %q, want offline", state.cameras[2].Status)
+	}
+	if state.cameraStatusWrites != 3 {
+		t.Errorf("cameraStatusWrites = %d, want 3", state.cameraStatusWrites)
+	}
+
+	// Pass 2 immediately after: unchanged statuses must NOT cause redundant DB writes
+	if err := rec.ReconcileOnce(ctx); err != nil {
+		t.Fatalf("ReconcileOnce pass 2 failed: %v", err)
+	}
+	if state.cameraStatusWrites != 3 {
+		t.Errorf("expected zero redundant camera status writes, got %d", state.cameraStatusWrites)
 	}
 }
 

@@ -31,6 +31,7 @@ type Snapshot struct {
 type StateStore interface {
 	LoadSnapshot(ctx context.Context) (Snapshot, error)
 	MarkNodeOffline(ctx context.Context, nodeID string) error
+	UpdateCameraStatus(ctx context.Context, cameraID uuid.UUID, status string) error
 	SaveTaskAssignment(ctx context.Context, task ExistingTaskInfo) error
 	StopTask(ctx context.Context, taskID uuid.UUID) error
 }
@@ -40,10 +41,11 @@ type CommandBus interface {
 	PublishAgentCommand(ctx context.Context, ingestInstanceID string, body []byte) error
 }
 
-// MediaMTXSyncer synchronizes camera paths and builds authorized RTSP URLs.
+// MediaMTXSyncer synchronizes camera paths, queries live readiness, and builds authorized RTSP URLs.
 type MediaMTXSyncer interface {
 	UpsertPath(ctx context.Context, spec mediamtx.PathSpec) error
 	DeletePath(ctx context.Context, streamPath string) error
+	ListPathStatuses(ctx context.Context) (map[string]bool, error)
 	BuildAuthorizedRTSPURL(streamPath, token string) string
 }
 
@@ -92,6 +94,9 @@ type Reconciler struct {
 
 	specMu       sync.Mutex
 	lastSpecHash map[uuid.UUID]string
+
+	camStatusMu        sync.Mutex
+	lastOnlineTouchAt  map[uuid.UUID]time.Time
 }
 
 // NewReconciler creates a Reconciler with sensible defaults for omitted timings.
@@ -132,6 +137,7 @@ func NewReconciler(deps ReconcilerDeps) *Reconciler {
 		now:               deps.NowFunc,
 		triggerCh:         make(chan struct{}, 1),
 		lastSpecHash:      make(map[uuid.UUID]string),
+		lastOnlineTouchAt: make(map[uuid.UUID]time.Time),
 	}
 }
 
@@ -209,6 +215,48 @@ func (r *Reconciler) Run(ctx context.Context) error {
 					r.log.Warn("lease renewal tick failed", "err", err)
 				}
 			}
+		}
+	}
+}
+
+func (r *Reconciler) syncCameraStatuses(ctx context.Context, cameras []CameraInfo, now time.Time) {
+	pathStatuses, err := r.mediamtx.ListPathStatuses(ctx)
+	if err != nil {
+		r.log.Warn("mediamtx list path statuses failed", "err", err)
+		return
+	}
+
+	const onlineTouchInterval = 60 * time.Second
+	for _, cam := range cameras {
+		desired := "offline"
+		if cam.Enabled && pathStatuses[cam.StreamPath] {
+			desired = "online"
+		}
+
+		needsWrite := cam.Status != desired
+		if !needsWrite && desired == "online" {
+			r.camStatusMu.Lock()
+			lastTouch := r.lastOnlineTouchAt[cam.ID]
+			r.camStatusMu.Unlock()
+			if !lastTouch.IsZero() && now.Sub(lastTouch) >= onlineTouchInterval {
+				needsWrite = true
+			}
+		}
+		if !needsWrite {
+			continue
+		}
+
+		if err := r.state.UpdateCameraStatus(ctx, cam.ID, desired); err != nil {
+			r.log.Warn("update camera status failed", "camera_id", cam.ID, "status", desired, "err", err)
+			continue
+		}
+		if desired == "online" {
+			r.camStatusMu.Lock()
+			r.lastOnlineTouchAt[cam.ID] = now
+			r.camStatusMu.Unlock()
+		}
+		if cam.Status != desired {
+			r.log.Info("camera status changed", "camera_id", cam.ID, "stream_path", cam.StreamPath, "from", cam.Status, "to", desired)
 		}
 	}
 }
@@ -326,6 +374,9 @@ func (r *Reconciler) ReconcileOnce(ctx context.Context) error {
 				}
 			}
 		}
+
+		// 3b. Sync live camera online/offline readiness from MediaMTX into PostgreSQL
+		r.syncCameraStatuses(ctx, snap.Cameras, now)
 	}
 
 	// Index existing running tasks

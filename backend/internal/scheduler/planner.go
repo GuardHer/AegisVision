@@ -16,6 +16,7 @@ type CameraInfo struct {
 	StreamPath   string
 	SourceURL    string
 	SubStreamURL string
+	Status       string
 	Enabled      bool
 }
 

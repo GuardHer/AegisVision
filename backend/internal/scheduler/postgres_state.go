@@ -66,6 +66,7 @@ func (p *PostgresStateStore) LoadSnapshot(ctx context.Context) (Snapshot, error)
 			StreamPath:   c.StreamPath,
 			SourceURL:    c.RtspUrl,
 			SubStreamURL: c.SubStreamUrl,
+			Status:       c.Status,
 			Enabled:      c.Enabled,
 		})
 		rois, roiErr := q.ListCameraROIsByCamera(ctx, c.ID)
@@ -153,6 +154,14 @@ func (p *PostgresStateStore) MarkNodeOffline(ctx context.Context, nodeID string)
 		Status: domain.NodeStatusOffline,
 	})
 	return err
+}
+
+// UpdateCameraStatus persists a camera's online/offline status (and updates last_online_at when online).
+func (p *PostgresStateStore) UpdateCameraStatus(ctx context.Context, cameraID uuid.UUID, status string) error {
+	return p.store.Queries().UpdateCameraStatus(ctx, sqlcgen.UpdateCameraStatusParams{
+		ID:     cameraID,
+		Status: status,
+	})
 }
 
 // SaveTaskAssignment creates or updates an inference_tasks assignment row.
