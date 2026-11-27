@@ -32,8 +32,8 @@ RETURNING *;
 
 -- name: UpdateCameraStatus :exec
 UPDATE cameras
-SET status = $2,
-    last_online_at = CASE WHEN $2 = 'online' THEN NOW() ELSE last_online_at END,
+SET status = sqlc.arg('status')::varchar,
+    last_online_at = CASE WHEN sqlc.arg('status')::varchar = 'online' THEN NOW() ELSE last_online_at END,
     updated_at = NOW()
 WHERE id = $1;
 

@@ -96,6 +96,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
 	usersH := NewUsersHandler(deps.Store)
+	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
 	algosH := NewAlgorithmsHandler(deps.Store, deps.Publisher, deps.Logger)
 	camsH := NewCamerasHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Publisher, deps.Logger)
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
@@ -142,9 +143,17 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/algorithms/:id/versions", adminOnly, algosH.CreateVersion)
 	authed.PUT("/algorithm-versions/:version_id", adminOnly, algosH.UpdateVersion)
 
+	// Spatial zones tree
+	authed.GET("/zones/tree", allRoles, zonesH.GetTree)
+	authed.POST("/zones", adminOnly, zonesH.Create)
+	authed.PUT("/zones/:id", adminOnly, zonesH.Update)
+	authed.DELETE("/zones/:id", adminOnly, zonesH.Delete)
+
 	// Cameras, stream token, ROIs, rules
 	authed.GET("/cameras", allRoles, camsH.ListCameras)
 	authed.POST("/cameras", adminOnly, camsH.CreateCamera)
+	authed.POST("/cameras/batch", adminOnly, camsH.BatchUpdate)
+	authed.POST("/cameras/import", adminOnly, camsH.ImportCSV)
 	authed.GET("/cameras/:id", allRoles, camsH.GetCamera)
 	authed.PUT("/cameras/:id", adminOnly, camsH.UpdateCamera)
 	authed.DELETE("/cameras/:id", adminOnly, camsH.DeleteCamera)

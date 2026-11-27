@@ -468,8 +468,8 @@ func (q *Queries) UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams
 
 const updateCameraStatus = `-- name: UpdateCameraStatus :exec
 UPDATE cameras
-SET status = $2,
-    last_online_at = CASE WHEN $2 = 'online' THEN NOW() ELSE last_online_at END,
+SET status = $2::varchar,
+    last_online_at = CASE WHEN $2::varchar = 'online' THEN NOW() ELSE last_online_at END,
     updated_at = NOW()
 WHERE id = $1
 `
