@@ -100,6 +100,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	schedulesH := NewSchedulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	presetsH := NewPresetsHandler(deps.Store)
 	dashboardH := NewDashboardHandler(deps.Store)
+	analyticsH := NewAnalyticsHandler(deps.Store, deps.Logger)
 	algosH := NewAlgorithmsHandler(deps.Store, deps.Publisher, deps.Logger)
 	camsH := NewCamerasHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Publisher, deps.Logger)
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
@@ -146,8 +147,10 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/algorithms/:id/versions", adminOnly, algosH.CreateVersion)
 	authed.PUT("/algorithm-versions/:version_id", adminOnly, algosH.UpdateVersion)
 
-	// Operations dashboard & monitor tour presets
+	// Operations dashboard, analytics & monitor tour presets
 	authed.GET("/dashboard/overview", allRoles, dashboardH.Overview)
+	authed.GET("/analytics/summary", allRoles, analyticsH.Summary)
+	authed.GET("/analytics/export", allRoles, analyticsH.Export)
 	authed.GET("/monitor/presets", allRoles, presetsH.List)
 	authed.POST("/monitor/presets", allRoles, presetsH.Create)
 	authed.PUT("/monitor/presets/:id", allRoles, presetsH.Update)
