@@ -28,6 +28,65 @@ export interface AlgorithmVersionItem {
   created_at: string;
 }
 
+export interface ZoneTreeNode {
+  id: string;
+  parent_id?: string | null;
+  name: string;
+  code: string;
+  zone_type: "factory" | "workshop" | "line" | "workstation";
+  sort_order: number;
+  description: string;
+  camera_count: number;
+  online_camera_count: number;
+  children: ZoneTreeNode[];
+}
+
+export interface MonitorPresetItem {
+  id: string;
+  owner_user_id?: string | null;
+  name: string;
+  is_shared: boolean;
+  grid_size: 1 | 4 | 9 | 16;
+  camera_ids: string[];
+  tour_interval_seconds: number;
+  created_at: string;
+}
+
+export interface DashboardKPIs {
+  today_alarms: number;
+  yesterday_alarms: number;
+  unhandled_alarms: number;
+  confirmed_rate: number;
+  false_positive_rate: number;
+  today_sop_violations: number;
+  sop_compliance_rate: number;
+  cameras_online: number;
+  cameras_total: number;
+  nodes_online: number;
+  nodes_total: number;
+  running_tasks: number;
+}
+
+export interface DashboardOverview {
+  kpis: DashboardKPIs;
+  trend_7d: Array<{ date: string; safety_count: number; sop_count: number }>;
+  top_zones: Array<{ zone_id?: string | null; zone_name: string; alarm_count: number }>;
+  by_rule_mode: Array<{ rule_mode: string; count: number }>;
+  recent_alerts: Array<{
+    id: string;
+    camera_id: string;
+    camera_name: string;
+    zone_id?: string | null;
+    zone_name: string;
+    rule_mode: string;
+    title: string;
+    severity: "info" | "warning" | "critical";
+    handle_status: string;
+    image_object_key: string;
+    triggered_at: string;
+  }>;
+}
+
 export interface CameraItem {
   id: string;
   name: string;
@@ -38,6 +97,10 @@ export interface CameraItem {
   codec_hint: string;
   status: string;
   enabled: boolean;
+  zone_id?: string | null;
+  workstation_code?: string;
+  tags?: string[];
+  last_online_at?: string | null;
   created_at: string;
 }
 
@@ -110,6 +173,7 @@ export interface DetectionBox {
 export interface AlarmItem {
   id: string;
   camera_id: string;
+  zone_id?: string | null;
   roi_id?: string | null;
   rule_id?: string | null;
   algorithm_version_id?: string | null;
@@ -123,7 +187,8 @@ export interface AlarmItem {
   image_object_key: string;
   video_object_key: string;
   video_status: "none" | "recording" | "ready" | "failed";
-  handle_status: "unhandled" | "confirmed" | "false_positive";
+  handle_status: "unhandled" | "confirmed" | "false_positive" | "ignored";
+  false_positive_reason?: string;
   handled_by?: string | null;
   handled_at?: string | null;
   handle_note: string;
@@ -193,9 +258,46 @@ export const updateAlgorithmVersion = (
     { data }
   );
 
+// Dashboard, Spatial Zones & Monitor Tour Presets
+export const getDashboardOverview = (tz = "Asia/Shanghai") =>
+  http.request<ApiEnvelope<DashboardOverview>>("get", "/api/v1/dashboard/overview", {
+    params: { tz }
+  });
+
+export const getZonesTree = () =>
+  http.request<ApiEnvelope<ZoneTreeNode[]>>("get", "/api/v1/zones/tree");
+export const createZone = (data: Record<string, any>) =>
+  http.request<ApiEnvelope<ZoneTreeNode>>("post", "/api/v1/zones", { data });
+export const updateZone = (id: string, data: Record<string, any>) =>
+  http.request<ApiEnvelope<ZoneTreeNode>>("put", `/api/v1/zones/${id}`, { data });
+export const deleteZone = (id: string) =>
+  http.request<ApiEnvelope<any>>("delete", `/api/v1/zones/${id}`);
+
+export const listMonitorPresets = () =>
+  http.request<ApiEnvelope<MonitorPresetItem[]>>("get", "/api/v1/monitor/presets");
+export const createMonitorPreset = (data: Record<string, any>) =>
+  http.request<ApiEnvelope<MonitorPresetItem>>("post", "/api/v1/monitor/presets", { data });
+export const updateMonitorPreset = (id: string, data: Record<string, any>) =>
+  http.request<ApiEnvelope<MonitorPresetItem>>("put", `/api/v1/monitor/presets/${id}`, { data });
+export const deleteMonitorPreset = (id: string) =>
+  http.request<ApiEnvelope<any>>("delete", `/api/v1/monitor/presets/${id}`);
+
 // Cameras, Stream Token, ROIs & Rules
-export const listCameras = () =>
-  http.request<ApiEnvelope<CameraItem[]>>("get", "/api/v1/cameras");
+export const listCameras = (zoneId?: string) =>
+  http.request<ApiEnvelope<CameraItem[]>>("get", "/api/v1/cameras", {
+    params: zoneId ? { zone_id: zoneId } : undefined
+  });
+export const batchUpdateCameras = (data: {
+  camera_ids: string[];
+  action: "enable" | "disable" | "move_zone";
+  zone_id?: string;
+}) => http.request<ApiEnvelope<{ updated_count: number }>>("post", "/api/v1/cameras/batch", { data });
+export const importCamerasCSV = (csv: string) =>
+  http.request<ApiEnvelope<{ created_count: number; cameras: CameraItem[]; errors: string[] }>>(
+    "post",
+    "/api/v1/cameras/import",
+    { data: { csv } }
+  );
 export const getCamera = (id: string) =>
   http.request<ApiEnvelope<CameraItem>>("get", `/api/v1/cameras/${id}`);
 export const createCamera = (data: Record<string, any>) =>
@@ -261,8 +363,22 @@ export const getAlarm = (alarmId: string) =>
   http.request<ApiEnvelope<AlarmItem>>("get", `/api/v1/alarms/${alarmId}`);
 export const handleAlarm = (
   alarmId: string,
-  data: { handle_status: string; handle_note: string }
+  data: { handle_status: string; false_positive_reason?: string; handle_note: string }
 ) => http.request<ApiEnvelope<AlarmItem>>("post", `/api/v1/alarms/${alarmId}/handle`, { data });
+
+export const batchHandleAlarms = (data: {
+  alarm_ids: string[];
+  handle_status: string;
+  false_positive_reason?: string;
+  handle_note: string;
+}) => http.request<ApiEnvelope<{ updated_count: number }>>("post", "/api/v1/alarms/batch-handle", { data });
+
+export const exportAlarmsBlob = (payload: Record<string, any>): Promise<Blob> =>
+  http.request<Blob>("post", "/api/v1/alarms/export", {
+    data: payload,
+    responseType: "blob",
+    timeout: 120000
+  });
 export const listAlarmDeliveries = (alarmId: string) =>
   http.request<ApiEnvelope<AlarmDeliveryItem[]>>(
     "get",

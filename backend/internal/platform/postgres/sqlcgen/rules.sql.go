@@ -7,6 +7,7 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,15 +25,15 @@ func (q *Queries) ClearRuleAlarmChannels(ctx context.Context, ruleID uuid.UUID) 
 const createAlarmChannel = `-- name: CreateAlarmChannel :one
 INSERT INTO alarm_channels (id, name, channel_type, config, enabled)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, channel_type, config, enabled, created_at, updated_at
+RETURNING id, name, channel_type, config, enabled, created_at, updated_at, routing_rules
 `
 
 type CreateAlarmChannelParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	ChannelType string    `json:"channel_type"`
-	Config      []byte    `json:"config"`
-	Enabled     bool      `json:"enabled"`
+	ID          uuid.UUID       `json:"id"`
+	Name        string          `json:"name"`
+	ChannelType string          `json:"channel_type"`
+	Config      json.RawMessage `json:"config"`
+	Enabled     bool            `json:"enabled"`
 }
 
 func (q *Queries) CreateAlarmChannel(ctx context.Context, arg CreateAlarmChannelParams) (AlarmChannel, error) {
@@ -52,6 +53,7 @@ func (q *Queries) CreateAlarmChannel(ctx context.Context, arg CreateAlarmChannel
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RoutingRules,
 	)
 	return i, err
 }
@@ -63,24 +65,24 @@ INSERT INTO roi_algorithm_rules (
     record_video, video_pre_seconds, video_post_seconds, enabled
 )
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at
+RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id
 `
 
 type CreateROIAlgorithmRuleParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	CameraID           uuid.UUID   `json:"camera_id"`
-	RoiID              uuid.UUID   `json:"roi_id"`
-	AlgorithmVersionID uuid.UUID   `json:"algorithm_version_id"`
-	Name               string      `json:"name"`
-	RuleMode           string      `json:"rule_mode"`
-	Params             []byte      `json:"params"`
-	AlgoParamsOverride []byte      `json:"algo_params_override"`
-	ScheduleMode       string      `json:"schedule_mode"`
-	PinnedNodeID       pgtype.Text `json:"pinned_node_id"`
-	RecordVideo        bool        `json:"record_video"`
-	VideoPreSeconds    int32       `json:"video_pre_seconds"`
-	VideoPostSeconds   int32       `json:"video_post_seconds"`
-	Enabled            bool        `json:"enabled"`
+	ID                 uuid.UUID       `json:"id"`
+	CameraID           uuid.UUID       `json:"camera_id"`
+	RoiID              uuid.UUID       `json:"roi_id"`
+	AlgorithmVersionID uuid.UUID       `json:"algorithm_version_id"`
+	Name               string          `json:"name"`
+	RuleMode           string          `json:"rule_mode"`
+	Params             json.RawMessage `json:"params"`
+	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
+	ScheduleMode       string          `json:"schedule_mode"`
+	PinnedNodeID       pgtype.Text     `json:"pinned_node_id"`
+	RecordVideo        bool            `json:"record_video"`
+	VideoPreSeconds    int32           `json:"video_pre_seconds"`
+	VideoPostSeconds   int32           `json:"video_post_seconds"`
+	Enabled            bool            `json:"enabled"`
 }
 
 func (q *Queries) CreateROIAlgorithmRule(ctx context.Context, arg CreateROIAlgorithmRuleParams) (RoiAlgorithmRule, error) {
@@ -118,6 +120,7 @@ func (q *Queries) CreateROIAlgorithmRule(ctx context.Context, arg CreateROIAlgor
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ScheduleID,
 	)
 	return i, err
 }
@@ -141,7 +144,7 @@ func (q *Queries) DeleteROIAlgorithmRule(ctx context.Context, id uuid.UUID) erro
 }
 
 const getAlarmChannelByID = `-- name: GetAlarmChannelByID :one
-SELECT id, name, channel_type, config, enabled, created_at, updated_at FROM alarm_channels WHERE id = $1
+SELECT id, name, channel_type, config, enabled, created_at, updated_at, routing_rules FROM alarm_channels WHERE id = $1
 `
 
 func (q *Queries) GetAlarmChannelByID(ctx context.Context, id uuid.UUID) (AlarmChannel, error) {
@@ -155,12 +158,13 @@ func (q *Queries) GetAlarmChannelByID(ctx context.Context, id uuid.UUID) (AlarmC
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RoutingRules,
 	)
 	return i, err
 }
 
 const getROIAlgorithmRuleByID = `-- name: GetROIAlgorithmRuleByID :one
-SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at FROM roi_algorithm_rules WHERE id = $1
+SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id FROM roi_algorithm_rules WHERE id = $1
 `
 
 func (q *Queries) GetROIAlgorithmRuleByID(ctx context.Context, id uuid.UUID) (RoiAlgorithmRule, error) {
@@ -183,6 +187,7 @@ func (q *Queries) GetROIAlgorithmRuleByID(ctx context.Context, id uuid.UUID) (Ro
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ScheduleID,
 	)
 	return i, err
 }
@@ -204,7 +209,7 @@ func (q *Queries) LinkRuleAlarmChannel(ctx context.Context, arg LinkRuleAlarmCha
 }
 
 const listAlarmChannels = `-- name: ListAlarmChannels :many
-SELECT id, name, channel_type, config, enabled, created_at, updated_at FROM alarm_channels ORDER BY created_at DESC
+SELECT id, name, channel_type, config, enabled, created_at, updated_at, routing_rules FROM alarm_channels ORDER BY created_at DESC
 `
 
 func (q *Queries) ListAlarmChannels(ctx context.Context) ([]AlarmChannel, error) {
@@ -224,6 +229,7 @@ func (q *Queries) ListAlarmChannels(ctx context.Context) ([]AlarmChannel, error)
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RoutingRules,
 		); err != nil {
 			return nil, err
 		}
@@ -236,7 +242,7 @@ func (q *Queries) ListAlarmChannels(ctx context.Context) ([]AlarmChannel, error)
 }
 
 const listChannelsByRule = `-- name: ListChannelsByRule :many
-SELECT c.id, c.name, c.channel_type, c.config, c.enabled, c.created_at, c.updated_at
+SELECT c.id, c.name, c.channel_type, c.config, c.enabled, c.created_at, c.updated_at, c.routing_rules
 FROM alarm_channels c
 INNER JOIN rule_alarm_channels rac ON rac.channel_id = c.id
 WHERE rac.rule_id = $1 AND c.enabled = TRUE
@@ -260,6 +266,7 @@ func (q *Queries) ListChannelsByRule(ctx context.Context, ruleID uuid.UUID) ([]A
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RoutingRules,
 		); err != nil {
 			return nil, err
 		}
@@ -272,7 +279,7 @@ func (q *Queries) ListChannelsByRule(ctx context.Context, ruleID uuid.UUID) ([]A
 }
 
 const listEnabledRules = `-- name: ListEnabledRules :many
-SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at FROM roi_algorithm_rules
+SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id FROM roi_algorithm_rules
 WHERE enabled = TRUE
 ORDER BY camera_id, created_at ASC
 `
@@ -303,6 +310,7 @@ func (q *Queries) ListEnabledRules(ctx context.Context) ([]RoiAlgorithmRule, err
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ScheduleID,
 		); err != nil {
 			return nil, err
 		}
@@ -315,7 +323,7 @@ func (q *Queries) ListEnabledRules(ctx context.Context) ([]RoiAlgorithmRule, err
 }
 
 const listRulesByCamera = `-- name: ListRulesByCamera :many
-SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at FROM roi_algorithm_rules
+SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id FROM roi_algorithm_rules
 WHERE camera_id = $1
 ORDER BY created_at ASC
 `
@@ -346,6 +354,7 @@ func (q *Queries) ListRulesByCamera(ctx context.Context, cameraID uuid.UUID) ([]
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ScheduleID,
 		); err != nil {
 			return nil, err
 		}
@@ -365,15 +374,15 @@ SET name = $2,
     enabled = $5,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, name, channel_type, config, enabled, created_at, updated_at
+RETURNING id, name, channel_type, config, enabled, created_at, updated_at, routing_rules
 `
 
 type UpdateAlarmChannelParams struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	ChannelType string    `json:"channel_type"`
-	Config      []byte    `json:"config"`
-	Enabled     bool      `json:"enabled"`
+	ID          uuid.UUID       `json:"id"`
+	Name        string          `json:"name"`
+	ChannelType string          `json:"channel_type"`
+	Config      json.RawMessage `json:"config"`
+	Enabled     bool            `json:"enabled"`
 }
 
 func (q *Queries) UpdateAlarmChannel(ctx context.Context, arg UpdateAlarmChannelParams) (AlarmChannel, error) {
@@ -393,6 +402,7 @@ func (q *Queries) UpdateAlarmChannel(ctx context.Context, arg UpdateAlarmChannel
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RoutingRules,
 	)
 	return i, err
 }
@@ -411,21 +421,21 @@ SET name = $2,
     enabled = $11,
     updated_at = NOW()
 WHERE id = $1
-RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at
+RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id
 `
 
 type UpdateROIAlgorithmRuleParams struct {
-	ID                 uuid.UUID   `json:"id"`
-	Name               string      `json:"name"`
-	RuleMode           string      `json:"rule_mode"`
-	Params             []byte      `json:"params"`
-	AlgoParamsOverride []byte      `json:"algo_params_override"`
-	ScheduleMode       string      `json:"schedule_mode"`
-	PinnedNodeID       pgtype.Text `json:"pinned_node_id"`
-	RecordVideo        bool        `json:"record_video"`
-	VideoPreSeconds    int32       `json:"video_pre_seconds"`
-	VideoPostSeconds   int32       `json:"video_post_seconds"`
-	Enabled            bool        `json:"enabled"`
+	ID                 uuid.UUID       `json:"id"`
+	Name               string          `json:"name"`
+	RuleMode           string          `json:"rule_mode"`
+	Params             json.RawMessage `json:"params"`
+	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
+	ScheduleMode       string          `json:"schedule_mode"`
+	PinnedNodeID       pgtype.Text     `json:"pinned_node_id"`
+	RecordVideo        bool            `json:"record_video"`
+	VideoPreSeconds    int32           `json:"video_pre_seconds"`
+	VideoPostSeconds   int32           `json:"video_post_seconds"`
+	Enabled            bool            `json:"enabled"`
 }
 
 func (q *Queries) UpdateROIAlgorithmRule(ctx context.Context, arg UpdateROIAlgorithmRuleParams) (RoiAlgorithmRule, error) {
@@ -460,6 +470,7 @@ func (q *Queries) UpdateROIAlgorithmRule(ctx context.Context, arg UpdateROIAlgor
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ScheduleID,
 	)
 	return i, err
 }

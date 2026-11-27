@@ -12,6 +12,7 @@ const (
 	RuleModeAnomalyDetect  = "anomaly_detect"
 	RuleModeCountThreshold = "count_threshold"
 	RuleModeAbsenceDetect  = "absence_detect"
+	RuleModeSOPSequence    = "sop_sequence"
 )
 
 // ROI geometry hit modes.
@@ -39,6 +40,30 @@ const (
 	HandleStatusUnhandled     = "unhandled"
 	HandleStatusConfirmed     = "confirmed"
 	HandleStatusFalsePositive = "false_positive"
+	HandleStatusIgnored       = "ignored"
+)
+
+// False positive reason codes.
+const (
+	FalsePositiveLighting      = "lighting"
+	FalsePositiveOcclusion     = "occlusion"
+	FalsePositiveSimilarAction = "similar_action"
+	FalsePositiveModelDrift    = "model_drift"
+	FalsePositiveOther         = "other"
+)
+
+// Spatial hierarchy zone types.
+const (
+	ZoneTypeFactory     = "factory"
+	ZoneTypeWorkshop    = "workshop"
+	ZoneTypeLine        = "line"
+	ZoneTypeWorkstation = "workstation"
+)
+
+// SOP cycle outcomes.
+const (
+	SOPOutcomeCompliant = "compliant"
+	SOPOutcomeViolated  = "violated"
 )
 
 // Alarm video evidence statuses.

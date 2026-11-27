@@ -96,11 +96,14 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
 	usersH := NewUsersHandler(deps.Store)
+	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
+	presetsH := NewPresetsHandler(deps.Store)
+	dashboardH := NewDashboardHandler(deps.Store)
 	algosH := NewAlgorithmsHandler(deps.Store, deps.Publisher, deps.Logger)
 	camsH := NewCamerasHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Publisher, deps.Logger)
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	nodesH := NewNodesTasksHandler(deps.Store, deps.Publisher, deps.Logger)
-	alarmsH := NewAlarmsHandler(deps.Store, deps.Publisher, deps.Logger)
+	alarmsH := NewAlarmsHandler(deps.Store, deps.Storage, deps.Publisher, deps.Logger)
 	channelsH := NewChannelsHandler(deps.Store, nil)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
 
@@ -142,9 +145,24 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/algorithms/:id/versions", adminOnly, algosH.CreateVersion)
 	authed.PUT("/algorithm-versions/:version_id", adminOnly, algosH.UpdateVersion)
 
+	// Operations dashboard & monitor tour presets
+	authed.GET("/dashboard/overview", allRoles, dashboardH.Overview)
+	authed.GET("/monitor/presets", allRoles, presetsH.List)
+	authed.POST("/monitor/presets", allRoles, presetsH.Create)
+	authed.PUT("/monitor/presets/:id", allRoles, presetsH.Update)
+	authed.DELETE("/monitor/presets/:id", allRoles, presetsH.Delete)
+
+	// Spatial zones tree
+	authed.GET("/zones/tree", allRoles, zonesH.GetTree)
+	authed.POST("/zones", adminOnly, zonesH.Create)
+	authed.PUT("/zones/:id", adminOnly, zonesH.Update)
+	authed.DELETE("/zones/:id", adminOnly, zonesH.Delete)
+
 	// Cameras, stream token, ROIs, rules
 	authed.GET("/cameras", allRoles, camsH.ListCameras)
 	authed.POST("/cameras", adminOnly, camsH.CreateCamera)
+	authed.POST("/cameras/batch", adminOnly, camsH.BatchUpdate)
+	authed.POST("/cameras/import", adminOnly, camsH.ImportCSV)
 	authed.GET("/cameras/:id", allRoles, camsH.GetCamera)
 	authed.PUT("/cameras/:id", adminOnly, camsH.UpdateCamera)
 	authed.DELETE("/cameras/:id", adminOnly, camsH.DeleteCamera)
@@ -169,6 +187,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 
 	// Alarms & deliveries
 	authed.GET("/alarms", allRoles, alarmsH.List)
+	authed.POST("/alarms/batch-handle", opRoles, alarmsH.BatchHandle)
+	authed.POST("/alarms/export", allRoles, alarmsH.Export)
 	authed.GET("/alarms/:id", allRoles, alarmsH.Get)
 	authed.POST("/alarms/:id/handle", opRoles, alarmsH.Handle)
 	authed.GET("/alarms/:id/deliveries", allRoles, alarmsH.ListDeliveries)

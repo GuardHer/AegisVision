@@ -7,25 +7,64 @@ package sqlcgen
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const batchHandleAlarms = `-- name: BatchHandleAlarms :execrows
+UPDATE alarms
+SET handle_status = $1,
+    handled_by = $2,
+    handled_at = NOW(),
+    handle_note = $3,
+    false_positive_reason = $4
+WHERE id = ANY($5::uuid[])
+`
+
+type BatchHandleAlarmsParams struct {
+	HandleStatus        string        `json:"handle_status"`
+	HandledBy           uuid.NullUUID `json:"handled_by"`
+	HandleNote          string        `json:"handle_note"`
+	FalsePositiveReason string        `json:"false_positive_reason"`
+	Ids                 []uuid.UUID   `json:"ids"`
+}
+
+func (q *Queries) BatchHandleAlarms(ctx context.Context, arg BatchHandleAlarmsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, batchHandleAlarms,
+		arg.HandleStatus,
+		arg.HandledBy,
+		arg.HandleNote,
+		arg.FalsePositiveReason,
+		arg.Ids,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countAlarms = `-- name: CountAlarms :one
 SELECT COUNT(*) FROM alarms
 WHERE ($1::uuid IS NULL OR camera_id = $1)
-  AND ($2::varchar IS NULL OR rule_mode = $2)
-  AND ($3::varchar IS NULL OR handle_status = $3)
-  AND ($4::timestamptz IS NULL OR triggered_at >= $4)
-  AND ($5::timestamptz IS NULL OR triggered_at <= $5)
+  AND ($2::uuid[] IS NULL OR zone_id = ANY($2::uuid[]))
+  AND ($3::varchar IS NULL OR rule_mode = $3)
+  AND ($4::varchar IS NULL OR severity = $4)
+  AND ($5::varchar IS NULL OR handle_status = $5)
+  AND ($6::text IS NULL OR title ILIKE '%' || $6::text || '%')
+  AND ($7::timestamptz IS NULL OR triggered_at >= $7)
+  AND ($8::timestamptz IS NULL OR triggered_at <= $8)
 `
 
 type CountAlarmsParams struct {
 	CameraID     uuid.NullUUID `json:"camera_id"`
+	ZoneIds      []uuid.UUID   `json:"zone_ids"`
 	RuleMode     pgtype.Text   `json:"rule_mode"`
+	Severity     pgtype.Text   `json:"severity"`
 	HandleStatus pgtype.Text   `json:"handle_status"`
+	Keyword      pgtype.Text   `json:"keyword"`
 	StartTime    *time.Time    `json:"start_time"`
 	EndTime      *time.Time    `json:"end_time"`
 }
@@ -33,8 +72,11 @@ type CountAlarmsParams struct {
 func (q *Queries) CountAlarms(ctx context.Context, arg CountAlarmsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countAlarms,
 		arg.CameraID,
+		arg.ZoneIds,
 		arg.RuleMode,
+		arg.Severity,
 		arg.HandleStatus,
+		arg.Keyword,
 		arg.StartTime,
 		arg.EndTime,
 	)
@@ -45,31 +87,33 @@ func (q *Queries) CountAlarms(ctx context.Context, arg CountAlarmsParams) (int64
 
 const createAlarm = `-- name: CreateAlarm :one
 INSERT INTO alarms (
-    id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id,
+    id, event_dedup_key, camera_id, zone_id, roi_id, rule_id, algorithm_version_id,
     rule_mode, title, severity, triggered_at, detected_count,
-    detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status
+    detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, sop_trace
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-RETURNING id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+RETURNING id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at, zone_id, false_positive_reason, sop_trace
 `
 
 type CreateAlarmParams struct {
-	ID                 uuid.UUID     `json:"id"`
-	EventDedupKey      pgtype.Text   `json:"event_dedup_key"`
-	CameraID           uuid.UUID     `json:"camera_id"`
-	RoiID              uuid.NullUUID `json:"roi_id"`
-	RuleID             uuid.NullUUID `json:"rule_id"`
-	AlgorithmVersionID uuid.NullUUID `json:"algorithm_version_id"`
-	RuleMode           string        `json:"rule_mode"`
-	Title              string        `json:"title"`
-	Severity           string        `json:"severity"`
-	TriggeredAt        time.Time     `json:"triggered_at"`
-	DetectedCount      int32         `json:"detected_count"`
-	DetectionsSnapshot []byte        `json:"detections_snapshot"`
-	RoiSnapshot        []byte        `json:"roi_snapshot"`
-	ImageObjectKey     string        `json:"image_object_key"`
-	VideoObjectKey     string        `json:"video_object_key"`
-	VideoStatus        string        `json:"video_status"`
+	ID                 uuid.UUID       `json:"id"`
+	EventDedupKey      pgtype.Text     `json:"event_dedup_key"`
+	CameraID           uuid.UUID       `json:"camera_id"`
+	ZoneID             uuid.NullUUID   `json:"zone_id"`
+	RoiID              uuid.NullUUID   `json:"roi_id"`
+	RuleID             uuid.NullUUID   `json:"rule_id"`
+	AlgorithmVersionID uuid.NullUUID   `json:"algorithm_version_id"`
+	RuleMode           string          `json:"rule_mode"`
+	Title              string          `json:"title"`
+	Severity           string          `json:"severity"`
+	TriggeredAt        time.Time       `json:"triggered_at"`
+	DetectedCount      int32           `json:"detected_count"`
+	DetectionsSnapshot json.RawMessage `json:"detections_snapshot"`
+	RoiSnapshot        json.RawMessage `json:"roi_snapshot"`
+	ImageObjectKey     string          `json:"image_object_key"`
+	VideoObjectKey     string          `json:"video_object_key"`
+	VideoStatus        string          `json:"video_status"`
+	SopTrace           json.RawMessage `json:"sop_trace"`
 }
 
 func (q *Queries) CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm, error) {
@@ -77,6 +121,7 @@ func (q *Queries) CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm
 		arg.ID,
 		arg.EventDedupKey,
 		arg.CameraID,
+		arg.ZoneID,
 		arg.RoiID,
 		arg.RuleID,
 		arg.AlgorithmVersionID,
@@ -90,6 +135,7 @@ func (q *Queries) CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm
 		arg.ImageObjectKey,
 		arg.VideoObjectKey,
 		arg.VideoStatus,
+		arg.SopTrace,
 	)
 	var i Alarm
 	err := row.Scan(
@@ -114,6 +160,9 @@ func (q *Queries) CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm
 		&i.HandledAt,
 		&i.HandleNote,
 		&i.CreatedAt,
+		&i.ZoneID,
+		&i.FalsePositiveReason,
+		&i.SopTrace,
 	)
 	return i, err
 }
@@ -161,7 +210,7 @@ func (q *Queries) CreateAlarmDelivery(ctx context.Context, arg CreateAlarmDelive
 }
 
 const getAlarmByDedupKey = `-- name: GetAlarmByDedupKey :one
-SELECT id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at FROM alarms WHERE event_dedup_key = $1
+SELECT id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at, zone_id, false_positive_reason, sop_trace FROM alarms WHERE event_dedup_key = $1
 `
 
 func (q *Queries) GetAlarmByDedupKey(ctx context.Context, eventDedupKey pgtype.Text) (Alarm, error) {
@@ -189,12 +238,15 @@ func (q *Queries) GetAlarmByDedupKey(ctx context.Context, eventDedupKey pgtype.T
 		&i.HandledAt,
 		&i.HandleNote,
 		&i.CreatedAt,
+		&i.ZoneID,
+		&i.FalsePositiveReason,
+		&i.SopTrace,
 	)
 	return i, err
 }
 
 const getAlarmByID = `-- name: GetAlarmByID :one
-SELECT id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at FROM alarms WHERE id = $1
+SELECT id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at, zone_id, false_positive_reason, sop_trace FROM alarms WHERE id = $1
 `
 
 func (q *Queries) GetAlarmByID(ctx context.Context, id uuid.UUID) (Alarm, error) {
@@ -222,6 +274,9 @@ func (q *Queries) GetAlarmByID(ctx context.Context, id uuid.UUID) (Alarm, error)
 		&i.HandledAt,
 		&i.HandleNote,
 		&i.CreatedAt,
+		&i.ZoneID,
+		&i.FalsePositiveReason,
+		&i.SopTrace,
 	)
 	return i, err
 }
@@ -255,16 +310,18 @@ UPDATE alarms
 SET handle_status = $2,
     handled_by = $3,
     handled_at = NOW(),
-    handle_note = $4
+    handle_note = $4,
+    false_positive_reason = $5
 WHERE id = $1
-RETURNING id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at
+RETURNING id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at, zone_id, false_positive_reason, sop_trace
 `
 
 type HandleAlarmParams struct {
-	ID           uuid.UUID     `json:"id"`
-	HandleStatus string        `json:"handle_status"`
-	HandledBy    uuid.NullUUID `json:"handled_by"`
-	HandleNote   string        `json:"handle_note"`
+	ID                  uuid.UUID     `json:"id"`
+	HandleStatus        string        `json:"handle_status"`
+	HandledBy           uuid.NullUUID `json:"handled_by"`
+	HandleNote          string        `json:"handle_note"`
+	FalsePositiveReason string        `json:"false_positive_reason"`
 }
 
 func (q *Queries) HandleAlarm(ctx context.Context, arg HandleAlarmParams) (Alarm, error) {
@@ -273,6 +330,7 @@ func (q *Queries) HandleAlarm(ctx context.Context, arg HandleAlarmParams) (Alarm
 		arg.HandleStatus,
 		arg.HandledBy,
 		arg.HandleNote,
+		arg.FalsePositiveReason,
 	)
 	var i Alarm
 	err := row.Scan(
@@ -297,25 +355,34 @@ func (q *Queries) HandleAlarm(ctx context.Context, arg HandleAlarmParams) (Alarm
 		&i.HandledAt,
 		&i.HandleNote,
 		&i.CreatedAt,
+		&i.ZoneID,
+		&i.FalsePositiveReason,
+		&i.SopTrace,
 	)
 	return i, err
 }
 
 const listAlarms = `-- name: ListAlarms :many
-SELECT id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at FROM alarms
+SELECT id, event_dedup_key, camera_id, roi_id, rule_id, algorithm_version_id, rule_mode, title, severity, triggered_at, detected_count, detections_snapshot, roi_snapshot, image_object_key, video_object_key, video_status, handle_status, handled_by, handled_at, handle_note, created_at, zone_id, false_positive_reason, sop_trace FROM alarms
 WHERE ($1::uuid IS NULL OR camera_id = $1)
-  AND ($2::varchar IS NULL OR rule_mode = $2)
-  AND ($3::varchar IS NULL OR handle_status = $3)
-  AND ($4::timestamptz IS NULL OR triggered_at >= $4)
-  AND ($5::timestamptz IS NULL OR triggered_at <= $5)
+  AND ($2::uuid[] IS NULL OR zone_id = ANY($2::uuid[]))
+  AND ($3::varchar IS NULL OR rule_mode = $3)
+  AND ($4::varchar IS NULL OR severity = $4)
+  AND ($5::varchar IS NULL OR handle_status = $5)
+  AND ($6::text IS NULL OR title ILIKE '%' || $6::text || '%')
+  AND ($7::timestamptz IS NULL OR triggered_at >= $7)
+  AND ($8::timestamptz IS NULL OR triggered_at <= $8)
 ORDER BY triggered_at DESC
-LIMIT $7 OFFSET $6
+LIMIT $10 OFFSET $9
 `
 
 type ListAlarmsParams struct {
 	CameraID     uuid.NullUUID `json:"camera_id"`
+	ZoneIds      []uuid.UUID   `json:"zone_ids"`
 	RuleMode     pgtype.Text   `json:"rule_mode"`
+	Severity     pgtype.Text   `json:"severity"`
 	HandleStatus pgtype.Text   `json:"handle_status"`
+	Keyword      pgtype.Text   `json:"keyword"`
 	StartTime    *time.Time    `json:"start_time"`
 	EndTime      *time.Time    `json:"end_time"`
 	PageOffset   int32         `json:"page_offset"`
@@ -325,8 +392,11 @@ type ListAlarmsParams struct {
 func (q *Queries) ListAlarms(ctx context.Context, arg ListAlarmsParams) ([]Alarm, error) {
 	rows, err := q.db.Query(ctx, listAlarms,
 		arg.CameraID,
+		arg.ZoneIds,
 		arg.RuleMode,
+		arg.Severity,
 		arg.HandleStatus,
+		arg.Keyword,
 		arg.StartTime,
 		arg.EndTime,
 		arg.PageOffset,
@@ -361,6 +431,127 @@ func (q *Queries) ListAlarms(ctx context.Context, arg ListAlarmsParams) ([]Alarm
 			&i.HandledAt,
 			&i.HandleNote,
 			&i.CreatedAt,
+			&i.ZoneID,
+			&i.FalsePositiveReason,
+			&i.SopTrace,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlarmsForExport = `-- name: ListAlarmsForExport :many
+SELECT
+    a.id, a.event_dedup_key, a.camera_id, a.roi_id, a.rule_id, a.algorithm_version_id, a.rule_mode, a.title, a.severity, a.triggered_at, a.detected_count, a.detections_snapshot, a.roi_snapshot, a.image_object_key, a.video_object_key, a.video_status, a.handle_status, a.handled_by, a.handled_at, a.handle_note, a.created_at, a.zone_id, a.false_positive_reason, a.sop_trace,
+    COALESCE(c.name, '')::text AS camera_name,
+    COALESCE(z.name, '')::text AS zone_name
+FROM alarms a
+LEFT JOIN cameras c ON c.id = a.camera_id
+LEFT JOIN zones z ON z.id = a.zone_id
+WHERE ($1::uuid IS NULL OR a.camera_id = $1)
+  AND ($2::uuid[] IS NULL OR a.zone_id = ANY($2::uuid[]))
+  AND ($3::varchar IS NULL OR a.rule_mode = $3)
+  AND ($4::varchar IS NULL OR a.severity = $4)
+  AND ($5::varchar IS NULL OR a.handle_status = $5)
+  AND ($6::text IS NULL OR a.title ILIKE '%' || $6::text || '%')
+  AND ($7::timestamptz IS NULL OR a.triggered_at >= $7)
+  AND ($8::timestamptz IS NULL OR a.triggered_at <= $8)
+ORDER BY a.triggered_at DESC
+LIMIT $9
+`
+
+type ListAlarmsForExportParams struct {
+	CameraID     uuid.NullUUID `json:"camera_id"`
+	ZoneIds      []uuid.UUID   `json:"zone_ids"`
+	RuleMode     pgtype.Text   `json:"rule_mode"`
+	Severity     pgtype.Text   `json:"severity"`
+	HandleStatus pgtype.Text   `json:"handle_status"`
+	Keyword      pgtype.Text   `json:"keyword"`
+	StartTime    *time.Time    `json:"start_time"`
+	EndTime      *time.Time    `json:"end_time"`
+	MaxRows      int32         `json:"max_rows"`
+}
+
+type ListAlarmsForExportRow struct {
+	ID                  uuid.UUID       `json:"id"`
+	EventDedupKey       pgtype.Text     `json:"event_dedup_key"`
+	CameraID            uuid.UUID       `json:"camera_id"`
+	RoiID               uuid.NullUUID   `json:"roi_id"`
+	RuleID              uuid.NullUUID   `json:"rule_id"`
+	AlgorithmVersionID  uuid.NullUUID   `json:"algorithm_version_id"`
+	RuleMode            string          `json:"rule_mode"`
+	Title               string          `json:"title"`
+	Severity            string          `json:"severity"`
+	TriggeredAt         time.Time       `json:"triggered_at"`
+	DetectedCount       int32           `json:"detected_count"`
+	DetectionsSnapshot  json.RawMessage `json:"detections_snapshot"`
+	RoiSnapshot         json.RawMessage `json:"roi_snapshot"`
+	ImageObjectKey      string          `json:"image_object_key"`
+	VideoObjectKey      string          `json:"video_object_key"`
+	VideoStatus         string          `json:"video_status"`
+	HandleStatus        string          `json:"handle_status"`
+	HandledBy           uuid.NullUUID   `json:"handled_by"`
+	HandledAt           *time.Time      `json:"handled_at"`
+	HandleNote          string          `json:"handle_note"`
+	CreatedAt           time.Time       `json:"created_at"`
+	ZoneID              uuid.NullUUID   `json:"zone_id"`
+	FalsePositiveReason string          `json:"false_positive_reason"`
+	SopTrace            json.RawMessage `json:"sop_trace"`
+	CameraName          string          `json:"camera_name"`
+	ZoneName            string          `json:"zone_name"`
+}
+
+func (q *Queries) ListAlarmsForExport(ctx context.Context, arg ListAlarmsForExportParams) ([]ListAlarmsForExportRow, error) {
+	rows, err := q.db.Query(ctx, listAlarmsForExport,
+		arg.CameraID,
+		arg.ZoneIds,
+		arg.RuleMode,
+		arg.Severity,
+		arg.HandleStatus,
+		arg.Keyword,
+		arg.StartTime,
+		arg.EndTime,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAlarmsForExportRow{}
+	for rows.Next() {
+		var i ListAlarmsForExportRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventDedupKey,
+			&i.CameraID,
+			&i.RoiID,
+			&i.RuleID,
+			&i.AlgorithmVersionID,
+			&i.RuleMode,
+			&i.Title,
+			&i.Severity,
+			&i.TriggeredAt,
+			&i.DetectedCount,
+			&i.DetectionsSnapshot,
+			&i.RoiSnapshot,
+			&i.ImageObjectKey,
+			&i.VideoObjectKey,
+			&i.VideoStatus,
+			&i.HandleStatus,
+			&i.HandledBy,
+			&i.HandledAt,
+			&i.HandleNote,
+			&i.CreatedAt,
+			&i.ZoneID,
+			&i.FalsePositiveReason,
+			&i.SopTrace,
+			&i.CameraName,
+			&i.ZoneName,
 		); err != nil {
 			return nil, err
 		}
@@ -457,6 +648,22 @@ func (q *Queries) UpdateAlarmDeliveryResult(ctx context.Context, arg UpdateAlarm
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const updateAlarmImageEvidence = `-- name: UpdateAlarmImageEvidence :exec
+UPDATE alarms
+SET image_object_key = $2
+WHERE id = $1
+`
+
+type UpdateAlarmImageEvidenceParams struct {
+	ID             uuid.UUID `json:"id"`
+	ImageObjectKey string    `json:"image_object_key"`
+}
+
+func (q *Queries) UpdateAlarmImageEvidence(ctx context.Context, arg UpdateAlarmImageEvidenceParams) error {
+	_, err := q.db.Exec(ctx, updateAlarmImageEvidence, arg.ID, arg.ImageObjectKey)
+	return err
 }
 
 const updateAlarmVideoEvidence = `-- name: UpdateAlarmVideoEvidence :exec

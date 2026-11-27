@@ -1,8 +1,10 @@
 package api
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -18,7 +20,11 @@ import (
 	platformredis "aegisvision/backend/internal/platform/redis"
 )
 
-const streamPlayTokenTTL = 60 * time.Second
+const (
+	streamPlayTokenTTL = 60 * time.Second
+	maxCSVImportBytes  = 2 * 1024 * 1024
+	maxCSVImportRows   = 500
+)
 
 // PointInput represents a normalized [0.0, 1.0] vertex of a camera ROI polygon.
 type PointInput struct {
@@ -70,22 +76,38 @@ func NewCamerasHandler(store *postgres.Store, cache CacheStore, mtx *mediamtx.Cl
 }
 
 type createCameraRequest struct {
-	Name         string `json:"name" binding:"required"`
-	Location     string `json:"location"`
-	RtspURL      string `json:"rtsp_url" binding:"required"`
-	SubStreamURL string `json:"sub_stream_url"`
-	StreamPath   string `json:"stream_path"`
-	CodecHint    string `json:"codec_hint"`
-	Enabled      *bool  `json:"enabled"`
+	Name            string   `json:"name" binding:"required"`
+	Location        string   `json:"location"`
+	RtspURL         string   `json:"rtsp_url" binding:"required"`
+	SubStreamURL    string   `json:"sub_stream_url"`
+	StreamPath      string   `json:"stream_path"`
+	CodecHint       string   `json:"codec_hint"`
+	Enabled         *bool    `json:"enabled"`
+	ZoneID          string   `json:"zone_id"`
+	WorkstationCode string   `json:"workstation_code"`
+	Tags            []string `json:"tags"`
 }
 
 type updateCameraRequest struct {
-	Name         string `json:"name" binding:"required"`
-	Location     string `json:"location"`
-	RtspURL      string `json:"rtsp_url" binding:"required"`
-	SubStreamURL string `json:"sub_stream_url"`
-	CodecHint    string `json:"codec_hint"`
-	Enabled      bool   `json:"enabled"`
+	Name            string   `json:"name" binding:"required"`
+	Location        string   `json:"location"`
+	RtspURL         string   `json:"rtsp_url" binding:"required"`
+	SubStreamURL    string   `json:"sub_stream_url"`
+	CodecHint       string   `json:"codec_hint"`
+	Enabled         bool     `json:"enabled"`
+	ZoneID          string   `json:"zone_id"`
+	WorkstationCode string   `json:"workstation_code"`
+	Tags            []string `json:"tags"`
+}
+
+type batchCamerasRequest struct {
+	CameraIDs []string `json:"camera_ids" binding:"required"`
+	Action    string   `json:"action" binding:"required"`
+	ZoneID    string   `json:"zone_id"`
+}
+
+type importCamerasCSVRequest struct {
+	CSV string `json:"csv"`
 }
 
 type createROIRequest struct {
@@ -93,6 +115,7 @@ type createROIRequest struct {
 	ROIType string       `json:"roi_type" binding:"required"`
 	Points  []PointInput `json:"points"`
 	Enabled *bool        `json:"enabled"`
+	Color   string       `json:"color"`
 }
 
 type updateROIRequest struct {
@@ -100,14 +123,41 @@ type updateROIRequest struct {
 	ROIType string       `json:"roi_type" binding:"required"`
 	Points  []PointInput `json:"points"`
 	Enabled bool         `json:"enabled"`
+	Color   string       `json:"color"`
 }
 
-// ListCameras returns all configured cameras.
+// ListCameras returns configured cameras, optionally filtered by zone_id (including descendant zones).
 func (h *CamerasHandler) ListCameras(c *gin.Context) {
-	items, err := h.store.Queries().ListCameras(c.Request.Context())
+	ctx := c.Request.Context()
+	items, err := h.store.Queries().ListCameras(ctx)
 	if err != nil {
 		respondErr(c, err)
 		return
+	}
+	if rawZone := strings.TrimSpace(c.Query("zone_id")); rawZone != "" {
+		zid, parseErr := uuid.Parse(rawZone)
+		if parseErr != nil {
+			respondErr(c, domain.NewInvalidArgumentError("invalid zone_id filter", parseErr))
+			return
+		}
+		allowed, descErr := collectZoneDescendants(ctx, h.store.Queries(), zid)
+		if descErr != nil {
+			respondErr(c, descErr)
+			return
+		}
+		allowedSet := make(map[uuid.UUID]struct{}, len(allowed))
+		for _, id := range allowed {
+			allowedSet[id] = struct{}{}
+		}
+		filtered := make([]sqlcgen.Camera, 0, len(items))
+		for _, cam := range items {
+			if cam.ZoneID.Valid {
+				if _, ok := allowedSet[cam.ZoneID.UUID]; ok {
+					filtered = append(filtered, cam)
+				}
+			}
+		}
+		items = filtered
 	}
 	respondOK(c, items)
 }
@@ -148,16 +198,34 @@ func (h *CamerasHandler) CreateCamera(c *gin.Context) {
 		enabled = *req.Enabled
 	}
 
+	var zoneID uuid.NullUUID
+	if trimmed := strings.TrimSpace(req.ZoneID); trimmed != "" {
+		zid, parseErr := uuid.Parse(trimmed)
+		if parseErr != nil {
+			respondErr(c, domain.NewInvalidArgumentError("invalid zone_id", parseErr))
+			return
+		}
+		zoneID = uuid.NullUUID{UUID: zid, Valid: true}
+	}
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	tagsJSON, _ := json.Marshal(tags)
+
 	cam, err := h.store.Queries().CreateCamera(c.Request.Context(), sqlcgen.CreateCameraParams{
-		ID:           id,
-		Name:         req.Name,
-		Location:     req.Location,
-		RtspUrl:      req.RtspURL,
-		SubStreamUrl: req.SubStreamURL,
-		StreamPath:   streamPath,
-		CodecHint:    codec,
-		Status:       "offline",
-		Enabled:      enabled,
+		ID:              id,
+		Name:            req.Name,
+		Location:        req.Location,
+		RtspUrl:         req.RtspURL,
+		SubStreamUrl:    req.SubStreamURL,
+		StreamPath:      streamPath,
+		CodecHint:       codec,
+		Status:          "offline",
+		Enabled:         enabled,
+		ZoneID:          zoneID,
+		WorkstationCode: strings.TrimSpace(req.WorkstationCode),
+		Tags:            tagsJSON,
 	})
 	if err != nil {
 		respondErr(c, err)
@@ -184,14 +252,32 @@ func (h *CamerasHandler) UpdateCamera(c *gin.Context) {
 		codec = "h264"
 	}
 
+	var zoneID uuid.NullUUID
+	if trimmed := strings.TrimSpace(req.ZoneID); trimmed != "" {
+		zid, parseErr := uuid.Parse(trimmed)
+		if parseErr != nil {
+			respondErr(c, domain.NewInvalidArgumentError("invalid zone_id", parseErr))
+			return
+		}
+		zoneID = uuid.NullUUID{UUID: zid, Valid: true}
+	}
+	tags := req.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+	tagsJSON, _ := json.Marshal(tags)
+
 	cam, err := h.store.Queries().UpdateCamera(c.Request.Context(), sqlcgen.UpdateCameraParams{
-		ID:           id,
-		Name:         req.Name,
-		Location:     req.Location,
-		RtspUrl:      req.RtspURL,
-		SubStreamUrl: req.SubStreamURL,
-		CodecHint:    codec,
-		Enabled:      req.Enabled,
+		ID:              id,
+		Name:            req.Name,
+		Location:        req.Location,
+		RtspUrl:         req.RtspURL,
+		SubStreamUrl:    req.SubStreamURL,
+		CodecHint:       codec,
+		Enabled:         req.Enabled,
+		ZoneID:          zoneID,
+		WorkstationCode: strings.TrimSpace(req.WorkstationCode),
+		Tags:            tagsJSON,
 	})
 	if err != nil {
 		respondErr(c, err)
@@ -214,6 +300,176 @@ func (h *CamerasHandler) DeleteCamera(c *gin.Context) {
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "camera", "deleted", id.String())
 	respondOK(c, gin.H{"deleted": true})
+}
+
+// BatchUpdate applies enable, disable, or move_zone across multiple cameras atomically.
+func (h *CamerasHandler) BatchUpdate(c *gin.Context) {
+	var req batchCamerasRequest
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.CameraIDs) == 0 {
+		respondErr(c, domain.NewInvalidArgumentError("camera_ids and action are required", err))
+		return
+	}
+	ids, err := parseUUIDSlice(req.CameraIDs)
+	if err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid camera_ids", err))
+		return
+	}
+
+	ctx := c.Request.Context()
+	var affected int64
+	switch req.Action {
+	case "enable":
+		affected, err = h.store.Queries().BatchUpdateCamerasEnabled(ctx, sqlcgen.BatchUpdateCamerasEnabledParams{
+			Enabled: true,
+			Ids:     ids,
+		})
+	case "disable":
+		affected, err = h.store.Queries().BatchUpdateCamerasEnabled(ctx, sqlcgen.BatchUpdateCamerasEnabledParams{
+			Enabled: false,
+			Ids:     ids,
+		})
+	case "move_zone":
+		var zoneID uuid.NullUUID
+		if trimmed := strings.TrimSpace(req.ZoneID); trimmed != "" {
+			zid, parseErr := uuid.Parse(trimmed)
+			if parseErr != nil {
+				respondErr(c, domain.NewInvalidArgumentError("invalid zone_id", parseErr))
+				return
+			}
+			zoneID = uuid.NullUUID{UUID: zid, Valid: true}
+		}
+		affected, err = h.store.Queries().BatchUpdateCamerasZone(ctx, sqlcgen.BatchUpdateCamerasZoneParams{
+			ZoneID: zoneID,
+			Ids:    ids,
+		})
+	default:
+		respondErr(c, domain.NewInvalidArgumentError("action must be enable, disable, or move_zone", nil))
+		return
+	}
+	if err != nil {
+		respondErr(c, err)
+		return
+	}
+	emitConfigEvent(ctx, h.pub, h.log, "camera", "batch_"+req.Action, "")
+	respondOK(c, gin.H{"updated_count": affected})
+}
+
+// ImportCSV batch-creates cameras from CSV text (columns: name,rtsp_url,sub_stream_url,workstation_code,zone_id,codec_hint).
+func (h *CamerasHandler) ImportCSV(c *gin.Context) {
+	var rawCSV string
+	if strings.Contains(c.ContentType(), "application/json") {
+		var req importCamerasCSVRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			respondErr(c, domain.NewInvalidArgumentError("invalid import payload", err))
+			return
+		}
+		if len(req.CSV) > maxCSVImportBytes {
+			respondErr(c, domain.NewInvalidArgumentError("csv payload exceeds 2MB limit", nil))
+			return
+		}
+		rawCSV = req.CSV
+	} else {
+		bodyBytes, err := io.ReadAll(io.LimitReader(c.Request.Body, maxCSVImportBytes+1))
+		if err != nil {
+			respondErr(c, domain.NewInvalidArgumentError("failed to read csv body", err))
+			return
+		}
+		if len(bodyBytes) > maxCSVImportBytes {
+			respondErr(c, domain.NewInvalidArgumentError("csv payload exceeds 2MB limit", nil))
+			return
+		}
+		rawCSV = string(bodyBytes)
+	}
+	rawCSV = strings.TrimPrefix(strings.TrimSpace(rawCSV), "\uFEFF")
+	if rawCSV == "" {
+		respondErr(c, domain.NewInvalidArgumentError("csv content is empty", nil))
+		return
+	}
+
+	reader := csv.NewReader(strings.NewReader(rawCSV))
+	reader.FieldsPerRecord = -1
+	rows, err := reader.ReadAll()
+	if err != nil || len(rows) == 0 {
+		respondErr(c, domain.NewInvalidArgumentError("failed to parse csv rows", err))
+		return
+	}
+
+	startIdx := 0
+	if len(rows[0]) >= 2 && strings.EqualFold(strings.TrimSpace(rows[0][0]), "name") {
+		startIdx = 1
+	}
+	if len(rows)-startIdx > maxCSVImportRows {
+		respondErr(c, domain.NewInvalidArgumentError(fmt.Sprintf("csv exceeds maximum of %d rows", maxCSVImportRows), nil))
+		return
+	}
+
+	ctx := c.Request.Context()
+	created := make([]sqlcgen.Camera, 0)
+	rowErrors := make([]string, 0)
+
+	for i := startIdx; i < len(rows); i++ {
+		cols := rows[i]
+		getCol := func(idx int) string {
+			if idx < len(cols) {
+				return strings.TrimSpace(cols[idx])
+			}
+			return ""
+		}
+		name := getCol(0)
+		rtspURL := getCol(1)
+		if name == "" || rtspURL == "" {
+			rowErrors = append(rowErrors, fmt.Sprintf("row %d: name and rtsp_url are required", i+1))
+			continue
+		}
+		subURL := getCol(2)
+		wsCode := getCol(3)
+		var zoneID uuid.NullUUID
+		if zRaw := getCol(4); zRaw != "" {
+			zid, parseErr := uuid.Parse(zRaw)
+			if parseErr != nil {
+				rowErrors = append(rowErrors, fmt.Sprintf("row %d: invalid zone_id %q", i+1, zRaw))
+				continue
+			}
+			zoneID = uuid.NullUUID{UUID: zid, Valid: true}
+		}
+		codec := getCol(5)
+		if codec == "" {
+			codec = "h264"
+		}
+
+		id := uuid.Must(uuid.NewV7())
+		cam, createErr := h.store.Queries().CreateCamera(ctx, sqlcgen.CreateCameraParams{
+			ID:              id,
+			Name:            name,
+			Location:        "",
+			RtspUrl:         rtspURL,
+			SubStreamUrl:    subURL,
+			StreamPath:      "cam_" + strings.ReplaceAll(id.String(), "-", ""),
+			CodecHint:       codec,
+			Status:          "offline",
+			Enabled:         true,
+			ZoneID:          zoneID,
+			WorkstationCode: wsCode,
+			Tags:            json.RawMessage(`[]`),
+		})
+		if createErr != nil {
+			if h.log != nil {
+				h.log.Warn("camera csv import row failed", "row", i+1, "err", createErr)
+			}
+			rowErrors = append(rowErrors, fmt.Sprintf("row %d: failed to create camera (verify zone_id and stream configuration)", i+1))
+			continue
+		}
+		created = append(created, cam)
+	}
+
+	if len(created) > 0 {
+		emitConfigEvent(ctx, h.pub, h.log, "camera", "imported", "")
+	}
+	respondOK(c, gin.H{
+		"created_count": len(created),
+		"cameras":       created,
+		"errors":        rowErrors,
+	})
 }
 
 // CreateStreamToken issues a 60s Redis-backed WebRTC WHEP playback token for the camera.
@@ -314,6 +570,7 @@ func (h *CamerasHandler) CreateROI(c *gin.Context) {
 		RoiType:  req.ROIType,
 		Points:   ptsJSON,
 		Enabled:  enabled,
+		Color:    strings.TrimSpace(req.Color),
 	})
 	if err != nil {
 		respondErr(c, err)
@@ -351,6 +608,7 @@ func (h *CamerasHandler) UpdateROI(c *gin.Context) {
 		RoiType: req.ROIType,
 		Points:  ptsJSON,
 		Enabled: req.Enabled,
+		Color:   strings.TrimSpace(req.Color),
 	})
 	if err != nil {
 		respondErr(c, err)

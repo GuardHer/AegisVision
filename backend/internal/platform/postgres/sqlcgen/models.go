@@ -5,6 +5,7 @@
 package sqlcgen
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,51 +13,55 @@ import (
 )
 
 type AgentNode struct {
-	NodeID          string     `json:"node_id"`
-	Hostname        string     `json:"hostname"`
-	IpAddr          string     `json:"ip_addr"`
-	RuntimeKeys     []byte     `json:"runtime_keys"`
-	MaxTasks        int32      `json:"max_tasks"`
-	RunningTasks    int32      `json:"running_tasks"`
-	Status          string     `json:"status"`
-	Meta            []byte     `json:"meta"`
-	LastHeartbeatAt *time.Time `json:"last_heartbeat_at"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	NodeID          string          `json:"node_id"`
+	Hostname        string          `json:"hostname"`
+	IpAddr          string          `json:"ip_addr"`
+	RuntimeKeys     json.RawMessage `json:"runtime_keys"`
+	MaxTasks        int32           `json:"max_tasks"`
+	RunningTasks    int32           `json:"running_tasks"`
+	Status          string          `json:"status"`
+	Meta            json.RawMessage `json:"meta"`
+	LastHeartbeatAt *time.Time      `json:"last_heartbeat_at"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type Alarm struct {
-	ID                 uuid.UUID     `json:"id"`
-	EventDedupKey      pgtype.Text   `json:"event_dedup_key"`
-	CameraID           uuid.UUID     `json:"camera_id"`
-	RoiID              uuid.NullUUID `json:"roi_id"`
-	RuleID             uuid.NullUUID `json:"rule_id"`
-	AlgorithmVersionID uuid.NullUUID `json:"algorithm_version_id"`
-	RuleMode           string        `json:"rule_mode"`
-	Title              string        `json:"title"`
-	Severity           string        `json:"severity"`
-	TriggeredAt        time.Time     `json:"triggered_at"`
-	DetectedCount      int32         `json:"detected_count"`
-	DetectionsSnapshot []byte        `json:"detections_snapshot"`
-	RoiSnapshot        []byte        `json:"roi_snapshot"`
-	ImageObjectKey     string        `json:"image_object_key"`
-	VideoObjectKey     string        `json:"video_object_key"`
-	VideoStatus        string        `json:"video_status"`
-	HandleStatus       string        `json:"handle_status"`
-	HandledBy          uuid.NullUUID `json:"handled_by"`
-	HandledAt          *time.Time    `json:"handled_at"`
-	HandleNote         string        `json:"handle_note"`
-	CreatedAt          time.Time     `json:"created_at"`
+	ID                  uuid.UUID       `json:"id"`
+	EventDedupKey       pgtype.Text     `json:"event_dedup_key"`
+	CameraID            uuid.UUID       `json:"camera_id"`
+	RoiID               uuid.NullUUID   `json:"roi_id"`
+	RuleID              uuid.NullUUID   `json:"rule_id"`
+	AlgorithmVersionID  uuid.NullUUID   `json:"algorithm_version_id"`
+	RuleMode            string          `json:"rule_mode"`
+	Title               string          `json:"title"`
+	Severity            string          `json:"severity"`
+	TriggeredAt         time.Time       `json:"triggered_at"`
+	DetectedCount       int32           `json:"detected_count"`
+	DetectionsSnapshot  json.RawMessage `json:"detections_snapshot"`
+	RoiSnapshot         json.RawMessage `json:"roi_snapshot"`
+	ImageObjectKey      string          `json:"image_object_key"`
+	VideoObjectKey      string          `json:"video_object_key"`
+	VideoStatus         string          `json:"video_status"`
+	HandleStatus        string          `json:"handle_status"`
+	HandledBy           uuid.NullUUID   `json:"handled_by"`
+	HandledAt           *time.Time      `json:"handled_at"`
+	HandleNote          string          `json:"handle_note"`
+	CreatedAt           time.Time       `json:"created_at"`
+	ZoneID              uuid.NullUUID   `json:"zone_id"`
+	FalsePositiveReason string          `json:"false_positive_reason"`
+	SopTrace            json.RawMessage `json:"sop_trace"`
 }
 
 type AlarmChannel struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	ChannelType string    `json:"channel_type"`
-	Config      []byte    `json:"config"`
-	Enabled     bool      `json:"enabled"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           uuid.UUID       `json:"id"`
+	Name         string          `json:"name"`
+	ChannelType  string          `json:"channel_type"`
+	Config       json.RawMessage `json:"config"`
+	Enabled      bool            `json:"enabled"`
+	CreatedAt    time.Time       `json:"created_at"`
+	UpdatedAt    time.Time       `json:"updated_at"`
+	RoutingRules json.RawMessage `json:"routing_rules"`
 }
 
 type AlarmDelivery struct {
@@ -75,50 +80,82 @@ type AlarmDelivery struct {
 }
 
 type Algorithm struct {
-	ID              uuid.UUID `json:"id"`
-	AlgorithmKey    string    `json:"algorithm_key"`
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	SupportedLabels []byte    `json:"supported_labels"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uuid.UUID       `json:"id"`
+	AlgorithmKey    string          `json:"algorithm_key"`
+	Name            string          `json:"name"`
+	Description     string          `json:"description"`
+	SupportedLabels json.RawMessage `json:"supported_labels"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 }
 
 type AlgorithmVersion struct {
-	ID            uuid.UUID `json:"id"`
-	AlgorithmID   uuid.UUID `json:"algorithm_id"`
-	Version       string    `json:"version"`
-	RuntimeKey    string    `json:"runtime_key"`
-	LaunchSpec    []byte    `json:"launch_spec"`
-	DefaultParams []byte    `json:"default_params"`
-	Status        string    `json:"status"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID            uuid.UUID       `json:"id"`
+	AlgorithmID   uuid.UUID       `json:"algorithm_id"`
+	Version       string          `json:"version"`
+	RuntimeKey    string          `json:"runtime_key"`
+	LaunchSpec    json.RawMessage `json:"launch_spec"`
+	DefaultParams json.RawMessage `json:"default_params"`
+	Status        string          `json:"status"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type ArmingSchedule struct {
+	ID            uuid.UUID       `json:"id"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	Timezone      string          `json:"timezone"`
+	WeeklyWindows json.RawMessage `json:"weekly_windows"`
+	ExcludeDates  json.RawMessage `json:"exclude_dates"`
+	IncludeDates  json.RawMessage `json:"include_dates"`
+	Enabled       bool            `json:"enabled"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+type AuditLog struct {
+	ID            uuid.UUID       `json:"id"`
+	ActorUserID   uuid.NullUUID   `json:"actor_user_id"`
+	ActorUsername string          `json:"actor_username"`
+	Action        string          `json:"action"`
+	ResourceType  string          `json:"resource_type"`
+	ResourceID    string          `json:"resource_id"`
+	Summary       string          `json:"summary"`
+	Detail        json.RawMessage `json:"detail"`
+	ClientIp      string          `json:"client_ip"`
+	RequestID     string          `json:"request_id"`
+	CreatedAt     time.Time       `json:"created_at"`
 }
 
 type Camera struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Location     string    `json:"location"`
-	RtspUrl      string    `json:"rtsp_url"`
-	SubStreamUrl string    `json:"sub_stream_url"`
-	StreamPath   string    `json:"stream_path"`
-	CodecHint    string    `json:"codec_hint"`
-	Status       string    `json:"status"`
-	Enabled      bool      `json:"enabled"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID              uuid.UUID       `json:"id"`
+	Name            string          `json:"name"`
+	Location        string          `json:"location"`
+	RtspUrl         string          `json:"rtsp_url"`
+	SubStreamUrl    string          `json:"sub_stream_url"`
+	StreamPath      string          `json:"stream_path"`
+	CodecHint       string          `json:"codec_hint"`
+	Status          string          `json:"status"`
+	Enabled         bool            `json:"enabled"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	ZoneID          uuid.NullUUID   `json:"zone_id"`
+	WorkstationCode string          `json:"workstation_code"`
+	Tags            json.RawMessage `json:"tags"`
+	LastOnlineAt    *time.Time      `json:"last_online_at"`
 }
 
 type CameraRoi struct {
-	ID        uuid.UUID `json:"id"`
-	CameraID  uuid.UUID `json:"camera_id"`
-	Name      string    `json:"name"`
-	RoiType   string    `json:"roi_type"`
-	Points    []byte    `json:"points"`
-	Enabled   bool      `json:"enabled"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        uuid.UUID       `json:"id"`
+	CameraID  uuid.UUID       `json:"camera_id"`
+	Name      string          `json:"name"`
+	RoiType   string          `json:"roi_type"`
+	Points    json.RawMessage `json:"points"`
+	Enabled   bool            `json:"enabled"`
+	CreatedAt time.Time       `json:"created_at"`
+	UpdatedAt time.Time       `json:"updated_at"`
+	Color     string          `json:"color"`
 }
 
 type InferenceTask struct {
@@ -139,6 +176,18 @@ type InferenceTask struct {
 	UpdatedAt          time.Time     `json:"updated_at"`
 }
 
+type MonitorPreset struct {
+	ID                  uuid.UUID       `json:"id"`
+	OwnerUserID         uuid.NullUUID   `json:"owner_user_id"`
+	Name                string          `json:"name"`
+	IsShared            bool            `json:"is_shared"`
+	GridSize            int32           `json:"grid_size"`
+	CameraIds           json.RawMessage `json:"camera_ids"`
+	TourIntervalSeconds int32           `json:"tour_interval_seconds"`
+	CreatedAt           time.Time       `json:"created_at"`
+	UpdatedAt           time.Time       `json:"updated_at"`
+}
+
 type RefreshToken struct {
 	ID        uuid.UUID  `json:"id"`
 	UserID    uuid.UUID  `json:"user_id"`
@@ -149,22 +198,23 @@ type RefreshToken struct {
 }
 
 type RoiAlgorithmRule struct {
-	ID                 uuid.UUID   `json:"id"`
-	CameraID           uuid.UUID   `json:"camera_id"`
-	RoiID              uuid.UUID   `json:"roi_id"`
-	AlgorithmVersionID uuid.UUID   `json:"algorithm_version_id"`
-	Name               string      `json:"name"`
-	RuleMode           string      `json:"rule_mode"`
-	Params             []byte      `json:"params"`
-	AlgoParamsOverride []byte      `json:"algo_params_override"`
-	ScheduleMode       string      `json:"schedule_mode"`
-	PinnedNodeID       pgtype.Text `json:"pinned_node_id"`
-	RecordVideo        bool        `json:"record_video"`
-	VideoPreSeconds    int32       `json:"video_pre_seconds"`
-	VideoPostSeconds   int32       `json:"video_post_seconds"`
-	Enabled            bool        `json:"enabled"`
-	CreatedAt          time.Time   `json:"created_at"`
-	UpdatedAt          time.Time   `json:"updated_at"`
+	ID                 uuid.UUID       `json:"id"`
+	CameraID           uuid.UUID       `json:"camera_id"`
+	RoiID              uuid.UUID       `json:"roi_id"`
+	AlgorithmVersionID uuid.UUID       `json:"algorithm_version_id"`
+	Name               string          `json:"name"`
+	RuleMode           string          `json:"rule_mode"`
+	Params             json.RawMessage `json:"params"`
+	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
+	ScheduleMode       string          `json:"schedule_mode"`
+	PinnedNodeID       pgtype.Text     `json:"pinned_node_id"`
+	RecordVideo        bool            `json:"record_video"`
+	VideoPreSeconds    int32           `json:"video_pre_seconds"`
+	VideoPostSeconds   int32           `json:"video_post_seconds"`
+	Enabled            bool            `json:"enabled"`
+	CreatedAt          time.Time       `json:"created_at"`
+	UpdatedAt          time.Time       `json:"updated_at"`
+	ScheduleID         uuid.NullUUID   `json:"schedule_id"`
 }
 
 type RuleAlarmChannel struct {
@@ -172,14 +222,54 @@ type RuleAlarmChannel struct {
 	ChannelID uuid.UUID `json:"channel_id"`
 }
 
+type SopCycle struct {
+	ID                 uuid.UUID     `json:"id"`
+	RuleID             uuid.UUID     `json:"rule_id"`
+	CameraID           uuid.UUID     `json:"camera_id"`
+	ZoneID             uuid.NullUUID `json:"zone_id"`
+	AlgorithmVersionID uuid.NullUUID `json:"algorithm_version_id"`
+	Outcome            string        `json:"outcome"`
+	ViolationType      string        `json:"violation_type"`
+	AlarmID            uuid.NullUUID `json:"alarm_id"`
+	StartedAt          time.Time     `json:"started_at"`
+	EndedAt            time.Time     `json:"ended_at"`
+	DurationMs         int32         `json:"duration_ms"`
+	CreatedAt          time.Time     `json:"created_at"`
+}
+
+type SystemSetting struct {
+	Key       string          `json:"key"`
+	Value     json.RawMessage `json:"value"`
+	UpdatedBy uuid.NullUUID   `json:"updated_by"`
+	UpdatedAt time.Time       `json:"updated_at"`
+}
+
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Username     string     `json:"username"`
-	PasswordHash string     `json:"password_hash"`
-	DisplayName  string     `json:"display_name"`
-	Role         string     `json:"role"`
-	Enabled      bool       `json:"enabled"`
-	LastLoginAt  *time.Time `json:"last_login_at"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID             uuid.UUID  `json:"id"`
+	Username       string     `json:"username"`
+	PasswordHash   string     `json:"password_hash"`
+	DisplayName    string     `json:"display_name"`
+	Role           string     `json:"role"`
+	Enabled        bool       `json:"enabled"`
+	LastLoginAt    *time.Time `json:"last_login_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	AllZonesAccess bool       `json:"all_zones_access"`
+}
+
+type UserZone struct {
+	UserID uuid.UUID `json:"user_id"`
+	ZoneID uuid.UUID `json:"zone_id"`
+}
+
+type Zone struct {
+	ID          uuid.UUID     `json:"id"`
+	ParentID    uuid.NullUUID `json:"parent_id"`
+	Name        string        `json:"name"`
+	Code        string        `json:"code"`
+	ZoneType    string        `json:"zone_type"`
+	SortOrder   int32         `json:"sort_order"`
+	Description string        `json:"description"`
+	CreatedAt   time.Time     `json:"created_at"`
+	UpdatedAt   time.Time     `json:"updated_at"`
 }

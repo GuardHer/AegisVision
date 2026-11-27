@@ -72,14 +72,15 @@ menus:
   purePermissionButton: Button Permission
   purePermissionButtonRouter: Route return button permission
   purePermissionButtonLogin: Login interface return button permission
-  aegisMonitor: Live Monitor
-  aegisAlarms: Alarm Center
-  aegisCameras: Cameras
-  aegisCameraConfig: ROI & Rules Config
-  aegisAlgorithms: Algorithms
-  aegisNodes: Compute Nodes & Tasks
-  aegisChannels: Alarm Channels
-  aegisUsers: Users & Roles
+  aegisDashboard: Operations Dashboard
+  aegisMonitor: Duty Monitor Center
+  aegisAlarms: Alarm Console
+  aegisCameras: Factory Assets
+  aegisCameraConfig: Camera AI Config
+  aegisAlgorithms: Algorithm Hub
+  aegisNodes: Compute Cluster & Tasks
+  aegisChannels: Notification Channels
+  aegisUsers: Users & Permissions
 aegis:
   common:
     create: Create
@@ -93,12 +94,45 @@ aegis:
     enabled: Enabled
     disabled: Disabled
     confirmDelete: Confirm deleting this item?
+  dashboard:
+    title: Factory Safety & SOP Operations Overview
+    todayAlarms: Today Alarms
+    vsYesterday: vs Yesterday
+    unhandledAlarms: Unhandled Alarms
+    confirmedAndFp: Confirmed / False Positive
+    sopCompliance: 7-Day SOP Compliance
+    sopViolationsToday: Today SOP Violations
+    camerasOnline: Cameras Online
+    computeCluster: Nodes / Running Tasks
+    trend7d: 7-Day Safety vs SOP Trend
+    safetyBehavior: Safety Violations
+    sopViolation: SOP Violations
+    topZones: Top 10 Workshops by Alarms
+    behaviorDist: Rule Mode Breakdown
+    recentAlerts: Recent High-Severity Alerts
+    viewAll: View All
+    noRecentAlerts: No unhandled high-severity alerts
   monitor:
     grid1: 1-Grid
     grid4: 4-Grid
     grid9: 9-Grid
+    grid16: 16-Grid
     overlayOn: "Overlay: ON"
     overlayOff: "Overlay: OFF"
+    soundOn: "Chime: ON"
+    soundOff: "Chime: Muted"
+    fullscreen: Fullscreen
+    snapshot: Snapshot
+    zoneTree: Zone Tree
+    presets: Tour Presets
+    savePreset: Save Preset
+    startTour: Start Tour
+    stopTour: Stop Tour
+    presetName: Preset Name
+    sharedPreset: Shared Preset (Admin)
+    tourInterval: Tour Interval (s)
+    searchCamera: Search zones or cameras
+    allSeverities: All Severities
     mainStream: Main Stream
     subStream: Sub Stream
     realtimeAlarms: Realtime Alarms
@@ -108,16 +142,28 @@ aegis:
     wsDisconnected: Realtime WS Disconnected
   alarms:
     title: Alarm Title
+    zone: Workshop / Zone
     camera: Camera
     ruleMode: Rule Mode
     severity: Severity
+    keyword: Search title
     triggeredAt: Triggered At
     handleStatus: Handle Status
     videoStatus: Video Evidence
     detail: Alarm Details
     handle: Handle Alarm
-    confirm: Confirm Alarm
+    confirm: Confirm Violation
     falsePositive: Mark False Positive
+    ignored: Ignore
+    fpReason: False Positive Reason
+    fpLighting: Lighting / Glare
+    fpOcclusion: Occlusion
+    fpSimilarAction: Similar Normal Action
+    fpModelDrift: Model Drift
+    fpOther: Other
+    batchHandle: Batch Handle
+    exportCsv: Export CSV
+    exportZip: Export Evidence (ZIP)
     handleNote: Audit Note
     deliveries: Delivery Audit Logs
     retry: Retry Delivery
@@ -125,7 +171,20 @@ aegis:
     videoClip: Video Evidence Clip
   cameras:
     name: Name
-    location: Location
+    zone: Zone
+    allZones: All Zones
+    addZone: Add Zone
+    addChildZone: Add Child Zone
+    zoneType: Zone Level
+    zoneCode: Zone Code
+    workstationCode: Workstation Code
+    tags: Tags
+    batchEnable: Batch Enable
+    batchDisable: Batch Disable
+    batchMoveZone: Move Zone
+    importCsv: Import CSV
+    importHint: "CSV columns: name,rtsp_url,sub_stream_url,workstation_code,zone_id,codec_hint"
+    location: Location Note
     rtspUrl: Main RTSP URL
     subStreamUrl: Sub Stream RTSP URL
     streamPath: MediaMTX Path
