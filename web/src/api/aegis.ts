@@ -17,6 +17,13 @@ export interface AlgorithmItem {
   created_at: string;
 }
 
+export interface AlgorithmVersionStats30d {
+  total_alarms: number;
+  confirmed_count: number;
+  false_positive_count: number;
+  false_positive_rate: number;
+}
+
 export interface AlgorithmVersionItem {
   id: string;
   algorithm_id: string;
@@ -26,6 +33,7 @@ export interface AlgorithmVersionItem {
   default_params: Record<string, any>;
   status: "draft" | "active" | "deprecated";
   created_at: string;
+  stats_30d?: AlgorithmVersionStats30d;
 }
 
 export interface ZoneTreeNode {
@@ -309,11 +317,19 @@ export interface AlarmDeliveryItem {
   updated_at: string;
 }
 
+export interface ChannelRoutingRules {
+  auto_route?: boolean;
+  severities?: string[];
+  zone_ids?: string[];
+  rule_modes?: string[];
+}
+
 export interface AlarmChannelItem {
   id: string;
   name: string;
-  channel_type: string;
+  channel_type: "webhook" | "wecom" | "dingtalk" | "sound_light" | string;
   config: Record<string, any>;
+  routing_rules?: ChannelRoutingRules;
   enabled: boolean;
 }
 
@@ -323,7 +339,76 @@ export interface UserItem {
   display_name: string;
   role: "admin" | "operator" | "viewer";
   enabled: boolean;
+  all_zones_access?: boolean;
   last_login_at?: string | null;
+}
+
+export interface UserZonesScope {
+  user_id: string;
+  all_zones_access: boolean;
+  zone_ids: string[];
+}
+
+export interface FalsePositiveSampleItem {
+  alarm_id: string;
+  camera_id: string;
+  camera_name: string;
+  zone_id?: string | null;
+  zone_name: string;
+  algorithm_version_id?: string | null;
+  algorithm_name: string;
+  algorithm_version: string;
+  rule_mode: string;
+  title: string;
+  severity: "info" | "warning" | "critical";
+  triggered_at: string;
+  handled_at?: string | null;
+  false_positive_reason: string;
+  handle_note: string;
+  detections_snapshot: DetectionBox[];
+  roi_snapshot: Record<string, any>;
+  image_url: string;
+}
+
+export interface AuditLogItem {
+  id: string;
+  actor_user_id?: string | null;
+  actor_username: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  summary: string;
+  detail: Record<string, any>;
+  client_ip: string;
+  request_id: string;
+  created_at: string;
+}
+
+export interface PlatformSettings {
+  platform_title: string;
+  default_alarm_chime: boolean;
+  popup_min_severity: "info" | "warning" | "critical";
+  max_export_rows: number;
+  default_timezone: string;
+}
+
+export interface SystemComponentHealth {
+  name: string;
+  status: "healthy" | "degraded" | "not_configured" | string;
+  detail?: string;
+  latency_ms: number;
+}
+
+export interface SystemHealthPayload {
+  checked_at: string;
+  components: SystemComponentHealth[];
+  cluster: {
+    nodes_online: number;
+    nodes_total: number;
+    running_tasks: number;
+    cameras_online: number;
+    cameras_total: number;
+  };
 }
 
 // Algorithms & Versions
@@ -540,8 +625,26 @@ export const testChannel = (id: string) =>
     "post",
     `/api/v1/channels/${id}/test`
   );
+export const resetChannel = (id: string) =>
+  http.request<ApiEnvelope<{ reset_enqueued: boolean; channel_id: string }>>(
+    "post",
+    `/api/v1/channels/${id}/reset`
+  );
 
-// Users
+// False-Positive Training Datasets
+export const listFalsePositiveDataset = (params: Record<string, any>) =>
+  http.request<
+    ApiEnvelope<{ items: FalsePositiveSampleItem[]; total: number; page: number; page_size: number }>
+  >("get", "/api/v1/datasets/false-positives", { params });
+
+export const exportFalsePositiveDatasetBlob = (payload: Record<string, any>): Promise<Blob> =>
+  http.request<Blob>("post", "/api/v1/datasets/export", {
+    data: payload,
+    responseType: "blob",
+    timeout: 120000
+  });
+
+// Users & Workshop Scope
 export const listUsers = () =>
   http.request<ApiEnvelope<UserItem[]>>("get", "/api/v1/users");
 export const createUser = (data: Record<string, any>) =>
@@ -554,3 +657,19 @@ export const resetUserPassword = (id: string, newPassword: string) =>
   http.request<ApiEnvelope<any>>("post", `/api/v1/users/${id}/reset-password`, {
     data: { new_password: newPassword }
   });
+export const getUserZones = (id: string) =>
+  http.request<ApiEnvelope<UserZonesScope>>("get", `/api/v1/users/${id}/zones`);
+export const updateUserZones = (id: string, data: { all_zones_access: boolean; zone_ids: string[] }) =>
+  http.request<ApiEnvelope<UserZonesScope>>("put", `/api/v1/users/${id}/zones`, { data });
+
+// Governance: Audit Logs, Global Settings & System Health
+export const listAuditLogs = (params: Record<string, any>) =>
+  http.request<
+    ApiEnvelope<{ items: AuditLogItem[]; total: number; page: number; page_size: number }>
+  >("get", "/api/v1/audit-logs", { params });
+export const getPlatformSettings = () =>
+  http.request<ApiEnvelope<PlatformSettings>>("get", "/api/v1/settings");
+export const updatePlatformSettings = (data: PlatformSettings) =>
+  http.request<ApiEnvelope<PlatformSettings>>("put", "/api/v1/settings", { data });
+export const getSystemHealth = () =>
+  http.request<ApiEnvelope<SystemHealthPayload>>("get", "/api/v1/system/health");

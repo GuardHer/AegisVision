@@ -80,9 +80,12 @@ menus:
   aegisCameraConfig: 点位智能配置
   aegisSchedules: 布防排班模板
   aegisAlgorithms: 算法仓库
+  aegisDatasets: 误报样本集
   aegisNodes: 算力集群与任务
   aegisChannels: 联动通知通道
   aegisUsers: 用户与车间权限
+  aegisAuditLogs: 操作审计日志
+  aegisSettings: 系统配置与健康
 aegis:
   common:
     create: 新增
@@ -265,6 +268,17 @@ aegis:
     version: 版本号
     runtimeKey: Runtime 键
     defaultParams: 默认参数 (JSON)
+    hits30d: 近30日触发
+    confirmed30d: 确认违规
+    fp30d: 误报数
+    fpRate30d: 近30日误报率
+  datasets:
+    title: 误报样本回流与训练集导出
+    exportZip: 导出训练样本包 (ZIP)
+    empty: 暂无带抓拍图的误报样本
+    detectionsCount: 检测框数
+    allReasons: 全部误报原因
+    exportSuccess: 训练样本包导出成功
   nodes:
     nodesTab: 算力主机 (aegis-agent)
     tasksTab: 推理任务与租约
@@ -272,6 +286,12 @@ aegis:
     hostname: 主机名
     ipAddr: 内网 IP
     runtimeKeys: 可用 Runtime
+    telemetry: 主机资源监控
+    cpu: CPU
+    memory: 内存
+    gpu: GPU
+    vram: 显存
+    noGpuMetrics: 无 GPU 指标
     load: 负载
     lastHeartbeat: 最近心跳
     drain: 排水维护
@@ -280,16 +300,60 @@ aegis:
   channels:
     name: 通道名称
     type: 通道类型
-    url: Webhook URL
-    secret: HMAC 密钥
+    typeWebhook: 通用 Webhook
+    typeWecom: 企业微信机器人
+    typeDingtalk: 钉钉群机器人
+    typeSoundLight: 现场声光报警器
+    url: 目标 URL / Webhook
+    triggerUrl: 触发请求 URL
+    resetUrl: 复位消音 URL
+    autoResetSeconds: 自动复位时间 (秒)
+    secret: 签名密钥 (Secret)
     timeoutMs: 超时 (ms)
+    routing: 自动路由规则
+    autoRoute: 启用按车间/级别自动路由
+    autoRouteHint: 开启后，符合级别/区域/模式条件的告警将自动推送至该通道（不再需要逐条规则绑定）
+    severities: 匹配告警级别
+    zones: 匹配厂区/车间 (含下级)
+    ruleModes: 匹配规则模式
     test: 测试连通
+    reset: 现场消音/复位
+    resetQueued: 已下发声光消音复位指令
   users:
     username: 账号
     displayName: 显示名称
     role: 角色
     password: 密码
     resetPassword: 重置密码
+    workshopScope: 车间数据权限
+    allZonesAccess: 全厂访问权限
+    allZonesHint: 关闭后，该用户仅能查看与处置已勾选车间及其下级产线/工位的数据与实时视频
+    assignedZones: 授权车间/区域
+    scopeSaved: 车间权限已保存并实时生效
+  auditLogs:
+    title: 系统操作审计日志
+    actor: 操作人
+    action: 操作动作
+    resourceType: 资源类型
+    resourceId: 资源 ID
+    summary: 操作摘要
+    clientIp: 客户端 IP
+    requestId: 请求 ID
+    createdAt: 操作时间
+    detail: 脱敏详情 (JSON)
+  settings:
+    title: 平台全局配置与组件健康
+    platformConfig: 平台全局参数
+    platformTitle: 平台显示标题
+    defaultAlarmChime: 值班大屏默认开启告警提示音
+    popupMinSeverity: 实时告警弹窗最低级别
+    maxExportRows: 单次最大导出条数
+    defaultTimezone: 平台默认时区
+    saved: 系统设置已保存
+    systemHealth: 平台基础设施与组件健康状态
+    component: 组件
+    latency: 响应耗时
+    clusterSummary: 集群实时概况
 status:
   pureLoad: 加载中...
   pureMessage: 消息

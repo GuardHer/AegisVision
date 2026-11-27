@@ -131,10 +131,35 @@ onMounted(loadData);
                 </el-button>
               </div>
               <el-table :data="versionsByAlgo[row.id] ?? []" size="small" border>
-                <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="120" />
-                <el-table-column prop="runtime_key" :label="t('aegis.algorithms.runtimeKey')" width="180" />
-                <el-table-column prop="status" :label="t('aegis.common.status')" width="120" />
-                <el-table-column :label="t('aegis.common.actions')" width="140">
+                <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="110" />
+                <el-table-column prop="runtime_key" :label="t('aegis.algorithms.runtimeKey')" width="170" />
+                <el-table-column prop="status" :label="t('aegis.common.status')" width="100" />
+                <el-table-column :label="t('aegis.algorithms.hits30d')" width="100">
+                  <template #default="{ row: ver }">
+                    {{ ver.stats_30d?.total_alarms ?? 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('aegis.algorithms.confirmed30d')" width="100">
+                  <template #default="{ row: ver }">
+                    {{ ver.stats_30d?.confirmed_count ?? 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('aegis.algorithms.fp30d')" width="90">
+                  <template #default="{ row: ver }">
+                    {{ ver.stats_30d?.false_positive_count ?? 0 }}
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('aegis.algorithms.fpRate30d')" width="120">
+                  <template #default="{ row: ver }">
+                    <el-tag
+                      size="small"
+                      :type="(ver.stats_30d?.false_positive_rate ?? 0) > 25 ? 'danger' : (ver.stats_30d?.false_positive_rate ?? 0) > 10 ? 'warning' : 'success'"
+                    >
+                      {{ (ver.stats_30d?.false_positive_rate ?? 0).toFixed(1) }}%
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('aegis.common.actions')" width="120">
                   <template #default="{ row: ver }">
                     <el-button link type="primary" @click="toggleVersionStatus(ver)">
                       {{ ver.status === "active" ? "Deprecate" : "Activate" }}
