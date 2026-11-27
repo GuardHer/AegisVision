@@ -10,7 +10,7 @@
 | 组件 | 角色 | 默认内部端口 | 是否需对前端浏览器开放 |
 | :--- | :--- | :--- | :---: |
 | **`nginx`** | 前端静态页托管 + 统一反代 | `80` / `443` | ✅ 统一入口 |
-| **`mediamtx`** | RTSP 中继 & WebRTC 媒体 | `8554` (RTSP)、`8889` (WHEP)、`8189` (UDP/TCP Mux)、`9997` (Control API 仅内网) | 仅 `8189` (WebRTC 媒体流)；WHEP 信令可经 Nginx `/whep/` 反代；`8554` 仅对算力机开放 |
+| **`mediamtx`** | RTSP 中继 & WebRTC/LL-HLS 媒体 | `8554` (RTSP)、`8889` (WHEP)、`8888` (LL-HLS)、`8189` (UDP/TCP Mux)、`9997` (Control API 仅内网) | 仅 `8189` (WebRTC 媒体流)；WHEP/LL-HLS 均经 Nginx `/whep/`、`/hls/` 反代；`8554` 仅对算力机开放 |
 | **`aegis-api`** | 控制面 REST API / RBAC / 鉴权 / 证据代理 | `8081` | ❌（经 Nginx `/api/` 反代） |
 | **`aegis-ws`** | 浏览器 WebSocket 实时推送网关 | `8082` | ❌（经 Nginx `/ws/` 反代） |
 | **`aegis-ingest`** | Agent 主动 gRPC 接入 + 规则引擎 | `9090` (gRPC) | 仅对算力机 `aegis-agent` 开放 |
@@ -31,7 +31,7 @@
 
 ## 2. Nginx 统一配置规范（前后端完全分离）
 
-Nginx 承担四项核心职责：① 托管 `Vue Pure Admin` 构建产物 `dist/`；② 反代 `/api/` 至 `aegis-api` 集群；③ 反代 `/ws/` 至 `aegis-ws` 集群（透传 WebSocket Upgrade）；④ 反代 `/whep/` 至 MediaMTX（以及按需终结 HTTPS/WSS）。
+Nginx 承担四项核心职责：① 托管 `Vue Pure Admin` 构建产物 `dist/`；② 反代 `/api/` 至 `aegis-api` 集群；③ 反代 `/ws/` 至 `aegis-ws` 集群（透传 WebSocket Upgrade）；④ 反代 `/whep/` 与 `/hls/` 至 MediaMTX（以及按需终结 HTTPS/WSS）。
 
 关键配置约定：
 ```nginx
@@ -87,6 +87,15 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
+
+    # MediaMTX LL-HLS (fMP4) 兼容防抖预览反代
+    location /hls/ {
+        proxy_pass http://mediamtx:8888/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_buffering off;
+    }
 }
 ```
 > 注意：若内网启用 HTTPS/WSS，只需在此 `server` 块配内部 CA 证书开启 `listen 443 ssl`，后端 Go 进程、MediaMTX 与前端代码均零修改。
@@ -95,14 +104,13 @@ server {
 
 ## 3. MediaMTX 关键配置规范
 
-- **Control API**：开启 `api: yes`（仅绑定内网 `9997`），由 `aegis-scheduler` 自动同步摄像头路径（主码流 `cam_<id>`、可选子码流 `cam_<id>_sub`）。
-- **低延迟 WebRTC**：
-  - 开启 `webrtc: yes`、`webrtcAddress: :8889`
-  - 单端口复用 `webrtcLocalUDPAddress: :8189` + TCP 兜底 `webrtcLocalTCPAddress: :8189`
-  - 配置 `webrtcAdditionalHosts: [<平台内网固定IP>]`，确保跨 VLAN/NAT 内网浏览器稳定建连。
+- **Control API**：开启 `api: yes`（仅绑定内网 `9997`），由 `aegis-scheduler` 自动同步摄像头路径（主码流 `cam_<id>`、可选子码流 `cam_<id>_sub`，并默认下发 `rtspTransport: tcp` 防止拉源丢包）。
+- **低延迟 WebRTC + LL-HLS 双协议预览**：
+  - WebRTC 默认极速模式：开启 `webrtc: yes`、`webrtcAddress: :8889`，单端口复用 `webrtcLocalUDPAddress: :8189` + TCP 兜底 `webrtcLocalTCPAddress: :8189`，配置 `webrtcAdditionalHosts: [<平台内网固定IP>]`。
+  - LL-HLS 防抖兼容模式：开启 `hls: yes`、`hlsAddress: :8888`、`hlsVariant: lowLatency`（纯内存 fMP4 封装、零转码、`hlsPartDuration: 200ms`），供含 H.264 B 帧或 H.265 的存量摄像头在前端一键切换防抖播放。
 - **外部统一鉴权**：
   - 配置 `authMethod: http`、`authHTTPAddress: http://aegis-api:8081/internal/mediamtx/auth`
-  - 区分前端 WebRTC 播放 Token（`stream:play:<token>`）与 Runtime 授权 RTSP 拉流 Token（`stream:pull:<token>`），未授权请求一律拒绝。
+  - 区分前端 WebRTC/LL-HLS 播放 Token（`stream:play:<token>`）与 Runtime 授权 RTSP 拉流 Token（`stream:pull:<token>`），未授权请求一律拒绝。
 - **短期环形录像缓冲（支持报警前 5 秒短视频证据）**：
   - 对于开启 `record_video=true` 的摄像头，在 MediaMTX 对应路径启用极轻量的短期分段录像（如 `recordFormat: fmp4`、`recordSegmentDuration: 5s`、`recordDeleteAfter: 2m`，直接写内存盘/临时盘），使 `aegis-dispatcher` 在报警发生后可通过 `ffmpeg -c copy` 极速无损拼出“报警前 N 秒 + 报警后 M 秒”的 MP4 证据上传至 S3，CPU 开销接近于零。
 

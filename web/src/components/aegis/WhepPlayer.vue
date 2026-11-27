@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import Hls from "hls.js";
 import { createStreamToken } from "@/api/aegis";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 import Close from "~icons/ep/close";
@@ -18,6 +19,9 @@ import FullscreenFill from "~icons/ri/fullscreen-fill";
 import FullscreenExitFill from "~icons/ri/fullscreen-exit-fill";
 
 export type PlayerState = "connecting" | "playing" | "reconnecting" | "paused" | "error";
+export type PlaybackMode = "webrtc" | "hls";
+
+const MODE_STORAGE_PREFIX = "aegis:player-mode:";
 
 const IconClose = useRenderIcon(Close);
 const IconRefresh = useRenderIcon(Refresh);
@@ -39,6 +43,7 @@ const props = withDefaults(
     cameraName?: string;
     workstationCode?: string;
     stream?: "main" | "sub";
+    mode?: PlaybackMode;
     autoConnect?: boolean;
     showOverlay?: boolean;
     controls?: "full" | "minimal" | "none";
@@ -49,6 +54,7 @@ const props = withDefaults(
     cameraName: "",
     workstationCode: "",
     stream: "main",
+    mode: undefined,
     autoConnect: true,
     showOverlay: true,
     controls: "full",
@@ -61,6 +67,7 @@ const emit = defineEmits<{
   (e: "video-resize", size: { width: number; height: number }): void;
   (e: "state-change", state: PlayerState): void;
   (e: "update:stream", stream: "main" | "sub"): void;
+  (e: "update:mode", mode: PlaybackMode): void;
   (e: "update:showOverlay", visible: boolean): void;
   (e: "snapshot", video: HTMLVideoElement | null): void;
   (e: "close"): void;
@@ -70,6 +77,27 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const rootRef = ref<HTMLElement | null>(null);
 const videoRef = ref<HTMLVideoElement | null>(null);
+
+function loadSavedMode(camId: string): PlaybackMode {
+  if (!camId || typeof localStorage === "undefined") return "webrtc";
+  try {
+    return localStorage.getItem(MODE_STORAGE_PREFIX + camId) === "hls" ? "hls" : "webrtc";
+  } catch {
+    return "webrtc";
+  }
+}
+
+function saveMode(camId: string, mode: PlaybackMode) {
+  if (!camId || typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(MODE_STORAGE_PREFIX + camId, mode);
+  } catch {
+    // Ignore storage quota / private mode errors
+  }
+}
+
+const localMode = ref<PlaybackMode>(props.mode ?? loadSavedMode(props.cameraId));
+const activeMode = computed<PlaybackMode>(() => props.mode ?? localMode.value);
 
 const status = ref<PlayerState>("connecting");
 const lastError = ref("");
@@ -97,6 +125,9 @@ const pipSupported = computed(
 );
 
 let pc: RTCPeerConnection | null = null;
+let hlsInstance: Hls | null = null;
+let activeHlsToken = "";
+let hlsTokenTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let statsTimer: ReturnType<typeof setInterval> | null = null;
@@ -106,6 +137,7 @@ let prevStatsTs = 0;
 let lastVideoWidth = 0;
 let lastVideoHeight = 0;
 let backoffMs = 2000;
+let hlsMediaRecoveries = 0;
 let unmounted = false;
 
 const videoStyle = computed(() => {
@@ -115,6 +147,21 @@ const videoStyle = computed(() => {
     cursor: dragging.value ? "grabbing" : "grab"
   };
 });
+
+function withStreamToken(rawUrl: string, token: string): string {
+  if (!token) return rawUrl;
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "http://localhost";
+    const parsed = new URL(rawUrl, base);
+    parsed.searchParams.set("token", token);
+    if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+      return parsed.toString();
+    }
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return rawUrl;
+  }
+}
 
 function setStatus(next: PlayerState) {
   if (status.value === next) return;
@@ -138,27 +185,63 @@ function stopTimers() {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
+  if (hlsTokenTimer) {
+    clearInterval(hlsTokenTimer);
+    hlsTokenTimer = null;
+  }
   stopStatsPolling();
 }
 
-function cleanupPeer() {
+function cleanupMedia() {
   stopTimers();
   prevBytes = 0;
   prevStatsTs = 0;
   retryCountdown.value = 0;
+  activeHlsToken = "";
+  hlsMediaRecoveries = 0;
+
   if (pc) {
     pc.oniceconnectionstatechange = null;
     pc.ontrack = null;
     pc.close();
     pc = null;
   }
+  if (hlsInstance) {
+    hlsInstance.destroy();
+    hlsInstance = null;
+  }
   if (videoRef.value) {
     videoRef.value.srcObject = null;
+    if (videoRef.value.hasAttribute("src")) {
+      videoRef.value.removeAttribute("src");
+      videoRef.value.load();
+    }
   }
 }
 
-async function pollStatsOnce(peer: RTCPeerConnection) {
-  if (!pc || pc !== peer || unmounted || !showStats.value) return;
+async function pollStatsOnce() {
+  if (unmounted || !showStats.value) return;
+
+  if (activeMode.value === "hls") {
+    const hls = hlsInstance;
+    if (hls) {
+      if (typeof hls.bandwidthEstimate === "number" && Number.isFinite(hls.bandwidthEstimate)) {
+        telemetry.bitrateKbps = Math.round(hls.bandwidthEstimate / 1000);
+      }
+      if (typeof hls.latency === "number" && Number.isFinite(hls.latency)) {
+        telemetry.rttMs = Math.round(hls.latency * 1000);
+      }
+    }
+    const v = videoRef.value;
+    if (v && v.videoWidth > 0) {
+      telemetry.width = v.videoWidth;
+      telemetry.height = v.videoHeight;
+    }
+    return;
+  }
+
+  const peer = pc;
+  if (!peer) return;
   try {
     const report = await peer.getStats();
     report.forEach((stat: any) => {
@@ -195,11 +278,12 @@ async function pollStatsOnce(peer: RTCPeerConnection) {
 
 function syncStatsPolling() {
   stopStatsPolling();
-  if (!showStats.value || !pc || unmounted) return;
-  const peer = pc;
-  void pollStatsOnce(peer);
+  if (!showStats.value || unmounted) return;
+  if (activeMode.value === "webrtc" && !pc) return;
+  if (activeMode.value === "hls" && !hlsInstance) return;
+  void pollStatsOnce();
   statsTimer = setInterval(() => {
-    void pollStatsOnce(peer);
+    void pollStatsOnce();
   }, 2000);
 }
 
@@ -220,8 +304,153 @@ function scheduleReconnect() {
   }, delay);
 }
 
+async function refreshHlsToken(): Promise<boolean> {
+  if (unmounted || !props.cameraId || activeMode.value !== "hls") return false;
+  try {
+    const resp = await createStreamToken(props.cameraId, props.stream);
+    const nextToken = resp?.data?.token;
+    if (nextToken) {
+      activeHlsToken = nextToken;
+      return true;
+    }
+  } catch {
+    // Let hls.js error handler trigger reconnect if auth fails
+  }
+  return false;
+}
+
+async function connectWebRTC(whepUrl: string) {
+  const peer = new RTCPeerConnection({ iceServers: [] });
+  pc = peer;
+  peer.addTransceiver("video", { direction: "recvonly" });
+
+  peer.ontrack = evt => {
+    const stream = evt.streams[0];
+    if (videoRef.value && stream && videoRef.value.srcObject !== stream) {
+      videoRef.value.srcObject = stream;
+      videoRef.value.muted = isMuted.value;
+      void videoRef.value.play().catch(() => {});
+    }
+  };
+
+  peer.oniceconnectionstatechange = () => {
+    if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
+      backoffMs = 2000;
+      lastError.value = "";
+      setStatus(isPaused.value ? "paused" : "playing");
+      syncStatsPolling();
+    } else if (
+      peer.iceConnectionState === "failed" ||
+      peer.iceConnectionState === "disconnected"
+    ) {
+      lastError.value = `ICE ${peer.iceConnectionState}`;
+      scheduleReconnect();
+    }
+  };
+
+  const offer = await peer.createOffer();
+  await peer.setLocalDescription(offer);
+
+  const resp = await fetch(whepUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/sdp" },
+    body: offer.sdp
+  });
+  if (!resp.ok) {
+    throw new Error(`WHEP HTTP ${resp.status}`);
+  }
+  const answerSdp = await resp.text();
+  await peer.setRemoteDescription({ type: "answer", sdp: answerSdp });
+}
+
+function connectHLS(hlsUrl: string, token: string, expiresInSec: number) {
+  const video = videoRef.value;
+  if (!video) return;
+
+  activeHlsToken = token;
+  const refreshMs = Math.max(15, (expiresInSec || 60) - 15) * 1000;
+  hlsTokenTimer = setInterval(() => {
+    void refreshHlsToken();
+  }, refreshMs);
+
+  if (Hls.isSupported()) {
+    const BaseLoader = Hls.DefaultConfig.loader;
+    class TokenizedHlsLoader extends BaseLoader {
+      override load(context: any, config: any, callbacks: any) {
+        if (context?.url && activeHlsToken) {
+          context.url = withStreamToken(context.url, activeHlsToken);
+        }
+        super.load(context, config, callbacks);
+      }
+    }
+
+    const hls = new Hls({
+      lowLatencyMode: true,
+      liveSyncDurationCount: 2,
+      liveMaxLatencyDurationCount: 5,
+      maxLiveSyncPlaybackRate: 1.5,
+      backBufferLength: 10,
+      enableWorker: true,
+      loader: TokenizedHlsLoader as any
+    });
+    hlsInstance = hls;
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (unmounted) return;
+      backoffMs = 2000;
+      lastError.value = "";
+      video.muted = isMuted.value;
+      void video.play().catch(() => {});
+      setStatus(isPaused.value ? "paused" : "playing");
+      syncStatsPolling();
+    });
+
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (unmounted || !data.fatal) return;
+      const code = data.response?.code;
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && (code === 401 || code === 403)) {
+        void refreshHlsToken().then(ok => {
+          if (ok && hlsInstance === hls && !unmounted) {
+            hls.startLoad();
+          } else {
+            lastError.value = `LL-HLS HTTP ${code}`;
+            setStatus("error");
+            scheduleReconnect();
+          }
+        });
+        return;
+      }
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR && hlsMediaRecoveries < 2) {
+        hlsMediaRecoveries += 1;
+        hls.recoverMediaError();
+        return;
+      }
+      lastError.value = code
+        ? `LL-HLS HTTP ${code}`
+        : data.details || "LL-HLS playback failed";
+      setStatus("error");
+      scheduleReconnect();
+    });
+
+    hls.loadSource(withStreamToken(hlsUrl, activeHlsToken));
+    hls.attachMedia(video);
+    return;
+  }
+
+  // Safari native LL-HLS fallback
+  if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    video.src = withStreamToken(hlsUrl, activeHlsToken);
+    video.muted = isMuted.value;
+    void video.play().catch(() => {});
+    setStatus("playing");
+    return;
+  }
+
+  throw new Error("LL-HLS (MSE) not supported in this browser");
+}
+
 async function connect() {
-  cleanupPeer();
+  cleanupMedia();
   if (!props.cameraId || unmounted) return;
 
   isPaused.value = false;
@@ -230,52 +459,24 @@ async function connect() {
 
   try {
     const tokenResp = await createStreamToken(props.cameraId, props.stream);
-    const whepUrl = tokenResp?.data?.whep_url;
-    if (!whepUrl) {
-      throw new Error("missing whep_url");
-    }
+    if (unmounted) return;
+    const data = tokenResp?.data;
 
-    const peer = new RTCPeerConnection({ iceServers: [] });
-    pc = peer;
-    peer.addTransceiver("video", { direction: "recvonly" });
-
-    peer.ontrack = evt => {
-      const stream = evt.streams[0];
-      if (videoRef.value && stream && videoRef.value.srcObject !== stream) {
-        videoRef.value.srcObject = stream;
-        videoRef.value.muted = isMuted.value;
-        void videoRef.value.play().catch(() => {});
+    if (activeMode.value === "hls") {
+      const hlsUrl =
+        data?.hls_url ||
+        (data?.stream_path ? `/hls/${data.stream_path}/index.m3u8` : "");
+      if (!hlsUrl) {
+        throw new Error("missing hls_url");
       }
-    };
-
-    peer.oniceconnectionstatechange = () => {
-      if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
-        backoffMs = 2000;
-        lastError.value = "";
-        setStatus(isPaused.value ? "paused" : "playing");
-        syncStatsPolling();
-      } else if (
-        peer.iceConnectionState === "failed" ||
-        peer.iceConnectionState === "disconnected"
-      ) {
-        lastError.value = `ICE ${peer.iceConnectionState}`;
-        scheduleReconnect();
+      connectHLS(hlsUrl, data?.token || "", data?.expires_in || 60);
+    } else {
+      const whepUrl = data?.whep_url;
+      if (!whepUrl) {
+        throw new Error("missing whep_url");
       }
-    };
-
-    const offer = await peer.createOffer();
-    await peer.setLocalDescription(offer);
-
-    const resp = await fetch(whepUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/sdp" },
-      body: offer.sdp
-    });
-    if (!resp.ok) {
-      throw new Error(`WHEP HTTP ${resp.status}`);
+      await connectWebRTC(whepUrl);
     }
-    const answerSdp = await resp.text();
-    await peer.setRemoteDescription({ type: "answer", sdp: answerSdp });
   } catch (err: any) {
     lastError.value = err?.message || "Stream handshake failed";
     setStatus("error");
@@ -311,6 +512,13 @@ function toggleMute() {
 
 function toggleStream() {
   emit("update:stream", props.stream === "main" ? "sub" : "main");
+}
+
+function toggleMode() {
+  const next: PlaybackMode = activeMode.value === "webrtc" ? "hls" : "webrtc";
+  localMode.value = next;
+  saveMode(props.cameraId, next);
+  emit("update:mode", next);
 }
 
 function cycleZoom() {
@@ -412,7 +620,6 @@ function onDoubleClick() {
 
 function updateCompactByWidth(w: number) {
   if (w <= 0) return;
-  // Hysteresis band (300..340px) prevents threshold oscillation
   if (w < 300 && !isCompact.value) {
     isCompact.value = true;
   } else if (w > 340 && isCompact.value) {
@@ -425,9 +632,18 @@ watch(showStats, () => {
 });
 
 watch(
-  [() => props.cameraId, () => props.stream],
-  ([newId, newStream], [oldId, oldStream]) => {
-    if (newId === oldId && newStream === oldStream) return;
+  () => props.cameraId,
+  newId => {
+    if (props.mode === undefined) {
+      localMode.value = loadSavedMode(newId);
+    }
+  }
+);
+
+watch(
+  [() => props.cameraId, () => props.stream, activeMode],
+  ([newId, newStream, newMode], [oldId, oldStream, oldMode]) => {
+    if (newId === oldId && newStream === oldStream && newMode === oldMode) return;
     backoffMs = 2000;
     lastVideoWidth = 0;
     lastVideoHeight = 0;
@@ -463,12 +679,13 @@ onBeforeUnmount(() => {
     rootResizeObserver.disconnect();
     rootResizeObserver = null;
   }
-  cleanupPeer();
+  cleanupMedia();
 });
 
 defineExpose({
   connect: manualReconnect,
   togglePause,
+  toggleMode,
   resetZoom,
   videoRef
 });
@@ -526,6 +743,9 @@ defineExpose({
         <span v-else-if="status === 'paused'" class="aegis-whep-paused-tag">
           {{ t("aegis.player.paused") }}
         </span>
+        <span v-if="activeMode === 'hls'" class="aegis-whep-mode-tag">
+          HLS
+        </span>
         <span v-if="zoom > 1" class="aegis-whep-zoom-tag">
           {{ zoom.toFixed(1) }}×
         </span>
@@ -545,7 +765,7 @@ defineExpose({
       </div>
     </div>
 
-    <!-- Live Stream Telemetry HUD (WebRTC getStats) -->
+    <!-- Live Stream Telemetry HUD -->
     <div
       v-if="showStats && controls !== 'none'"
       class="aegis-whep-stats aegis-tabular"
@@ -643,6 +863,19 @@ defineExpose({
           @click="toggleStream"
         >
           {{ stream === "main" ? "HD" : "SD" }}
+        </el-button>
+
+        <!-- Transport Mode Switch (RTC / HLS for B-frame compatibility) -->
+        <el-button
+          size="small"
+          round
+          class="aegis-hud-btn aegis-hud-pill"
+          :class="{ 'is-active': activeMode === 'hls' }"
+          :title="activeMode === 'hls' ? t('aegis.player.modeHls') : t('aegis.player.modeWebrtc')"
+          data-test="player-mode-toggle"
+          @click="toggleMode"
+        >
+          {{ activeMode === "hls" ? "HLS" : "RTC" }}
         </el-button>
       </div>
 
@@ -827,6 +1060,7 @@ defineExpose({
 
 .aegis-whep-live-tag,
 .aegis-whep-paused-tag,
+.aegis-whep-mode-tag,
 .aegis-whep-zoom-tag {
   font-size: 10px;
   font-weight: 600;
@@ -843,6 +1077,11 @@ defineExpose({
 
 .aegis-whep-paused-tag {
   background: rgb(2 132 199 / 85%);
+  color: #fff;
+}
+
+.aegis-whep-mode-tag {
+  background: rgb(37 99 235 / 85%);
   color: #fff;
 }
 

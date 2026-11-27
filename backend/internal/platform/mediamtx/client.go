@@ -24,6 +24,7 @@ type Client struct {
 	apiURL      string
 	rtspBaseURL string
 	whepBaseURL string
+	hlsBaseURL  string
 	httpClient  *http.Client
 }
 
@@ -36,13 +37,23 @@ func New(apiURL, rtspBaseURL, whepBaseURL string, httpClient *http.Client) *Clie
 		apiURL:      strings.TrimRight(apiURL, "/"),
 		rtspBaseURL: strings.TrimRight(rtspBaseURL, "/"),
 		whepBaseURL: strings.TrimRight(whepBaseURL, "/"),
+		hlsBaseURL:  "/hls",
 		httpClient:  httpClient,
 	}
+}
+
+// WithHLSBaseURL overrides the Nginx-proxied LL-HLS base URL prefix (defaults to "/hls").
+func (c *Client) WithHLSBaseURL(hlsBaseURL string) *Client {
+	if trimmed := strings.TrimRight(strings.TrimSpace(hlsBaseURL), "/"); trimmed != "" {
+		c.hlsBaseURL = trimmed
+	}
+	return c
 }
 
 type pathConfigPayload struct {
 	Source                string `json:"source"`
 	SourceOnDemand        bool   `json:"sourceOnDemand"`
+	RTSPTransport         string `json:"rtspTransport,omitempty"`
 	Record                bool   `json:"record"`
 	RecordFormat          string `json:"recordFormat,omitempty"`
 	RecordSegmentDuration string `json:"recordSegmentDuration,omitempty"`
@@ -54,6 +65,7 @@ func (c *Client) UpsertPath(ctx context.Context, spec PathSpec) error {
 	payload := pathConfigPayload{
 		Source:         spec.SourceURL,
 		SourceOnDemand: false,
+		RTSPTransport:  "tcp",
 		Record:         spec.RecordVideo,
 	}
 	if spec.RecordVideo {
@@ -130,6 +142,19 @@ func (c *Client) BuildAuthorizedRTSPURL(streamPath, token string) string {
 // BuildWHEPPath returns the Nginx-proxied WebRTC WHEP endpoint carrying a short-lived play token.
 func (c *Client) BuildWHEPPath(streamPath, token string) string {
 	base := fmt.Sprintf("%s/%s/whep", c.whepBaseURL, strings.TrimLeft(streamPath, "/"))
+	if token == "" {
+		return base
+	}
+	return fmt.Sprintf("%s?token=%s", base, url.QueryEscape(token))
+}
+
+// BuildHLSPath returns the Nginx-proxied LL-HLS (fMP4) playlist endpoint carrying a short-lived play token.
+func (c *Client) BuildHLSPath(streamPath, token string) string {
+	prefix := c.hlsBaseURL
+	if prefix == "" {
+		prefix = "/hls"
+	}
+	base := fmt.Sprintf("%s/%s/index.m3u8", prefix, strings.TrimLeft(streamPath, "/"))
 	if token == "" {
 		return base
 	}

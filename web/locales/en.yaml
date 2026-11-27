@@ -170,6 +170,8 @@ aegis:
     unmute: Unmute
     mainStream: Main Stream (HD)
     subStream: Sub Stream (SD)
+    modeWebrtc: WebRTC Ultra-Low Latency (click for LL-HLS B-frame safe mode)
+    modeHls: LL-HLS Anti-Jitter Mode (B-frame safe, click for WebRTC)
     zoomIn: Digital Zoom
     zoomReset: Reset Zoom
     overlayToggle: AI Overlay

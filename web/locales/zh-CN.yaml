@@ -170,6 +170,8 @@ aegis:
     unmute: 开启声音
     mainStream: 主码流 (高清)
     subStream: 子码流 (流畅)
+    modeWebrtc: WebRTC 极速模式（点击切换 LL-HLS 防抖兼容）
+    modeHls: LL-HLS 防抖模式（支持 B 帧，点击切换 WebRTC 极速）
     zoomIn: 电子放大
     zoomReset: 复位缩放
     overlayToggle: AI 检测叠加

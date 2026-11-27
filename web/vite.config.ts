@@ -38,6 +38,11 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
           target: process.env.VITE_WHEP_PROXY_TARGET || "http://127.0.0.1:8889",
           changeOrigin: true,
           rewrite: path => path.replace(/^\/whep/, "")
+        },
+        "/hls": {
+          target: process.env.VITE_HLS_PROXY_TARGET || "http://127.0.0.1:8888",
+          changeOrigin: true,
+          rewrite: path => path.replace(/^\/hls/, "")
         }
       },
       // 预热文件以提前转换和缓存结果，降低启动期间的初始页面加载时长并防止转换瀑布

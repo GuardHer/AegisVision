@@ -100,6 +100,7 @@ type MediaMTXConfig struct {
 	APIURL        string `yaml:"api_url"`
 	RTSPBaseURL   string `yaml:"rtsp_base_url"`
 	WHEPBaseURL   string `yaml:"whep_base_url"`
+	HLSBaseURL    string `yaml:"hls_base_url"`
 	RecordingsDir string `yaml:"recordings_dir"`
 }
 
@@ -169,6 +170,7 @@ func Default() *Config {
 			APIURL:      "http://127.0.0.1:9997",
 			RTSPBaseURL: "rtsp://127.0.0.1:8554",
 			WHEPBaseURL: "/whep",
+			HLSBaseURL:  "/hls",
 		},
 		Auth: AuthConfig{
 			AccessTokenTTL:  2 * time.Hour,
@@ -248,6 +250,7 @@ func applyEnvOverrides(cfg *Config) {
 	overrideString("AEGIS_MEDIAMTX_API_URL", &cfg.MediaMTX.APIURL)
 	overrideString("AEGIS_MEDIAMTX_RTSP_BASE_URL", &cfg.MediaMTX.RTSPBaseURL)
 	overrideString("AEGIS_MEDIAMTX_WHEP_BASE_URL", &cfg.MediaMTX.WHEPBaseURL)
+	overrideString("AEGIS_MEDIAMTX_HLS_BASE_URL", &cfg.MediaMTX.HLSBaseURL)
 	overrideString("AEGIS_MEDIAMTX_RECORDINGS_DIR", &cfg.MediaMTX.RecordingsDir)
 
 	overrideString("AEGIS_JWT_SECRET", &cfg.Auth.JWTSecret)

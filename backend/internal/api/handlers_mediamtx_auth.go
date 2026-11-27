@@ -77,7 +77,7 @@ func extractQueryToken(rawQuery string) string {
 
 func tokenKindsForProtocol(protocol string) []string {
 	switch strings.ToLower(strings.TrimSpace(protocol)) {
-	case "webrtc":
+	case "webrtc", "hls":
 		return []string{platformredis.StreamTokenKindPlay}
 	case "rtsp":
 		return []string{platformredis.StreamTokenKindPull}

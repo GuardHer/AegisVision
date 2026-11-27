@@ -554,14 +554,17 @@ func (h *CamerasHandler) CreateStreamToken(c *gin.Context) {
 	}
 
 	whepURL := "/whep/" + streamPath + "/whep?token=" + tok
+	hlsURL := "/hls/" + streamPath + "/index.m3u8?token=" + tok
 	if h.mediamtx != nil {
 		whepURL = h.mediamtx.BuildWHEPPath(streamPath, tok)
+		hlsURL = h.mediamtx.BuildHLSPath(streamPath, tok)
 	}
 
 	respondOK(c, gin.H{
 		"token":       tok,
 		"stream_path": streamPath,
 		"whep_url":    whepURL,
+		"hls_url":     hlsURL,
 		"expires_in":  int(streamPlayTokenTTL.Seconds()),
 	})
 }
