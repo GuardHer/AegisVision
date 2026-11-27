@@ -7,21 +7,24 @@ SELECT
     COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND handle_status = 'false_positive')::bigint AS today_false_positive,
     COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND handle_status IN ('confirmed', 'false_positive', 'ignored'))::bigint AS today_handled,
     COUNT(*) FILTER (WHERE triggered_at >= sqlc.arg('today_start') AND triggered_at < sqlc.arg('tomorrow_start') AND rule_mode = 'sop_sequence')::bigint AS today_sop_violations
-FROM alarms;
+FROM alarms
+WHERE (sqlc.narg('zone_ids')::uuid[] IS NULL OR zone_id = ANY(sqlc.narg('zone_ids')::uuid[]));
 
 -- name: GetDashboardSOPCycleCounts :one
 SELECT
     COUNT(*) FILTER (WHERE outcome = 'compliant')::bigint AS compliant_count,
     COUNT(*) FILTER (WHERE outcome = 'violated')::bigint AS violated_count
 FROM sop_cycles
-WHERE ended_at >= sqlc.arg('since_time');
+WHERE ended_at >= sqlc.arg('since_time')
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR zone_id = ANY(sqlc.narg('zone_ids')::uuid[]));
 
 -- name: GetDashboardCameraHealth :one
 SELECT
     COUNT(*)::bigint AS total_count,
     COUNT(*) FILTER (WHERE status = 'online')::bigint AS online_count
 FROM cameras
-WHERE enabled = TRUE;
+WHERE enabled = TRUE
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR zone_id = ANY(sqlc.narg('zone_ids')::uuid[]));
 
 -- name: GetDashboardNodeHealth :one
 SELECT
@@ -37,6 +40,7 @@ SELECT
     COUNT(*) FILTER (WHERE rule_mode = 'sop_sequence')::bigint AS sop_count
 FROM alarms
 WHERE triggered_at >= sqlc.arg('since_time')
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR zone_id = ANY(sqlc.narg('zone_ids')::uuid[]))
 GROUP BY (triggered_at AT TIME ZONE sqlc.arg('tz')::text)::date
 ORDER BY (triggered_at AT TIME ZONE sqlc.arg('tz')::text)::date ASC;
 
@@ -48,6 +52,7 @@ SELECT
 FROM alarms a
 LEFT JOIN zones z ON z.id = a.zone_id
 WHERE a.triggered_at >= sqlc.arg('since_time')
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR a.zone_id = ANY(sqlc.narg('zone_ids')::uuid[]))
 GROUP BY a.zone_id, z.name
 ORDER BY alarm_count DESC
 LIMIT 10;
@@ -58,6 +63,7 @@ SELECT
     COUNT(*)::bigint AS count
 FROM alarms
 WHERE triggered_at >= sqlc.arg('since_time')
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR zone_id = ANY(sqlc.narg('zone_ids')::uuid[]))
 GROUP BY rule_mode
 ORDER BY count DESC;
 
@@ -79,5 +85,6 @@ LEFT JOIN cameras c ON c.id = a.camera_id
 LEFT JOIN zones z ON z.id = a.zone_id
 WHERE a.handle_status = 'unhandled'
   AND a.severity IN ('critical', 'warning')
+  AND (sqlc.narg('zone_ids')::uuid[] IS NULL OR a.zone_id = ANY(sqlc.narg('zone_ids')::uuid[]))
 ORDER BY a.triggered_at DESC
 LIMIT 10;

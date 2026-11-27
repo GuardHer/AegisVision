@@ -281,7 +281,7 @@ func (q *Queries) StopInferenceTask(ctx context.Context, id uuid.UUID) error {
 const updateAgentNodeHeartbeat = `-- name: UpdateAgentNodeHeartbeat :exec
 UPDATE agent_nodes
 SET running_tasks = $2,
-    meta = $3,
+    meta = COALESCE(agent_nodes.meta, '{}'::jsonb) || $3::jsonb,
     status = CASE WHEN status = 'offline' THEN 'online' ELSE status END,
     last_heartbeat_at = NOW(),
     updated_at = NOW()

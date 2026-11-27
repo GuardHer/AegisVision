@@ -106,6 +106,18 @@ func (c *Client) DeletePath(ctx context.Context, streamPath string) error {
 	return fmt.Errorf("mediamtx delete path %q returned %d: %s", streamPath, status, respBody)
 }
 
+// Ping checks whether the MediaMTX Control API v3 is reachable.
+func (c *Client) Ping(ctx context.Context) error {
+	status, respBody, err := c.doJSON(ctx, http.MethodGet, c.apiURL+"/v3/paths/list", nil)
+	if err != nil {
+		return err
+	}
+	if status >= 200 && status < 300 {
+		return nil
+	}
+	return fmt.Errorf("mediamtx ping returned %d: %s", status, respBody)
+}
+
 // BuildAuthorizedRTSPURL returns the low-latency internal RTSP URL carrying a short-lived pull token.
 func (c *Client) BuildAuthorizedRTSPURL(streamPath, token string) string {
 	base := fmt.Sprintf("%s/%s", c.rtspBaseURL, strings.TrimLeft(streamPath, "/"))

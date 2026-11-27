@@ -67,9 +67,34 @@ func doAPIReq(t *testing.T, r http.Handler, method, path, bearer string, body an
 	return w
 }
 
+func seedTestUserToken(t *testing.T, store *postgres.Store, tokens *auth.TokenManager, role string) (uuid.UUID, string) {
+	t.Helper()
+	uid := uuid.Must(uuid.NewV7())
+	uname := "test_" + role + "_" + uid.String()[24:]
+	_, err := store.Queries().CreateUser(context.Background(), sqlcgen.CreateUserParams{
+		ID:           uid,
+		Username:     uname,
+		PasswordHash: "hash",
+		DisplayName:  uname,
+		Role:         role,
+		Enabled:      true,
+	})
+	if err != nil {
+		t.Fatalf("seedTestUserToken(%s): %v", role, err)
+	}
+	t.Cleanup(func() {
+		_ = store.Queries().DeleteUser(context.Background(), uid)
+	})
+	tok, _, _, err := tokens.IssueAccessToken(uid.String(), uname, role)
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+	return uid, tok
+}
+
 func TestZonesTreeHierarchyDeleteGuardAndCameraBatchImport(t *testing.T) {
 	router, store, tokens := setupEnterpriseAPITest(t)
-	adminTok, _, _, _ := tokens.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "admin", domain.RoleAdmin)
+	_, adminTok := seedTestUserToken(t, store, tokens, domain.RoleAdmin)
 
 	var createdZones []uuid.UUID
 	var createdCams []uuid.UUID

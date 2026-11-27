@@ -198,6 +198,7 @@ func (h *SchedulesHandler) Create(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "schedule", "created", created.ID.String())
+	recordAudit(c, h.store, h.log, "schedule.create", "schedule", created.ID.String(), "Created arming schedule "+created.Name, map[string]any{"timezone": created.Timezone})
 	respondCreated(c, created)
 }
 
@@ -238,6 +239,7 @@ func (h *SchedulesHandler) Update(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "schedule", "updated", updated.ID.String())
+	recordAudit(c, h.store, h.log, "schedule.update", "schedule", updated.ID.String(), "Updated arming schedule "+updated.Name, map[string]any{"timezone": updated.Timezone, "enabled": updated.Enabled})
 	respondOK(c, updated)
 }
 
@@ -271,5 +273,6 @@ func (h *SchedulesHandler) Delete(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(ctx, h.pub, h.log, "schedule", "deleted", id.String())
+	recordAudit(c, h.store, h.log, "schedule.delete", "schedule", id.String(), "Deleted arming schedule", nil)
 	respondOK(c, gin.H{"deleted": true})
 }

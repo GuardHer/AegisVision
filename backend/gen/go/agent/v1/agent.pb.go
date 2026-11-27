@@ -589,6 +589,8 @@ type HostMetrics struct {
 	MemoryPercent    float32                `protobuf:"fixed32,2,opt,name=memory_percent,json=memoryPercent,proto3" json:"memory_percent,omitempty"`
 	GpuPercent       float32                `protobuf:"fixed32,3,opt,name=gpu_percent,json=gpuPercent,proto3" json:"gpu_percent,omitempty"`
 	GpuMemoryPercent float32                `protobuf:"fixed32,4,opt,name=gpu_memory_percent,json=gpuMemoryPercent,proto3" json:"gpu_memory_percent,omitempty"`
+	HasGpu           bool                   `protobuf:"varint,5,opt,name=has_gpu,json=hasGpu,proto3" json:"has_gpu,omitempty"`
+	GpuTempC         float32                `protobuf:"fixed32,6,opt,name=gpu_temp_c,json=gpuTempC,proto3" json:"gpu_temp_c,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -647,6 +649,20 @@ func (x *HostMetrics) GetGpuPercent() float32 {
 func (x *HostMetrics) GetGpuMemoryPercent() float32 {
 	if x != nil {
 		return x.GpuMemoryPercent
+	}
+	return 0
+}
+
+func (x *HostMetrics) GetHasGpu() bool {
+	if x != nil {
+		return x.HasGpu
+	}
+	return false
+}
+
+func (x *HostMetrics) GetGpuTempC() float32 {
+	if x != nil {
+		return x.GpuTempC
 	}
 	return 0
 }
@@ -1511,14 +1527,17 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\vruntime_key\x18\x02 \x01(\tR\n" +
 	"runtimeKey\x12!\n" +
 	"\factual_state\x18\x03 \x01(\tR\vactualState\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\xa4\x01\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\xdb\x01\n" +
 	"\vHostMetrics\x12\x1f\n" +
 	"\vcpu_percent\x18\x01 \x01(\x02R\n" +
 	"cpuPercent\x12%\n" +
 	"\x0ememory_percent\x18\x02 \x01(\x02R\rmemoryPercent\x12\x1f\n" +
 	"\vgpu_percent\x18\x03 \x01(\x02R\n" +
 	"gpuPercent\x12,\n" +
-	"\x12gpu_memory_percent\x18\x04 \x01(\x02R\x10gpuMemoryPercent\"\xcf\x01\n" +
+	"\x12gpu_memory_percent\x18\x04 \x01(\x02R\x10gpuMemoryPercent\x12\x17\n" +
+	"\ahas_gpu\x18\x05 \x01(\bR\x06hasGpu\x12\x1c\n" +
+	"\n" +
+	"gpu_temp_c\x18\x06 \x01(\x02R\bgpuTempC\"\xcf\x01\n" +
 	"\tHeartbeat\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12!\n" +
 	"\ftimestamp_ms\x18\x02 \x01(\x03R\vtimestampMs\x12F\n" +

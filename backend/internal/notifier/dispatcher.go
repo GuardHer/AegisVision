@@ -68,8 +68,19 @@ type RetryPublisher interface {
 	PublishAlarmRetry(ctx context.Context, failedAttempts int, body []byte) error
 }
 
+// ChannelConfigReader is optionally implemented by DeliveryStore to support channel-level reset commands.
+type ChannelConfigReader interface {
+	GetChannelConfig(ctx context.Context, channelID uuid.UUID) (channelType string, config []byte, err error)
+}
+
+// ResettableNotifier is implemented by hardware alarm channels (such as sound_light) supporting silence/reset.
+type ResettableNotifier interface {
+	Reset(ctx context.Context, rawConfig []byte) (SendResult, error)
+}
+
 // DispatcherDeps holds explicit dependencies for Dispatcher.
 type DispatcherDeps struct {
+	Context       context.Context
 	Registry      *Registry
 	Store         DeliveryStore
 	RetryBus      RetryPublisher
@@ -81,6 +92,7 @@ type DispatcherDeps struct {
 
 // Dispatcher consumes alarms.triggered jobs and dispatches notifications via registered Notifier plugins.
 type Dispatcher struct {
+	bgCtx         context.Context
 	registry      *Registry
 	store         DeliveryStore
 	retryBus      RetryPublisher
@@ -88,6 +100,13 @@ type Dispatcher struct {
 	publicBaseURL string
 	evidenceTTL   time.Duration
 	log           *slog.Logger
+
+	resetMu       sync.Mutex
+	pendingResets map[uuid.UUID]*pendingAutoReset
+}
+
+type pendingAutoReset struct {
+	cancel context.CancelFunc
 }
 
 // NewDispatcher constructs a Dispatcher.
@@ -98,7 +117,12 @@ func NewDispatcher(deps DispatcherDeps) *Dispatcher {
 	if deps.EvidenceTTL <= 0 {
 		deps.EvidenceTTL = 24 * time.Hour
 	}
+	bgCtx := deps.Context
+	if bgCtx == nil {
+		bgCtx = context.Background()
+	}
 	return &Dispatcher{
+		bgCtx:         bgCtx,
 		registry:      deps.Registry,
 		store:         deps.Store,
 		retryBus:      deps.RetryBus,
@@ -106,22 +130,28 @@ func NewDispatcher(deps DispatcherDeps) *Dispatcher {
 		publicBaseURL: deps.PublicBaseURL,
 		evidenceTTL:   deps.EvidenceTTL,
 		log:           deps.Logger,
+		pendingResets: make(map[uuid.UUID]*pendingAutoReset),
 	}
 }
 
 type dispatchMessage struct {
+	Action     string `json:"action,omitempty"`
 	AlarmID    string `json:"alarm_id"`
 	DeliveryID string `json:"delivery_id,omitempty"`
 	ChannelID  string `json:"channel_id,omitempty"`
 	Manual     bool   `json:"manual,omitempty"`
 }
 
-// HandleMessage processes an alarms.triggered RabbitMQ message (either initial alarm fan-out or single delivery retry).
+// HandleMessage processes an alarms.triggered RabbitMQ message (alarm fan-out, retry, or channel reset).
 func (d *Dispatcher) HandleMessage(ctx context.Context, body []byte) error {
 	var msg dispatchMessage
 	if err := json.Unmarshal(body, &msg); err != nil {
 		d.log.Warn("drop malformed alarm dispatch message", "err", err)
 		return nil
+	}
+
+	if msg.Action == "reset_channel" {
+		return d.handleChannelReset(ctx, msg.ChannelID)
 	}
 
 	alarmID, err := uuid.Parse(msg.AlarmID)
@@ -201,6 +231,7 @@ func (d *Dispatcher) deliverOne(ctx context.Context, alarm AlarmContext, rec Del
 		}); err != nil {
 			d.log.Warn("update delivery success failed", "delivery_id", rec.ID, "err", err)
 		}
+		d.maybeScheduleAutoReset(plugin, rec.ChannelID, rec.ChannelConfig)
 		return
 	}
 
@@ -260,4 +291,88 @@ func (d *Dispatcher) buildNotification(alarm AlarmContext, deliveryID uuid.UUID)
 		Detections:    alarm.Detections,
 		Evidence:      ev,
 	}
+}
+
+func (d *Dispatcher) cancelPendingAutoReset(channelID uuid.UUID) {
+	d.resetMu.Lock()
+	if prev, ok := d.pendingResets[channelID]; ok {
+		prev.cancel()
+		delete(d.pendingResets, channelID)
+	}
+	d.resetMu.Unlock()
+}
+
+func (d *Dispatcher) handleChannelReset(ctx context.Context, rawChannelID string) error {
+	chID, err := uuid.Parse(rawChannelID)
+	if err != nil {
+		d.log.Warn("drop reset_channel with invalid channel_id", "channel_id", rawChannelID)
+		return nil
+	}
+	// Cancel any pending auto-reset timer for this channel since a manual/handle reset is running now.
+	d.cancelPendingAutoReset(chID)
+	reader, ok := d.store.(ChannelConfigReader)
+	if !ok {
+		return nil
+	}
+	chType, rawCfg, err := reader.GetChannelConfig(ctx, chID)
+	if err != nil {
+		d.log.Warn("load channel config for reset failed", "channel_id", chID, "err", err)
+		return nil
+	}
+	plugin, ok := d.registry.Get(chType)
+	if !ok {
+		return nil
+	}
+	resettable, ok := plugin.(ResettableNotifier)
+	if !ok {
+		return nil
+	}
+	if _, rErr := resettable.Reset(ctx, rawCfg); rErr != nil {
+		d.log.Warn("channel reset failed", "channel_id", chID, "err", rErr)
+	}
+	return nil
+}
+
+func (d *Dispatcher) maybeScheduleAutoReset(plugin Notifier, channelID uuid.UUID, rawConfig []byte) {
+	resettable, ok := plugin.(ResettableNotifier)
+	if !ok {
+		return
+	}
+	var cfg SoundLightConfig
+	if err := json.Unmarshal(rawConfig, &cfg); err != nil || cfg.AutoResetSeconds <= 0 || cfg.ResetURL == "" {
+		return
+	}
+	cfgCopy := append([]byte(nil), rawConfig...)
+	delay := time.Duration(cfg.AutoResetSeconds) * time.Second
+
+	// Supersede any earlier pending auto-reset timer for the same channel so newer alarms reset on their own window.
+	timerCtx, cancel := context.WithCancel(d.bgCtx)
+	entry := &pendingAutoReset{cancel: cancel}
+	d.resetMu.Lock()
+	if prev, exists := d.pendingResets[channelID]; exists {
+		prev.cancel()
+	}
+	d.pendingResets[channelID] = entry
+	d.resetMu.Unlock()
+
+	go func() {
+		defer cancel()
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		select {
+		case <-timerCtx.Done():
+			return
+		case <-timer.C:
+			d.resetMu.Lock()
+			if d.pendingResets[channelID] == entry {
+				delete(d.pendingResets, channelID)
+			}
+			d.resetMu.Unlock()
+			rCtx, rCancel := context.WithTimeout(d.bgCtx, 10*time.Second)
+			defer rCancel()
+			if _, err := resettable.Reset(rCtx, cfgCopy); err != nil {
+				d.log.Warn("sound_light auto reset failed", "channel_id", channelID, "err", err)
+			}
+		}
+	}()
 }

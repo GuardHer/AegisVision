@@ -193,7 +193,7 @@ func TestCameraROIRuleCRUDAndConfigEvent(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r, store, pub, tm := setupAPITestRouter(t)
 
-	adminTok, _, _, _ := tm.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "admin", domain.RoleAdmin)
+	_, adminTok := seedTestUserToken(t, store, tm, domain.RoleAdmin)
 
 	var createdCamID, createdAlgoID, createdVerID, createdROIID, createdRuleID string
 	t.Cleanup(func() {
@@ -427,7 +427,7 @@ func TestAlarmHandleAuditAndManualRetry(t *testing.T) {
 	}
 
 	opTok, _, _, _ := tm.IssueAccessToken(opID.String(), "op_user", domain.RoleOperator)
-	viewerTok, _, _, _ := tm.IssueAccessToken(uuid.Must(uuid.NewV7()).String(), "viewer_user", domain.RoleViewer)
+	_, viewerTok := seedTestUserToken(t, store, tm, domain.RoleViewer)
 
 	// Viewer cannot handle alarm (403)
 	w := doJSONReq(t, r, http.MethodPost, "/api/v1/alarms/"+alarmID.String()+"/handle", viewerTok, map[string]any{

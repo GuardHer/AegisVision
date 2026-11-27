@@ -14,22 +14,27 @@ import (
 	"aegisvision/backend/internal/platform/telemetry"
 )
 
+// ScopeResolver resolves a user's workshop/camera access scope at WebSocket connect time.
+type ScopeResolver func(ctx context.Context, userID, role string) (ClientScope, error)
+
 // ServerDeps holds explicit dependencies for the WebSocket HTTP server.
 type ServerDeps struct {
-	Hub       *Hub
-	Tokens    *auth.TokenManager
-	Blacklist auth.TokenBlacklist
-	Health    *telemetry.Health
-	Logger    *slog.Logger
+	Hub           *Hub
+	Tokens        *auth.TokenManager
+	Blacklist     auth.TokenBlacklist
+	ScopeResolver ScopeResolver
+	Health        *telemetry.Health
+	Logger        *slog.Logger
 }
 
 // Server serves authenticated browser WebSocket connections at /ws/realtime.
 type Server struct {
-	hub       *Hub
-	tokens    *auth.TokenManager
-	blacklist auth.TokenBlacklist
-	health    *telemetry.Health
-	log       *slog.Logger
+	hub           *Hub
+	tokens        *auth.TokenManager
+	blacklist     auth.TokenBlacklist
+	scopeResolver ScopeResolver
+	health        *telemetry.Health
+	log           *slog.Logger
 }
 
 // NewServer creates a WebSocket gateway Server.
@@ -38,11 +43,12 @@ func NewServer(deps ServerDeps) *Server {
 		deps.Logger = slog.Default()
 	}
 	return &Server{
-		hub:       deps.Hub,
-		tokens:    deps.Tokens,
-		blacklist: deps.Blacklist,
-		health:    deps.Health,
-		log:       deps.Logger,
+		hub:           deps.Hub,
+		tokens:        deps.Tokens,
+		blacklist:     deps.Blacklist,
+		scopeResolver: deps.ScopeResolver,
+		health:        deps.Health,
+		log:           deps.Logger,
 	}
 }
 
@@ -65,9 +71,22 @@ type clientMessage struct {
 }
 
 func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
-	if !s.authenticate(r) {
+	claims, ok := s.authenticate(r)
+	if !ok {
 		http.Error(w, `{"code":40101,"message":"unauthorized"}`, http.StatusUnauthorized)
 		return
+	}
+
+	scope := ClientScope{UserID: claims.UserID, Unrestricted: true}
+	if s.scopeResolver != nil {
+		resolved, err := s.scopeResolver(r.Context(), claims.UserID, claims.Role)
+		if err != nil {
+			s.log.Warn("resolve ws user scope failed; failing closed", "user_id", claims.UserID, "err", err)
+			scope = ClientScope{UserID: claims.UserID, Unrestricted: false}
+		} else {
+			resolved.UserID = claims.UserID
+			scope = resolved
+		}
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -80,7 +99,7 @@ func (s *Server) handleRealtime(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = conn.Close(websocket.StatusNormalClosure, "") }()
 
 	clientID := uuid.Must(uuid.NewV7()).String()
-	client := s.hub.Register(clientID)
+	client := s.hub.RegisterWithScope(clientID, scope)
 	defer s.hub.Unregister(clientID)
 
 	ctx, cancel := context.WithCancel(r.Context())
@@ -154,26 +173,26 @@ func (s *Server) writeLoop(ctx context.Context, conn *websocket.Conn, client *Cl
 	}
 }
 
-func (s *Server) authenticate(r *http.Request) bool {
+func (s *Server) authenticate(r *http.Request) (auth.Claims, bool) {
 	if s.tokens == nil {
-		return false
+		return auth.Claims{}, false
 	}
 	raw := auth.ExtractBearerToken(r.Header.Get("Authorization"))
 	if raw == "" {
 		raw = r.URL.Query().Get("token")
 	}
 	if raw == "" {
-		return false
+		return auth.Claims{}, false
 	}
 	claims, err := s.tokens.ParseAccessToken(raw)
 	if err != nil {
-		return false
+		return auth.Claims{}, false
 	}
 	if s.blacklist != nil && claims.ID != "" {
 		revoked, blErr := s.blacklist.IsTokenBlacklisted(r.Context(), claims.ID)
 		if blErr != nil || revoked {
-			return false
+			return auth.Claims{}, false
 		}
 	}
-	return true
+	return *claims, true
 }

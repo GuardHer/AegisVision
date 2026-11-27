@@ -29,7 +29,7 @@ RETURNING *;
 -- name: UpdateAgentNodeHeartbeat :exec
 UPDATE agent_nodes
 SET running_tasks = $2,
-    meta = $3,
+    meta = COALESCE(agent_nodes.meta, '{}'::jsonb) || sqlc.arg('meta')::jsonb,
     status = CASE WHEN status = 'offline' THEN 'online' ELSE status END,
     last_heartbeat_at = NOW(),
     updated_at = NOW()

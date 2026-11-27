@@ -182,12 +182,28 @@ func parseUUIDSlice(raw []string) ([]uuid.UUID, error) {
 	return out, nil
 }
 
-// ListByCamera returns all rules configured under a camera.
+// ListByCamera returns all rules configured under a camera (enforcing workshop scope).
 func (h *RulesHandler) ListByCamera(c *gin.Context) {
 	camID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid camera id", err))
 		return
+	}
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	if !scope.Unrestricted {
+		cam, camErr := h.store.Queries().GetCameraByID(c.Request.Context(), camID)
+		if camErr != nil {
+			respondErr(c, camErr)
+			return
+		}
+		if !scope.AllowsZone(cam.ZoneID) {
+			respondErr(c, domain.NewForbiddenError("camera outside assigned workshops", nil))
+			return
+		}
 	}
 	rules, err := h.store.Queries().ListRulesByCamera(c.Request.Context(), camID)
 	if err != nil {
@@ -314,6 +330,7 @@ func (h *RulesHandler) Create(c *gin.Context) {
 	}
 
 	emitConfigEvent(ctx, h.pub, h.log, "rule", "created", created.ID.String())
+	recordAudit(c, h.store, h.log, "rule.create", "rule", created.ID.String(), "Created rule "+created.Name, map[string]any{"rule_mode": created.RuleMode, "camera_id": created.CameraID.String()})
 	respondCreated(c, created)
 }
 
@@ -430,6 +447,7 @@ func (h *RulesHandler) Update(c *gin.Context) {
 	}
 
 	emitConfigEvent(ctx, h.pub, h.log, "rule", "updated", updated.ID.String())
+	recordAudit(c, h.store, h.log, "rule.update", "rule", updated.ID.String(), "Updated rule "+updated.Name, map[string]any{"rule_mode": updated.RuleMode, "enabled": updated.Enabled})
 	respondOK(c, updated)
 }
 
@@ -445,5 +463,6 @@ func (h *RulesHandler) Delete(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "rule", "deleted", ruleID.String())
+	recordAudit(c, h.store, h.log, "rule.delete", "rule", ruleID.String(), "Deleted rule", nil)
 	respondOK(c, gin.H{"deleted": true})
 }

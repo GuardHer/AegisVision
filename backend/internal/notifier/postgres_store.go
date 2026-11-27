@@ -118,6 +118,15 @@ func (p *PostgresDeliveryStore) UpdateDeliveryResult(ctx context.Context, u Deli
 	return err
 }
 
+// GetChannelConfig returns a channel's type and config JSONB for reset commands.
+func (p *PostgresDeliveryStore) GetChannelConfig(ctx context.Context, channelID uuid.UUID) (string, []byte, error) {
+	ch, err := p.store.Queries().GetAlarmChannelByID(ctx, channelID)
+	if err != nil {
+		return "", nil, err
+	}
+	return ch.ChannelType, ch.Config, nil
+}
+
 func toDeliveryRecord(row sqlcgen.AlarmDelivery, channelConfig []byte) DeliveryRecord {
 	return DeliveryRecord{
 		ID:             row.ID,

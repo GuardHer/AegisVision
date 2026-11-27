@@ -147,11 +147,17 @@ type wsAlarmAlertMessage struct {
 	AlarmID     string `json:"alarm_id"`
 	CameraID    string `json:"camera_id"`
 	CameraName  string `json:"camera_name"`
+	ZoneID      string `json:"zone_id,omitempty"`
 	RuleMode    string `json:"rule_mode"`
 	Title       string `json:"title"`
 	Severity    string `json:"severity"`
 	TriggeredAt string `json:"triggered_at"`
 	ImageURL    string `json:"image_url"`
+}
+
+// CameraZoneResolver is optionally implemented by Repository to enrich realtime WS alerts with zone_id.
+type CameraZoneResolver interface {
+	GetCameraZoneID(ctx context.Context, cameraID uuid.UUID) uuid.NullUUID
 }
 
 type alarmQueueJob struct {
@@ -346,11 +352,18 @@ func (p *Processor) persistAndDispatchAlarm(ctx context.Context, triggered rules
 
 	// 1. Broadcast realtime WebSocket alert immediately via Redis Pub/Sub
 	if p.redis != nil {
+		zoneIDStr := ""
+		if zr, ok := p.repo.(CameraZoneResolver); ok {
+			if zid := zr.GetCameraZoneID(ctx, camID); zid.Valid {
+				zoneIDStr = zid.UUID.String()
+			}
+		}
 		alertRaw, _ := json.Marshal(wsAlarmAlertMessage{
 			Type:        "alarm_alert",
 			AlarmID:     alarmID.String(),
 			CameraID:    camID.String(),
 			CameraName:  p.repo.GetCameraName(ctx, camID),
+			ZoneID:      zoneIDStr,
 			RuleMode:    triggered.RuleMode,
 			Title:       triggered.Title,
 			Severity:    triggered.Severity,

@@ -95,8 +95,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	}
 
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
-	usersH := NewUsersHandler(deps.Store)
-	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
+	usersH := NewUsersHandler(deps.Store, deps.Cache)
+	zonesH := NewZonesHandler(deps.Store, deps.Cache, deps.Publisher, deps.Logger)
 	schedulesH := NewSchedulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	presetsH := NewPresetsHandler(deps.Store)
 	dashboardH := NewDashboardHandler(deps.Store)
@@ -106,8 +106,11 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	nodesH := NewNodesTasksHandler(deps.Store, deps.Publisher, deps.Logger)
 	alarmsH := NewAlarmsHandler(deps.Store, deps.Storage, deps.Publisher, deps.Logger)
-	channelsH := NewChannelsHandler(deps.Store, nil)
+	datasetsH := NewDatasetsHandler(deps.Store, deps.Storage, deps.Logger)
+	governanceH := NewGovernanceHandler(deps.Store, deps.Cache, deps.MediaMTX, deps.Storage, deps.Logger)
+	channelsH := NewChannelsHandler(deps.Store, deps.Publisher, nil, deps.Logger)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
+	evidenceH.SetScopeStore(deps.Store)
 
 	v1 := r.Group("/api/v1")
 
@@ -137,6 +140,8 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.PUT("/users/:id", adminOnly, usersH.Update)
 	authed.DELETE("/users/:id", adminOnly, usersH.Delete)
 	authed.POST("/users/:id/reset-password", adminOnly, usersH.ResetPassword)
+	authed.GET("/users/:id/zones", adminOnly, usersH.GetZones)
+	authed.PUT("/users/:id/zones", adminOnly, usersH.UpdateZones)
 
 	// Algorithms & versions
 	authed.GET("/algorithms", allRoles, algosH.ListAlgorithms)
@@ -204,12 +209,23 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.GET("/alarms/:id/deliveries", allRoles, alarmsH.ListDeliveries)
 	authed.POST("/deliveries/:delivery_id/retry", opRoles, alarmsH.RetryDelivery)
 
-	// Alarm channels (admin only)
+	// False-positive training datasets (admin & operator)
+	authed.GET("/datasets/false-positives", opRoles, datasetsH.ListFalsePositives)
+	authed.POST("/datasets/export", opRoles, datasetsH.ExportFalsePositives)
+
+	// Alarm channels (admin only; reset allowed for operator/admin)
 	authed.GET("/channels", adminOnly, channelsH.List)
 	authed.POST("/channels", adminOnly, channelsH.Create)
 	authed.PUT("/channels/:id", adminOnly, channelsH.Update)
 	authed.DELETE("/channels/:id", adminOnly, channelsH.Delete)
 	authed.POST("/channels/:id/test", adminOnly, channelsH.Test)
+	authed.POST("/channels/:id/reset", opRoles, channelsH.Reset)
+
+	// Governance: audit logs, global settings, and system health
+	authed.GET("/audit-logs", adminOnly, governanceH.ListAuditLogs)
+	authed.GET("/settings", allRoles, governanceH.GetSettings)
+	authed.PUT("/settings", adminOnly, governanceH.UpdateSettings)
+	authed.GET("/system/health", adminOnly, governanceH.SystemHealth)
 
 	return r
 }

@@ -6,7 +6,6 @@ package sqlcgen
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,8 +17,11 @@ type Querier interface {
 	BatchUpdateCamerasZone(ctx context.Context, arg BatchUpdateCamerasZoneParams) (int64, error)
 	ClearRuleAlarmChannels(ctx context.Context, ruleID uuid.UUID) error
 	CountAlarms(ctx context.Context, arg CountAlarmsParams) (int64, error)
+	CountAuditLogs(ctx context.Context, arg CountAuditLogsParams) (int64, error)
 	CountCamerasInZone(ctx context.Context, zoneID uuid.NullUUID) (int64, error)
+	CountChannelRulesInZones(ctx context.Context, arg CountChannelRulesInZonesParams) (int64, error)
 	CountChildZones(ctx context.Context, parentID uuid.NullUUID) (int64, error)
+	CountFalsePositiveAlarms(ctx context.Context, arg CountFalsePositiveAlarmsParams) (int64, error)
 	CountRulesUsingSchedule(ctx context.Context, scheduleID uuid.NullUUID) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm, error)
@@ -28,6 +30,7 @@ type Querier interface {
 	CreateAlgorithm(ctx context.Context, arg CreateAlgorithmParams) (Algorithm, error)
 	CreateAlgorithmVersion(ctx context.Context, arg CreateAlgorithmVersionParams) (AlgorithmVersion, error)
 	CreateArmingSchedule(ctx context.Context, arg CreateArmingScheduleParams) (ArmingSchedule, error)
+	CreateAuditLog(ctx context.Context, arg CreateAuditLogParams) (AuditLog, error)
 	CreateCamera(ctx context.Context, arg CreateCameraParams) (Camera, error)
 	CreateCameraROI(ctx context.Context, arg CreateCameraROIParams) (CameraRoi, error)
 	CreateInferenceTask(ctx context.Context, arg CreateInferenceTaskParams) (InferenceTask, error)
@@ -45,6 +48,7 @@ type Querier interface {
 	DeleteMonitorPreset(ctx context.Context, id uuid.UUID) error
 	DeleteROIAlgorithmRule(ctx context.Context, id uuid.UUID) error
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	DeleteUserZonesByUser(ctx context.Context, userID uuid.UUID) error
 	DeleteZone(ctx context.Context, id uuid.UUID) error
 	GetAgentNodeByID(ctx context.Context, nodeID string) (AgentNode, error)
 	GetAlarmByDedupKey(ctx context.Context, eventDedupKey pgtype.Text) (Alarm, error)
@@ -52,7 +56,7 @@ type Querier interface {
 	GetAlarmChannelByID(ctx context.Context, id uuid.UUID) (AlarmChannel, error)
 	GetAlarmDeliveryByID(ctx context.Context, id uuid.UUID) (AlarmDelivery, error)
 	GetAlarmTrendByDay(ctx context.Context, arg GetAlarmTrendByDayParams) ([]GetAlarmTrendByDayRow, error)
-	GetAlarmsByRuleMode(ctx context.Context, sinceTime time.Time) ([]GetAlarmsByRuleModeRow, error)
+	GetAlarmsByRuleMode(ctx context.Context, arg GetAlarmsByRuleModeParams) ([]GetAlarmsByRuleModeRow, error)
 	GetAlgorithmByID(ctx context.Context, id uuid.UUID) (Algorithm, error)
 	GetAlgorithmByKey(ctx context.Context, algorithmKey string) (Algorithm, error)
 	GetAlgorithmVersionByID(ctx context.Context, id uuid.UUID) (AlgorithmVersion, error)
@@ -68,39 +72,49 @@ type Querier interface {
 	GetCameraByStreamPath(ctx context.Context, streamPath string) (Camera, error)
 	GetCameraROIByID(ctx context.Context, id uuid.UUID) (CameraRoi, error)
 	GetDashboardAlarmKPIs(ctx context.Context, arg GetDashboardAlarmKPIsParams) (GetDashboardAlarmKPIsRow, error)
-	GetDashboardCameraHealth(ctx context.Context) (GetDashboardCameraHealthRow, error)
+	GetDashboardCameraHealth(ctx context.Context, zoneIds []uuid.UUID) (GetDashboardCameraHealthRow, error)
 	GetDashboardNodeHealth(ctx context.Context) (GetDashboardNodeHealthRow, error)
-	GetDashboardSOPCycleCounts(ctx context.Context, sinceTime time.Time) (GetDashboardSOPCycleCountsRow, error)
+	GetDashboardSOPCycleCounts(ctx context.Context, arg GetDashboardSOPCycleCountsParams) (GetDashboardSOPCycleCountsRow, error)
 	GetInferenceTaskByID(ctx context.Context, id uuid.UUID) (InferenceTask, error)
 	GetMonitorPresetByID(ctx context.Context, id uuid.UUID) (MonitorPreset, error)
 	GetROIAlgorithmRuleByID(ctx context.Context, id uuid.UUID) (RoiAlgorithmRule, error)
 	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (RefreshToken, error)
-	GetTopZonesByAlarms(ctx context.Context, sinceTime time.Time) ([]GetTopZonesByAlarmsRow, error)
+	GetSystemSettingByKey(ctx context.Context, key string) (SystemSetting, error)
+	GetTopZonesByAlarms(ctx context.Context, arg GetTopZonesByAlarmsParams) ([]GetTopZonesByAlarmsRow, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserZoneScopeFlags(ctx context.Context, id uuid.UUID) (GetUserZoneScopeFlagsRow, error)
 	GetZoneByID(ctx context.Context, id uuid.UUID) (Zone, error)
 	HandleAlarm(ctx context.Context, arg HandleAlarmParams) (Alarm, error)
+	InsertUserZone(ctx context.Context, arg InsertUserZoneParams) error
 	LinkRuleAlarmChannel(ctx context.Context, arg LinkRuleAlarmChannelParams) error
 	ListAgentNodes(ctx context.Context) ([]AgentNode, error)
 	ListAlarmChannels(ctx context.Context) ([]AlarmChannel, error)
 	ListAlarms(ctx context.Context, arg ListAlarmsParams) ([]Alarm, error)
 	ListAlarmsForExport(ctx context.Context, arg ListAlarmsForExportParams) ([]ListAlarmsForExportRow, error)
+	ListAlgorithmVersionStats30d(ctx context.Context, algorithmID uuid.UUID) ([]ListAlgorithmVersionStats30dRow, error)
 	ListAlgorithmVersionsByAlgorithm(ctx context.Context, algorithmID uuid.UUID) ([]AlgorithmVersion, error)
 	ListAlgorithms(ctx context.Context) ([]Algorithm, error)
 	ListAllAlgorithmVersions(ctx context.Context) ([]AlgorithmVersion, error)
 	ListArmingSchedules(ctx context.Context) ([]ListArmingSchedulesRow, error)
+	ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([]AuditLog, error)
 	ListCameraCountsByZone(ctx context.Context) ([]ListCameraCountsByZoneRow, error)
 	ListCameraROIsByCamera(ctx context.Context, cameraID uuid.UUID) ([]CameraRoi, error)
 	ListCameras(ctx context.Context) ([]Camera, error)
 	ListChannelsByRule(ctx context.Context, ruleID uuid.UUID) ([]AlarmChannel, error)
 	ListDeliveriesByAlarm(ctx context.Context, alarmID uuid.UUID) ([]AlarmDelivery, error)
+	ListEnabledAlarmChannels(ctx context.Context) ([]AlarmChannel, error)
 	ListEnabledCameras(ctx context.Context) ([]Camera, error)
 	ListEnabledRules(ctx context.Context) ([]RoiAlgorithmRule, error)
+	ListFalsePositiveAlarms(ctx context.Context, arg ListFalsePositiveAlarmsParams) ([]ListFalsePositiveAlarmsRow, error)
+	ListFalsePositiveAlarmsForExport(ctx context.Context, arg ListFalsePositiveAlarmsForExportParams) ([]ListFalsePositiveAlarmsForExportRow, error)
 	ListInferenceTasks(ctx context.Context) ([]InferenceTask, error)
 	ListMonitorPresetsForUser(ctx context.Context, ownerUserID uuid.NullUUID) ([]MonitorPreset, error)
-	ListRecentHighSeverityAlarms(ctx context.Context) ([]ListRecentHighSeverityAlarmsRow, error)
+	ListRecentHighSeverityAlarms(ctx context.Context, zoneIds []uuid.UUID) ([]ListRecentHighSeverityAlarmsRow, error)
 	ListRulesByCamera(ctx context.Context, cameraID uuid.UUID) ([]RoiAlgorithmRule, error)
 	ListRunningInferenceTasks(ctx context.Context) ([]InferenceTask, error)
+	ListSystemSettings(ctx context.Context) ([]SystemSetting, error)
+	ListUserZoneIDs(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 	ListUsers(ctx context.Context) ([]User, error)
 	ListZones(ctx context.Context) ([]Zone, error)
 	ResetInferenceTaskForReschedule(ctx context.Context, id uuid.UUID) (InferenceTask, error)
@@ -125,10 +139,12 @@ type Querier interface {
 	UpdateMonitorPreset(ctx context.Context, arg UpdateMonitorPresetParams) (MonitorPreset, error)
 	UpdateROIAlgorithmRule(ctx context.Context, arg UpdateROIAlgorithmRuleParams) (RoiAlgorithmRule, error)
 	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
+	UpdateUserAllZonesAccess(ctx context.Context, arg UpdateUserAllZonesAccessParams) error
 	UpdateUserLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateZone(ctx context.Context, arg UpdateZoneParams) (Zone, error)
 	UpsertAgentNode(ctx context.Context, arg UpsertAgentNodeParams) (AgentNode, error)
+	UpsertSystemSetting(ctx context.Context, arg UpsertSystemSettingParams) (SystemSetting, error)
 }
 
 var _ Querier = (*Queries)(nil)

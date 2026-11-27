@@ -200,5 +200,68 @@ export default [
         }
       }
     ]
+  },
+  {
+    path: "/datasets",
+    component: Layout,
+    redirect: "/datasets/index",
+    meta: {
+      icon: "ep/folder-opened",
+      title: $t("menus.aegisDatasets"),
+      rank: 10
+    },
+    children: [
+      {
+        path: "/datasets/index",
+        name: "AegisDatasets",
+        component: () => import("@/views/datasets/index.vue"),
+        meta: {
+          title: $t("menus.aegisDatasets"),
+          roles: ["admin", "operator"]
+        }
+      }
+    ]
+  },
+  {
+    path: "/audit-logs",
+    component: Layout,
+    redirect: "/audit-logs/index",
+    meta: {
+      icon: "ep/document",
+      title: $t("menus.aegisAuditLogs"),
+      rank: 11
+    },
+    children: [
+      {
+        path: "/audit-logs/index",
+        name: "AegisAuditLogs",
+        component: () => import("@/views/audit-logs/index.vue"),
+        meta: {
+          title: $t("menus.aegisAuditLogs"),
+          roles: ["admin"]
+        }
+      }
+    ]
+  },
+  {
+    path: "/settings",
+    component: Layout,
+    redirect: "/settings/index",
+    meta: {
+      icon: "ep/setting",
+      title: $t("menus.aegisSettings"),
+      rank: 12
+    },
+    children: [
+      {
+        path: "/settings/index",
+        name: "AegisSettings",
+        component: () => import("@/views/settings/index.vue"),
+        meta: {
+          title: $t("menus.aegisSettings"),
+          roles: ["admin"]
+        }
+      }
+    ]
   }
 ] satisfies Array<RouteConfigsTable>;

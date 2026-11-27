@@ -81,6 +81,13 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 	ctx := c.Request.Context()
 	q := h.store.Queries()
 
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
+	scopeZones, emptyScope := scope.IntersectZoneFilter(nil)
+
 	tzName := strings.TrimSpace(c.Query("tz"))
 	if tzName == "" || strings.EqualFold(tzName, "Local") {
 		tzName = "Asia/Shanghai"
@@ -97,29 +104,51 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 	yesterdayStart := todayStart.AddDate(0, 0, -1)
 	since7d := todayStart.AddDate(0, 0, -6)
 
+	nodeHealth, err := q.GetDashboardNodeHealth(ctx)
+	if err != nil {
+		respondErr(c, err)
+		return
+	}
+	if emptyScope {
+		trend7d := make([]TrendPoint, 0, 7)
+		for i := 0; i < 7; i++ {
+			trend7d = append(trend7d, TrendPoint{Date: since7d.AddDate(0, 0, i).Format("2006-01-02")})
+		}
+		respondOK(c, gin.H{
+			"kpis": DashboardKPIs{
+				NodesOnline:  nodeHealth.OnlineNodes,
+				NodesTotal:   nodeHealth.TotalNodes,
+				RunningTasks: nodeHealth.RunningTasks,
+			},
+			"trend_7d":      trend7d,
+			"top_zones":     []TopZoneItem{},
+			"by_rule_mode":  []RuleModeSlice{},
+			"recent_alerts": []RecentAlertItem{},
+		})
+		return
+	}
+
 	kpiRow, err := q.GetDashboardAlarmKPIs(ctx, sqlcgen.GetDashboardAlarmKPIsParams{
 		TodayStart:     todayStart.UTC(),
 		TomorrowStart:  tomorrowStart.UTC(),
 		YesterdayStart: yesterdayStart.UTC(),
+		ZoneIds:        scopeZones,
 	})
 	if err != nil {
 		respondErr(c, err)
 		return
 	}
 
-	sopRow, err := q.GetDashboardSOPCycleCounts(ctx, since7d.UTC())
+	sopRow, err := q.GetDashboardSOPCycleCounts(ctx, sqlcgen.GetDashboardSOPCycleCountsParams{
+		SinceTime: since7d.UTC(),
+		ZoneIds:   scopeZones,
+	})
 	if err != nil {
 		respondErr(c, err)
 		return
 	}
 
-	camHealth, err := q.GetDashboardCameraHealth(ctx)
-	if err != nil {
-		respondErr(c, err)
-		return
-	}
-
-	nodeHealth, err := q.GetDashboardNodeHealth(ctx)
+	camHealth, err := q.GetDashboardCameraHealth(ctx, scopeZones)
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -128,6 +157,7 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 	rawTrend, err := q.GetAlarmTrendByDay(ctx, sqlcgen.GetAlarmTrendByDayParams{
 		Tz:        tzName,
 		SinceTime: since7d.UTC(),
+		ZoneIds:   scopeZones,
 	})
 	if err != nil {
 		respondErr(c, err)
@@ -148,7 +178,10 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 		trend7d = append(trend7d, pt)
 	}
 
-	rawZones, err := q.GetTopZonesByAlarms(ctx, since7d.UTC())
+	rawZones, err := q.GetTopZonesByAlarms(ctx, sqlcgen.GetTopZonesByAlarmsParams{
+		SinceTime: since7d.UTC(),
+		ZoneIds:   scopeZones,
+	})
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -167,7 +200,10 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 		})
 	}
 
-	rawModes, err := q.GetAlarmsByRuleMode(ctx, since7d.UTC())
+	rawModes, err := q.GetAlarmsByRuleMode(ctx, sqlcgen.GetAlarmsByRuleModeParams{
+		SinceTime: since7d.UTC(),
+		ZoneIds:   scopeZones,
+	})
 	if err != nil {
 		respondErr(c, err)
 		return
@@ -180,7 +216,7 @@ func (h *DashboardHandler) Overview(c *gin.Context) {
 		})
 	}
 
-	rawRecent, err := q.ListRecentHighSeverityAlarms(ctx)
+	rawRecent, err := q.ListRecentHighSeverityAlarms(ctx, scopeZones)
 	if err != nil {
 		respondErr(c, err)
 		return

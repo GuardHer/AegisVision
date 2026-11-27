@@ -18,13 +18,14 @@ import (
 // ZonesHandler manages the Factory -> Workshop -> Line -> Workstation spatial hierarchy.
 type ZonesHandler struct {
 	store *postgres.Store
+	cache CacheStore
 	pub   EventPublisher
 	log   *slog.Logger
 }
 
 // NewZonesHandler constructs a ZonesHandler.
-func NewZonesHandler(store *postgres.Store, pub EventPublisher, log *slog.Logger) *ZonesHandler {
-	return &ZonesHandler{store: store, pub: pub, log: log}
+func NewZonesHandler(store *postgres.Store, cache CacheStore, pub EventPublisher, log *slog.Logger) *ZonesHandler {
+	return &ZonesHandler{store: store, cache: cache, pub: pub, log: log}
 }
 
 // ZoneTreeNode is a recursive spatial node with rolled-up camera counts.
@@ -59,9 +60,14 @@ func isValidZoneType(zt string) bool {
 	}
 }
 
-// GetTree returns the full spatial tree with rolled-up camera and online camera counts.
+// GetTree returns the full spatial tree with rolled-up camera and online camera counts (scoped by workshop RBAC).
 func (h *ZonesHandler) GetTree(c *gin.Context) {
 	ctx := c.Request.Context()
+	scope, scopeErr := resolveRequestScope(c, h.store)
+	if scopeErr != nil {
+		respondErr(c, scopeErr)
+		return
+	}
 	zones, err := h.store.Queries().ListZones(ctx)
 	if err != nil {
 		respondErr(c, err)
@@ -76,7 +82,7 @@ func (h *ZonesHandler) GetTree(c *gin.Context) {
 	directTotal := make(map[uuid.UUID]int64, len(counts))
 	directOnline := make(map[uuid.UUID]int64, len(counts))
 	for _, row := range counts {
-		if row.ZoneID.Valid {
+		if row.ZoneID.Valid && scope.AllowsZone(row.ZoneID) {
 			directTotal[row.ZoneID.UUID] = row.TotalCount
 			directOnline[row.ZoneID.UUID] = row.OnlineCount
 		}
@@ -113,6 +119,28 @@ func (h *ZonesHandler) GetTree(c *gin.Context) {
 			}
 		}
 		roots = append(roots, node)
+	}
+
+	if !scope.Unrestricted {
+		var prune func(n *ZoneTreeNode) bool
+		prune = func(n *ZoneTreeNode) bool {
+			kept := make([]*ZoneTreeNode, 0, len(n.Children))
+			for _, ch := range n.Children {
+				if prune(ch) {
+					kept = append(kept, ch)
+				}
+			}
+			n.Children = kept
+			_, selfAllowed := scope.AllowedZoneSet[n.ID]
+			return selfAllowed || len(kept) > 0
+		}
+		filteredRoots := make([]*ZoneTreeNode, 0, len(roots))
+		for _, r := range roots {
+			if prune(r) {
+				filteredRoots = append(filteredRoots, r)
+			}
+		}
+		roots = filteredRoots
 	}
 
 	var rollup func(n *ZoneTreeNode) (int64, int64)
@@ -175,6 +203,7 @@ func (h *ZonesHandler) Create(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "zone", "created", created.ID.String())
+	recordAudit(c, h.store, h.log, "zone.create", "zone", created.ID.String(), "Created zone "+created.Name, map[string]any{"zone_type": created.ZoneType})
 	respondCreated(c, created)
 }
 
@@ -238,6 +267,8 @@ func (h *ZonesHandler) Update(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "zone", "updated", updated.ID.String())
+	notifyAllScopesChanged(c.Request.Context(), h.cache)
+	recordAudit(c, h.store, h.log, "zone.update", "zone", updated.ID.String(), "Updated zone "+updated.Name, map[string]any{"zone_type": updated.ZoneType})
 	respondOK(c, updated)
 }
 
@@ -278,6 +309,8 @@ func (h *ZonesHandler) Delete(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(ctx, h.pub, h.log, "zone", "deleted", id.String())
+	notifyAllScopesChanged(ctx, h.cache)
+	recordAudit(c, h.store, h.log, "zone.delete", "zone", id.String(), "Deleted zone", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 

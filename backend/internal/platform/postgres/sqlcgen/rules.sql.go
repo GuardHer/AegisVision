@@ -22,18 +22,40 @@ func (q *Queries) ClearRuleAlarmChannels(ctx context.Context, ruleID uuid.UUID) 
 	return err
 }
 
+const countChannelRulesInZones = `-- name: CountChannelRulesInZones :one
+SELECT COUNT(*)::bigint
+FROM rule_alarm_channels rac
+JOIN roi_algorithm_rules r ON r.id = rac.rule_id
+JOIN cameras c ON c.id = r.camera_id
+WHERE rac.channel_id = $1
+  AND c.zone_id = ANY($2::uuid[])
+`
+
+type CountChannelRulesInZonesParams struct {
+	ChannelID uuid.UUID   `json:"channel_id"`
+	ZoneIds   []uuid.UUID `json:"zone_ids"`
+}
+
+func (q *Queries) CountChannelRulesInZones(ctx context.Context, arg CountChannelRulesInZonesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countChannelRulesInZones, arg.ChannelID, arg.ZoneIds)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createAlarmChannel = `-- name: CreateAlarmChannel :one
-INSERT INTO alarm_channels (id, name, channel_type, config, enabled)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO alarm_channels (id, name, channel_type, config, routing_rules, enabled)
+VALUES ($1, $2, $3, $4, COALESCE($6::jsonb, '{"auto_route":false}'::jsonb), $5)
 RETURNING id, name, channel_type, config, enabled, created_at, updated_at, routing_rules
 `
 
 type CreateAlarmChannelParams struct {
-	ID          uuid.UUID       `json:"id"`
-	Name        string          `json:"name"`
-	ChannelType string          `json:"channel_type"`
-	Config      json.RawMessage `json:"config"`
-	Enabled     bool            `json:"enabled"`
+	ID           uuid.UUID       `json:"id"`
+	Name         string          `json:"name"`
+	ChannelType  string          `json:"channel_type"`
+	Config       json.RawMessage `json:"config"`
+	Enabled      bool            `json:"enabled"`
+	RoutingRules json.RawMessage `json:"routing_rules"`
 }
 
 func (q *Queries) CreateAlarmChannel(ctx context.Context, arg CreateAlarmChannelParams) (AlarmChannel, error) {
@@ -43,6 +65,7 @@ func (q *Queries) CreateAlarmChannel(ctx context.Context, arg CreateAlarmChannel
 		arg.ChannelType,
 		arg.Config,
 		arg.Enabled,
+		arg.RoutingRules,
 	)
 	var i AlarmChannel
 	err := row.Scan(
@@ -280,6 +303,39 @@ func (q *Queries) ListChannelsByRule(ctx context.Context, ruleID uuid.UUID) ([]A
 	return items, nil
 }
 
+const listEnabledAlarmChannels = `-- name: ListEnabledAlarmChannels :many
+SELECT id, name, channel_type, config, enabled, created_at, updated_at, routing_rules FROM alarm_channels WHERE enabled = TRUE ORDER BY created_at ASC
+`
+
+func (q *Queries) ListEnabledAlarmChannels(ctx context.Context) ([]AlarmChannel, error) {
+	rows, err := q.db.Query(ctx, listEnabledAlarmChannels)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AlarmChannel{}
+	for rows.Next() {
+		var i AlarmChannel
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ChannelType,
+			&i.Config,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RoutingRules,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEnabledRules = `-- name: ListEnabledRules :many
 SELECT id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id FROM roi_algorithm_rules
 WHERE enabled = TRUE
@@ -373,6 +429,7 @@ UPDATE alarm_channels
 SET name = $2,
     channel_type = $3,
     config = $4,
+    routing_rules = COALESCE($6::jsonb, routing_rules),
     enabled = $5,
     updated_at = NOW()
 WHERE id = $1
@@ -380,11 +437,12 @@ RETURNING id, name, channel_type, config, enabled, created_at, updated_at, routi
 `
 
 type UpdateAlarmChannelParams struct {
-	ID          uuid.UUID       `json:"id"`
-	Name        string          `json:"name"`
-	ChannelType string          `json:"channel_type"`
-	Config      json.RawMessage `json:"config"`
-	Enabled     bool            `json:"enabled"`
+	ID           uuid.UUID       `json:"id"`
+	Name         string          `json:"name"`
+	ChannelType  string          `json:"channel_type"`
+	Config       json.RawMessage `json:"config"`
+	Enabled      bool            `json:"enabled"`
+	RoutingRules json.RawMessage `json:"routing_rules"`
 }
 
 func (q *Queries) UpdateAlarmChannel(ctx context.Context, arg UpdateAlarmChannelParams) (AlarmChannel, error) {
@@ -394,6 +452,7 @@ func (q *Queries) UpdateAlarmChannel(ctx context.Context, arg UpdateAlarmChannel
 		arg.ChannelType,
 		arg.Config,
 		arg.Enabled,
+		arg.RoutingRules,
 	)
 	var i AlarmChannel
 	err := row.Scan(

@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { nextTick, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   createUser,
   deleteUser,
+  getUserZones,
+  getZonesTree,
   listUsers,
   resetUserPassword,
   updateUser,
-  type UserItem
+  updateUserZones,
+  type UserItem,
+  type ZoneTreeNode
 } from "@/api/aegis";
 
 defineOptions({ name: "AegisUsers" });
@@ -16,8 +20,15 @@ defineOptions({ name: "AegisUsers" });
 const { t } = useI18n();
 const loading = ref(false);
 const users = ref<UserItem[]>([]);
+const zones = ref<ZoneTreeNode[]>([]);
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
+
+const scopeDialogVisible = ref(false);
+const scopeUser = ref<UserItem | null>(null);
+const scopeAllZones = ref(true);
+const scopeCheckedIds = ref<string[]>([]);
+const zoneTreeRef = ref<any>(null);
 
 const form = reactive({
   username: "",
@@ -30,8 +41,11 @@ const form = reactive({
 async function loadData() {
   loading.value = true;
   try {
-    const res = await listUsers();
-    users.value = res?.data ?? [];
+    const [uRes, zRes] = await Promise.all([listUsers(), getZonesTree().catch(() => ({ data: [] }))]);
+    users.value = uRes?.data ?? [];
+    zones.value = zRes?.data ?? [];
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load users");
   } finally {
     loading.value = false;
   }
@@ -61,37 +75,88 @@ function openEdit(row: UserItem) {
   dialogVisible.value = true;
 }
 
-async function submit() {
-  if (editingId.value) {
-    await updateUser(editingId.value, {
-      display_name: form.display_name,
-      role: form.role,
-      enabled: form.enabled
-    });
-  } else {
-    await createUser({ ...form });
+async function openScopeDialog(row: UserItem) {
+  try {
+    scopeUser.value = row;
+    const res = await getUserZones(row.id);
+    scopeAllZones.value = res?.data?.all_zones_access ?? true;
+    scopeCheckedIds.value = res?.data?.zone_ids ?? [];
+    scopeDialogVisible.value = true;
+    await nextTick();
+    if (zoneTreeRef.value?.setCheckedKeys) {
+      zoneTreeRef.value.setCheckedKeys(scopeCheckedIds.value);
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to load workshop scope");
   }
-  dialogVisible.value = false;
-  ElMessage.success("OK");
-  await loadData();
+}
+
+async function submitScope() {
+  if (!scopeUser.value) return;
+  try {
+    let selectedIds: string[] = [];
+    if (!scopeAllZones.value && zoneTreeRef.value?.getCheckedKeys) {
+      selectedIds = zoneTreeRef.value.getCheckedKeys(false) as string[];
+    }
+    await updateUserZones(scopeUser.value.id, {
+      all_zones_access: scopeAllZones.value,
+      zone_ids: selectedIds
+    });
+    scopeDialogVisible.value = false;
+    ElMessage.success(t("aegis.users.scopeSaved"));
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to update workshop scope");
+  }
+}
+
+async function submit() {
+  try {
+    if (editingId.value) {
+      await updateUser(editingId.value, {
+        display_name: form.display_name,
+        role: form.role,
+        enabled: form.enabled
+      });
+    } else {
+      await createUser({ ...form });
+    }
+    dialogVisible.value = false;
+    ElMessage.success("OK");
+    await loadData();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "Failed to save user");
+  }
 }
 
 async function onResetPassword(row: UserItem) {
-  const { value } = await ElMessageBox.prompt(
-    t("aegis.users.resetPassword"),
-    row.username,
-    { inputType: "password" }
-  );
-  if (value) {
-    await resetUserPassword(row.id, value);
-    ElMessage.success("Password updated");
+  try {
+    const { value } = await ElMessageBox.prompt(
+      t("aegis.users.resetPassword"),
+      row.username,
+      { inputType: "password" }
+    );
+    if (value) {
+      await resetUserPassword(row.id, value);
+      ElMessage.success("Password updated");
+    }
+  } catch (err: any) {
+    if (err !== "cancel" && err !== "close") {
+      ElMessage.error(err?.message || "Failed to reset password");
+    }
   }
 }
 
 async function onDelete(id: string) {
-  await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
-  await deleteUser(id);
-  await loadData();
+  try {
+    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await deleteUser(id);
+    await loadData();
+  } catch (err: any) {
+    if (err !== "cancel" && err !== "close") {
+      ElMessage.error(err?.message || "Failed to delete user");
+    }
+  }
 }
 
 onMounted(loadData);
@@ -107,14 +172,32 @@ onMounted(loadData);
 
       <el-table v-loading="loading" :data="users" border stripe>
         <el-table-column prop="username" :label="t('aegis.users.username')" width="150" />
-        <el-table-column prop="display_name" :label="t('aegis.users.displayName')" min-width="160" />
-        <el-table-column prop="role" :label="t('aegis.users.role')" width="120" />
-        <el-table-column prop="enabled" :label="t('aegis.common.enabled')" width="100" />
-        <el-table-column prop="last_login_at" label="Last Login" width="190" />
-        <el-table-column :label="t('aegis.common.actions')" width="240">
+        <el-table-column prop="display_name" :label="t('aegis.users.displayName')" min-width="150" />
+        <el-table-column prop="role" :label="t('aegis.users.role')" width="110" />
+        <el-table-column :label="t('aegis.users.workshopScope')" width="140">
+          <template #default="{ row }">
+            <el-tag
+              size="small"
+              :type="row.role === 'admin' || row.all_zones_access !== false ? 'success' : 'warning'"
+            >
+              {{ row.role === "admin" || row.all_zones_access !== false ? t("aegis.users.allZonesAccess") : t("aegis.users.assignedZones") }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="enabled" :label="t('aegis.common.enabled')" width="90" />
+        <el-table-column prop="last_login_at" label="Last Login" width="180" />
+        <el-table-column :label="t('aegis.common.actions')" width="310">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">
               {{ t("aegis.common.edit") }}
+            </el-button>
+            <el-button
+              v-if="row.role !== 'admin'"
+              link
+              type="success"
+              @click="openScopeDialog(row)"
+            >
+              {{ t("aegis.users.workshopScope") }}
             </el-button>
             <el-button link type="warning" @click="onResetPassword(row)">
               {{ t("aegis.users.resetPassword") }}
@@ -152,6 +235,36 @@ onMounted(loadData);
       <template #footer>
         <el-button @click="dialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
         <el-button type="primary" @click="submit">{{ t("aegis.common.save") }}</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="scopeDialogVisible"
+      :title="`${t('aegis.users.workshopScope')} — ${scopeUser?.username ?? ''}`"
+      width="520px"
+    >
+      <div class="space-y-4">
+        <div>
+          <el-switch v-model="scopeAllZones" :active-text="t('aegis.users.allZonesAccess')" />
+          <div class="text-xs text-slate-400 mt-1">{{ t("aegis.users.allZonesHint") }}</div>
+        </div>
+        <div v-show="!scopeAllZones" class="border rounded p-3 max-h-80 overflow-auto">
+          <div class="text-xs font-medium mb-2 text-slate-600">{{ t("aegis.users.assignedZones") }}</div>
+          <el-tree
+            ref="zoneTreeRef"
+            :data="zones"
+            node-key="id"
+            :default-checked-keys="scopeCheckedIds"
+            :props="{ label: 'name', children: 'children' }"
+            show-checkbox
+            check-strictly
+            default-expand-all
+          />
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="scopeDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
+        <el-button type="primary" @click="submitScope">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

@@ -16,12 +16,21 @@ const (
 	StreamTokenKindPlay = "play"
 	StreamTokenKindPull = "pull"
 
-	KeySchedulerLeader     = "scheduler:leader"
-	ChannelAlarmsRealtime  = "alarms:realtime"
-	FrameChannelPrefix     = "frames:"
-	AgentRouteKeyPrefix    = "agent:route:"
-	AuthBlacklistKeyPrefix = "auth:blacklist:"
+	KeySchedulerLeader      = "scheduler:leader"
+	ChannelAlarmsRealtime   = "alarms:realtime"
+	ChannelAuthScopeChanged = "auth:scope_changed"
+	FrameChannelPrefix      = "frames:"
+	AgentRouteKeyPrefix     = "agent:route:"
+	AuthBlacklistKeyPrefix  = "auth:blacklist:"
+	UserScopeKeyPrefix      = "user:scope:"
 )
+
+// UserScopeCachePayload caches a user's resolved workshop/camera access scope in Redis.
+type UserScopeCachePayload struct {
+	Unrestricted     bool     `json:"unrestricted"`
+	AllowedZoneIDs   []string `json:"allowed_zone_ids"`
+	AllowedCameraIDs []string `json:"allowed_camera_ids"`
+}
 
 // ErrKeyNotFound indicates the requested Redis key does not exist or has expired.
 var ErrKeyNotFound = errors.New("redis: key not found")
@@ -256,6 +265,98 @@ func (c *Client) SubscribeRealtimeAlarms(ctx context.Context) (<-chan []byte, fu
 				}
 				select {
 				case out <- []byte(msg.Payload):
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+
+	return out, pubsub.Close, nil
+}
+
+// SetUserScopeCache stores a user's resolved workshop/camera scope in Redis.
+func (c *Client) SetUserScopeCache(ctx context.Context, userID string, payload UserScopeCachePayload, ttl time.Duration) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal user scope cache: %w", err)
+	}
+	return c.rdb.Set(ctx, UserScopeKeyPrefix+userID, raw, ttl).Err()
+}
+
+// GetUserScopeCache fetches a cached user scope payload from Redis.
+func (c *Client) GetUserScopeCache(ctx context.Context, userID string) (*UserScopeCachePayload, error) {
+	raw, err := c.rdb.Get(ctx, UserScopeKeyPrefix+userID).Bytes()
+	if err != nil {
+		if errors.Is(err, goredis.Nil) {
+			return nil, ErrKeyNotFound
+		}
+		return nil, err
+	}
+	var payload UserScopeCachePayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal user scope cache: %w", err)
+	}
+	return &payload, nil
+}
+
+// DeleteUserScopeCache evicts a user's cached workshop scope immediately upon permission update.
+func (c *Client) DeleteUserScopeCache(ctx context.Context, userID string) error {
+	return c.rdb.Del(ctx, UserScopeKeyPrefix+userID).Err()
+}
+
+// DeleteAllUserScopeCaches evicts all cached user workshop scopes after camera/zone topology changes.
+func (c *Client) DeleteAllUserScopeCaches(ctx context.Context) error {
+	var cursor uint64
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, UserScopeKeyPrefix+"*", 100).Result()
+		if err != nil {
+			return err
+		}
+		if len(keys) > 0 {
+			if delErr := c.rdb.Del(ctx, keys...).Err(); delErr != nil {
+				return delErr
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
+}
+
+// PublishScopeChanged notifies aegis-ws instances that userID's workshop scope changed.
+func (c *Client) PublishScopeChanged(ctx context.Context, userID string) error {
+	return c.rdb.Publish(ctx, ChannelAuthScopeChanged, userID).Err()
+}
+
+// SubscribeScopeChanged listens for workshop scope revocation/update events across aegis-ws replicas.
+func (c *Client) SubscribeScopeChanged(ctx context.Context) (<-chan string, func() error, error) {
+	pubsub := c.rdb.Subscribe(ctx, ChannelAuthScopeChanged)
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return nil, nil, fmt.Errorf("subscribe auth scope changed: %w", err)
+	}
+
+	out := make(chan string, 64)
+	go func() {
+		defer close(out)
+		ch := pubsub.Channel()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				uid := strings.TrimSpace(msg.Payload)
+				if uid == "" {
+					continue
+				}
+				select {
+				case out <- uid:
 				case <-ctx.Done():
 					return
 				}

@@ -80,9 +80,12 @@ menus:
   aegisCameraConfig: Camera AI Config
   aegisSchedules: Arming Schedules
   aegisAlgorithms: Algorithm Hub
+  aegisDatasets: False-Positive Datasets
   aegisNodes: Compute Cluster & Tasks
   aegisChannels: Notification Channels
   aegisUsers: Users & Permissions
+  aegisAuditLogs: Audit Logs
+  aegisSettings: Settings & Health
 aegis:
   common:
     create: Create
@@ -265,6 +268,17 @@ aegis:
     version: Version
     runtimeKey: Runtime Key
     defaultParams: Default Params (JSON)
+    hits30d: 30d Hits
+    confirmed30d: Confirmed
+    fp30d: False Positives
+    fpRate30d: 30d FP Rate
+  datasets:
+    title: False-Positive Sample Library & Training Export
+    exportZip: Export Training ZIP
+    empty: No snapshot-bearing false-positive samples found
+    detectionsCount: Detections
+    allReasons: All Reasons
+    exportSuccess: Training dataset ZIP exported
   nodes:
     nodesTab: Compute Nodes (aegis-agent)
     tasksTab: Inference Tasks & Leases
@@ -272,6 +286,12 @@ aegis:
     hostname: Hostname
     ipAddr: IP Address
     runtimeKeys: Runtime Keys
+    telemetry: Host Telemetry
+    cpu: CPU
+    memory: RAM
+    gpu: GPU
+    vram: VRAM
+    noGpuMetrics: No GPU metrics
     load: Load
     lastHeartbeat: Last Heartbeat
     drain: Drain Node
@@ -280,16 +300,60 @@ aegis:
   channels:
     name: Channel Name
     type: Type
-    url: Webhook URL
-    secret: HMAC Secret
+    typeWebhook: Generic Webhook
+    typeWecom: WeCom Robot
+    typeDingtalk: DingTalk Robot
+    typeSoundLight: Sound & Light Alarm
+    url: Webhook / Target URL
+    triggerUrl: Trigger URL
+    resetUrl: Reset / Silence URL
+    autoResetSeconds: Auto-Reset (s)
+    secret: Signing Secret
     timeoutMs: Timeout (ms)
+    routing: Auto-Routing Rules
+    autoRoute: Enable Workshop/Severity Auto-Route
+    autoRouteHint: When enabled, matching alarms are routed automatically without per-rule binding
+    severities: Match Severities
+    zones: Match Zones (incl. descendants)
+    ruleModes: Match Rule Modes
     test: Test Connection
+    reset: Silence / Reset
+    resetQueued: Sound-light reset command queued
   users:
     username: Username
     displayName: Display Name
     role: Role
     password: Password
     resetPassword: Reset Password
+    workshopScope: Workshop Scope
+    allZonesAccess: All Zones Access
+    allZonesHint: When disabled, user can only view/handle cameras, alarms, and live streams in checked zones
+    assignedZones: Assigned Zones
+    scopeSaved: Workshop scope updated and applied immediately
+  auditLogs:
+    title: System Operation Audit Logs
+    actor: Actor
+    action: Action
+    resourceType: Resource Type
+    resourceId: Resource ID
+    summary: Summary
+    clientIp: Client IP
+    requestId: Request ID
+    createdAt: Timestamp
+    detail: Redacted Detail (JSON)
+  settings:
+    title: Global Platform Settings & System Health
+    platformConfig: Platform Configuration
+    platformTitle: Platform Display Title
+    defaultAlarmChime: Enable Alarm Chime by Default
+    popupMinSeverity: Popup Minimum Severity
+    maxExportRows: Max Export Rows
+    defaultTimezone: Default Timezone
+    saved: Platform settings saved
+    systemHealth: Platform Infrastructure & Component Health
+    component: Component
+    latency: Latency
+    clusterSummary: Live Cluster Summary
 status:
   pureLoad: Loading...
   pureMessage: Message

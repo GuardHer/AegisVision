@@ -178,7 +178,19 @@ func (g *Gateway) ControlStream(stream grpc.BidiStreamingServer[agentv1.AgentUps
 				_ = g.redis.SetAgentRoute(ctx, hb.GetNodeId(), g.instanceID, agentRouteTTL)
 			}
 			if g.repo != nil {
-				metaBytes, _ := json.Marshal(hb.GetHostMetrics())
+				var metaBytes []byte
+				if hm := hb.GetHostMetrics(); hm != nil {
+					metaBytes, _ = json.Marshal(map[string]any{
+						"cpu_percent":        hm.GetCpuPercent(),
+						"memory_percent":     hm.GetMemoryPercent(),
+						"gpu_percent":        hm.GetGpuPercent(),
+						"gpu_memory_percent": hm.GetGpuMemoryPercent(),
+						"has_gpu":            hm.GetHasGpu(),
+						"gpu_temp_c":         hm.GetGpuTempC(),
+					})
+				} else {
+					metaBytes = []byte(`{}`)
+				}
 				_ = g.repo.UpdateAgentHeartbeat(ctx, hb.GetNodeId(), len(hb.GetRunningTasks()), metaBytes)
 				for _, t := range hb.GetRunningTasks() {
 					_ = g.repo.UpdateTaskState(ctx, t.GetTaskId(), t.GetActualState(), t.GetErrorMessage())

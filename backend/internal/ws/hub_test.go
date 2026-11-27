@@ -199,3 +199,79 @@ func TestWSServerAuthSubscribeAndReceive(t *testing.T) {
 		t.Fatalf("unexpected ws message: %s", data)
 	}
 }
+
+// Review Focus #1: Restricted workshop WS client MUST NOT receive unauthorized frames or alarms,
+// and MUST be immediately evicted from active camera subscriptions upon UpdateUserScope revocation.
+func TestWSHubWorkshopScopeFilteringAndInstantRevocation(t *testing.T) {
+	hub := ws.NewHub(ws.HubConfig{FrameBufferSize: 8, AlarmBufferSize: 8})
+
+	scopeA := ws.ClientScope{
+		UserID:         "user-ws-a",
+		Unrestricted:   false,
+		AllowedZones:   map[string]struct{}{"zone-a": {}},
+		AllowedCameras: map[string]struct{}{"cam-a": {}},
+	}
+	clientA := hub.RegisterWithScope("sess-a", scopeA)
+	defer hub.Unregister("sess-a")
+
+	// Attempting to subscribe to both cam-a (allowed) and cam-b (unauthorized) MUST drop cam-b.
+	hub.SetSubscriptions("sess-a", []string{"cam-a", "cam-b"})
+
+	hub.BroadcastFrame("cam-a", []byte(`{"type":"frame_detections","camera_id":"cam-a"}`))
+	hub.BroadcastFrame("cam-b", []byte(`{"type":"frame_detections","camera_id":"cam-b"}`))
+
+	select {
+	case msg := <-clientA.FrameChan():
+		if !strings.Contains(string(msg), `"cam-a"`) {
+			t.Fatalf("expected cam-a frame, got %s", msg)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing authorized cam-a frame")
+	}
+	select {
+	case leaked := <-clientA.FrameChan():
+		t.Fatalf("unauthorized cam-b frame leaked to restricted client: %s", leaked)
+	default:
+	}
+
+	// Alarms MUST be filtered by zone_id (even if camera_id was previously in AllowedCameras before a move!).
+	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-ok","zone_id":"zone-a","camera_id":"cam-a"}`))
+	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-leak","zone_id":"zone-b","camera_id":"cam-b"}`))
+	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-moved-cam-leak","zone_id":"zone-b","camera_id":"cam-a"}`))
+
+	select {
+	case msg := <-clientA.AlarmChan():
+		if !strings.Contains(string(msg), `"a-ok"`) {
+			t.Fatalf("expected a-ok alarm, got %s", msg)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("missing authorized alarm")
+	}
+	select {
+	case leaked := <-clientA.AlarmChan():
+		t.Fatalf("unauthorized zone-b alarm leaked: %s", leaked)
+	default:
+	}
+
+	// Instant online revocation: admin removes zone-a from user-ws-a while connected.
+	hub.UpdateUserScope("user-ws-a", ws.ClientScope{
+		UserID:         "user-ws-a",
+		Unrestricted:   false,
+		AllowedZones:   map[string]struct{}{},
+		AllowedCameras: map[string]struct{}{},
+	})
+
+	hub.BroadcastFrame("cam-a", []byte(`{"type":"frame_detections","camera_id":"cam-a","after_revoke":true}`))
+	hub.BroadcastAlarm([]byte(`{"type":"alarm_alert","alarm_id":"a-after-revoke","zone_id":"zone-a","camera_id":"cam-a"}`))
+
+	select {
+	case leaked := <-clientA.FrameChan():
+		t.Fatalf("frame leaked after instant scope revocation: %s", leaked)
+	default:
+	}
+	select {
+	case leaked := <-clientA.AlarmChan():
+		t.Fatalf("alarm leaked after instant scope revocation: %s", leaked)
+	default:
+	}
+}

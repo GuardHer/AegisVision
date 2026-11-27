@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -10,6 +11,25 @@ import (
 
 	"aegisvision/backend/internal/domain"
 )
+
+func parsePagination(c *gin.Context, defaultPage, defaultSize, maxSize int) (int, int) {
+	page := defaultPage
+	if raw := c.Query("page"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 1 {
+			page = v
+		}
+	}
+	pageSize := defaultSize
+	if raw := c.Query("page_size"); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil && v >= 1 {
+			pageSize = v
+		}
+	}
+	if pageSize > maxSize {
+		pageSize = maxSize
+	}
+	return page, pageSize
+}
 
 // Envelope is the unified REST API response wrapper.
 type Envelope struct {

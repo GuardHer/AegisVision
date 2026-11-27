@@ -81,9 +81,13 @@ func main() {
 
 	registry := notifier.NewRegistry()
 	registry.Register(notifier.NewWebhookNotifier(nil))
+	registry.Register(notifier.NewWeComNotifier(nil))
+	registry.Register(notifier.NewDingTalkNotifier(nil))
+	registry.Register(notifier.NewSoundLightNotifier(nil))
 
 	signer := auth.NewEvidenceSigner(cfg.Auth.EvidenceSignSecret)
 	disp := notifier.NewDispatcher(notifier.DispatcherDeps{
+		Context:       ctx,
 		Registry:      registry,
 		Store:         notifier.NewPostgresDeliveryStore(pgStore),
 		RetryBus:      rmqClient,

@@ -96,6 +96,7 @@ func (h *AlgorithmsHandler) CreateAlgorithm(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "algorithm.create", "algorithm", item.ID.String(), "Created algorithm "+item.Name, map[string]any{"algorithm_key": item.AlgorithmKey})
 	respondCreated(c, item)
 }
 
@@ -140,22 +141,61 @@ func (h *AlgorithmsHandler) DeleteAlgorithm(c *gin.Context) {
 		respondErr(c, err)
 		return
 	}
+	recordAudit(c, h.store, h.log, "algorithm.delete", "algorithm", id.String(), "Deleted algorithm", nil)
 	respondOK(c, gin.H{"deleted": true})
 }
 
-// ListVersions returns all versions under an algorithm.
+// AlgorithmVersionStats30d summarizes 30-day trigger and false-positive quality metrics for an algorithm version.
+type AlgorithmVersionStats30d struct {
+	TotalAlarms        int64   `json:"total_alarms"`
+	ConfirmedCount     int64   `json:"confirmed_count"`
+	FalsePositiveCount int64   `json:"false_positive_count"`
+	FalsePositiveRate  float64 `json:"false_positive_rate"`
+}
+
+// AlgorithmVersionWithStats extends AlgorithmVersion with 30-day production accuracy telemetry.
+type AlgorithmVersionWithStats struct {
+	sqlcgen.AlgorithmVersion
+	Stats30d AlgorithmVersionStats30d `json:"stats_30d"`
+}
+
+// ListVersions returns all versions under an algorithm enriched with 30-day alarm and false-positive stats.
 func (h *AlgorithmsHandler) ListVersions(c *gin.Context) {
 	algoID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		respondErr(c, domain.NewInvalidArgumentError("invalid algorithm id", err))
 		return
 	}
-	items, err := h.store.Queries().ListAlgorithmVersionsByAlgorithm(c.Request.Context(), algoID)
+	ctx := c.Request.Context()
+	items, err := h.store.Queries().ListAlgorithmVersionsByAlgorithm(ctx, algoID)
 	if err != nil {
 		respondErr(c, err)
 		return
 	}
-	respondOK(c, items)
+	statsRows, statsErr := h.store.Queries().ListAlgorithmVersionStats30d(ctx, algoID)
+	statsByID := make(map[uuid.UUID]AlgorithmVersionStats30d, len(statsRows))
+	if statsErr != nil {
+		if h.log != nil {
+			h.log.Warn("load 30d algorithm version stats failed", "algorithm_id", algoID, "err", statsErr)
+		}
+	} else {
+		for _, r := range statsRows {
+			statsByID[r.AlgorithmVersionID] = AlgorithmVersionStats30d{
+				TotalAlarms:        r.TotalAlarms,
+				ConfirmedCount:     r.ConfirmedCount,
+				FalsePositiveCount: r.FalsePositiveCount,
+				FalsePositiveRate:  safePercent(r.FalsePositiveCount, r.HandledCount),
+			}
+		}
+	}
+	out := make([]AlgorithmVersionWithStats, 0, len(items))
+	for _, v := range items {
+		out = append(out, AlgorithmVersionWithStats{
+			AlgorithmVersion: v,
+			Stats30d:         statsByID[v.ID],
+		})
+	}
+	respondOK(c, out)
 }
 
 // CreateVersion registers a new version bound to a runtime_key.
@@ -189,6 +229,7 @@ func (h *AlgorithmsHandler) CreateVersion(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "algorithm_version", "created", item.ID.String())
+	recordAudit(c, h.store, h.log, "algorithm_version.create", "algorithm", item.ID.String(), "Created algorithm version "+item.Version, map[string]any{"runtime_key": item.RuntimeKey, "status": item.Status})
 	respondCreated(c, item)
 }
 
@@ -217,5 +258,6 @@ func (h *AlgorithmsHandler) UpdateVersion(c *gin.Context) {
 		return
 	}
 	emitConfigEvent(c.Request.Context(), h.pub, h.log, "algorithm_version", "updated", item.ID.String())
+	recordAudit(c, h.store, h.log, "algorithm_version.update", "algorithm", item.ID.String(), "Updated algorithm version", map[string]any{"runtime_key": item.RuntimeKey, "status": item.Status})
 	respondOK(c, item)
 }
