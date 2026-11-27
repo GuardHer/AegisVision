@@ -331,8 +331,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("menus.aegisAlarms") }}</h1>
@@ -426,10 +426,11 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="aegis-table-wrap">
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table
           v-loading="loading"
           :data="alarms"
+          height="100%"
           border
           stripe
           @selection-change="onSelectionChange"

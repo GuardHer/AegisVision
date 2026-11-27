@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -35,6 +35,12 @@ const cameras = ref<CameraItem[]>([]);
 const selectedCameraIds = ref<string[]>([]);
 const filterKeyword = ref("");
 const filterStatus = ref("");
+const page = ref(1);
+const pageSize = ref(20);
+
+const IconPlus = useRenderIcon(Plus);
+const IconEditPen = useRenderIcon(EditPen);
+const IconDelete = useRenderIcon(Delete);
 
 // Flatten zone tree for dropdowns and table lookup
 const flatZones = computed(() => {
@@ -68,6 +74,15 @@ const filteredCameras = computed(() => {
     const hay = `${cam.name} ${cam.workstation_code || ""} ${(cam.tags || []).join(" ")}`.toLowerCase();
     return hay.includes(kw);
   });
+});
+
+const pagedCameras = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return filteredCameras.value.slice(start, start + pageSize.value);
+});
+
+watch([filterKeyword, filterStatus, selectedZoneId], () => {
+  page.value = 1;
 });
 
 // Zone CRUD modal
@@ -322,11 +337,11 @@ onMounted(loadAll);
 </script>
 
 <template>
-  <div class="aegis-page">
+  <div class="aegis-page aegis-page--fixed">
     <div class="aegis-split-layout">
       <!-- Left Spatial Zone Tree -->
-      <aside class="aegis-panel flex flex-col gap-3">
-        <div class="flex items-center justify-between gap-2 pb-2 border-b border-[var(--el-border-color-extra-light)]">
+      <aside class="aegis-panel aegis-panel--fill gap-3">
+        <div class="flex items-center justify-between gap-2 pb-2 shrink-0 border-b border-[var(--el-border-color-extra-light)]">
           <span class="font-semibold text-sm">{{ t("aegis.cameras.zone") }}</span>
           <el-button size="small" type="primary" link @click="openCreateZone('')">
             + {{ t("aegis.cameras.addZone") }}
@@ -337,13 +352,13 @@ onMounted(loadAll);
           size="small"
           :type="selectedZoneId === '' ? 'primary' : 'default'"
           plain
-          class="w-full"
+          class="w-full shrink-0"
           @click="clearZoneFilter"
         >
           {{ t("aegis.cameras.allZones") }}
         </el-button>
 
-        <div class="aegis-scroll-region max-h-[calc(100dvh-260px)]">
+        <el-scrollbar class="flex-1 min-h-0">
           <el-tree
             :data="zonesTree"
             node-key="id"
@@ -363,7 +378,7 @@ onMounted(loadAll);
                     link
                     type="primary"
                     size="small"
-                    :icon="useRenderIcon(Plus)"
+                    :icon="IconPlus"
                     :title="t('aegis.cameras.addChildZone')"
                     @click.stop="openCreateZone(data.id)"
                   />
@@ -371,7 +386,7 @@ onMounted(loadAll);
                     link
                     type="primary"
                     size="small"
-                    :icon="useRenderIcon(EditPen)"
+                    :icon="IconEditPen"
                     :title="t('aegis.common.edit')"
                     @click.stop="openEditZone(data)"
                   />
@@ -379,7 +394,7 @@ onMounted(loadAll);
                     link
                     type="danger"
                     size="small"
-                    :icon="useRenderIcon(Delete)"
+                    :icon="IconDelete"
                     :title="t('aegis.common.delete')"
                     @click.stop="onDeleteZone(data)"
                   />
@@ -387,11 +402,11 @@ onMounted(loadAll);
               </div>
             </template>
           </el-tree>
-        </div>
+        </el-scrollbar>
       </aside>
 
       <!-- Right Camera Assets Panel -->
-      <section class="aegis-panel">
+      <section class="aegis-panel aegis-panel--fill">
         <header class="aegis-page-header">
           <div class="aegis-page-title-group">
             <div class="flex items-center gap-2">
@@ -440,10 +455,11 @@ onMounted(loadAll);
           </div>
         </div>
 
-        <div class="aegis-table-wrap">
+        <div class="aegis-table-wrap aegis-table-wrap--fill">
           <el-table
             v-loading="loading"
-            :data="filteredCameras"
+            :data="pagedCameras"
+            height="100%"
             border
             stripe
             @selection-change="onSelectionChange"
@@ -509,6 +525,17 @@ onMounted(loadAll);
               </template>
             </el-table-column>
           </el-table>
+        </div>
+
+        <div class="aegis-pagination">
+          <el-pagination
+            v-model:current-page="page"
+            v-model:page-size="pageSize"
+            :page-sizes="[10, 20, 50, 100]"
+            :total="filteredCameras.length"
+            layout="total, sizes, prev, pager, next"
+            @size-change="page = 1"
+          />
         </div>
       </section>
     </div>

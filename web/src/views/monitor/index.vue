@@ -668,62 +668,66 @@ onBeforeUnmount(() => {
       <aside v-show="!leftCollapsed" class="monitor-sidebar monitor-sidebar--left">
         <el-tabs v-model="leftTab" stretch class="monitor-tabs">
           <el-tab-pane :label="t('aegis.monitor.zoneTree')" name="zones">
-            <el-input
-              v-model="treeSearch"
-              size="small"
-              clearable
-              :placeholder="t('aegis.monitor.searchCamera')"
-              class="mb-2"
-              data-test="zone-tree-search"
-            />
-            <div class="aegis-scroll-region monitor-sidebar__scroll">
-              <el-tree
-                :data="combinedTree"
-                node-key="id"
-                default-expand-all
-                :expand-on-click-node="false"
-                @node-click="onTreeNodeClick"
-              >
-                <template #default="{ data }">
-                  <div class="flex items-center gap-1.5 text-xs truncate">
-                    <span
-                      v-if="data.isCamera"
-                      class="w-2 h-2 rounded-full inline-block shrink-0"
-                      :class="data.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-400'"
-                    />
-                    <span class="truncate">{{ data.label }}</span>
-                  </div>
-                </template>
-              </el-tree>
+            <div class="monitor-tab-body">
+              <el-input
+                v-model="treeSearch"
+                size="small"
+                clearable
+                :placeholder="t('aegis.monitor.searchCamera')"
+                class="mb-2 shrink-0"
+                data-test="zone-tree-search"
+              />
+              <el-scrollbar class="monitor-sidebar__scroll">
+                <el-tree
+                  :data="combinedTree"
+                  node-key="id"
+                  default-expand-all
+                  :expand-on-click-node="false"
+                  @node-click="onTreeNodeClick"
+                >
+                  <template #default="{ data }">
+                    <div class="flex items-center gap-1.5 text-xs truncate">
+                      <span
+                        v-if="data.isCamera"
+                        class="w-2 h-2 rounded-full inline-block shrink-0"
+                        :class="data.status === 'online' ? 'bg-emerald-500' : 'bg-zinc-400'"
+                      />
+                      <span class="truncate">{{ data.label }}</span>
+                    </div>
+                  </template>
+                </el-tree>
+              </el-scrollbar>
             </div>
           </el-tab-pane>
 
           <el-tab-pane :label="t('aegis.monitor.presets')" name="presets">
-            <div class="aegis-scroll-region monitor-sidebar__scroll flex flex-col gap-2">
-              <div
-                v-for="p in presets"
-                :key="p.id"
-                class="p-2 rounded border text-xs flex flex-col gap-1 hover:border-blue-400 cursor-pointer"
-                @click="applyPreset(p)"
-              >
-                <div class="flex items-center justify-between font-medium">
-                  <span class="truncate">{{ p.name }}</span>
-                  <el-tag size="small" type="info">{{ p.grid_size }}G</el-tag>
-                </div>
-                <div class="flex items-center justify-between text-zinc-400">
-                  <span>{{ p.is_shared ? "Shared" : "Private" }}</span>
-                  <el-button
-                    v-if="!p.is_shared || isAdmin"
-                    link
-                    type="danger"
-                    size="small"
-                    @click.stop="removePreset(p.id)"
-                  >
-                    {{ t("aegis.common.delete") }}
-                  </el-button>
+            <el-scrollbar class="monitor-sidebar__scroll">
+              <div class="flex flex-col gap-2 pr-1">
+                <div
+                  v-for="p in presets"
+                  :key="p.id"
+                  class="p-2 rounded border text-xs flex flex-col gap-1 hover:border-blue-400 cursor-pointer"
+                  @click="applyPreset(p)"
+                >
+                  <div class="flex items-center justify-between font-medium">
+                    <span class="truncate">{{ p.name }}</span>
+                    <el-tag size="small" type="info">{{ p.grid_size }}G</el-tag>
+                  </div>
+                  <div class="flex items-center justify-between text-zinc-400">
+                    <span>{{ p.is_shared ? "Shared" : "Private" }}</span>
+                    <el-button
+                      v-if="!p.is_shared || isAdmin"
+                      link
+                      type="danger"
+                      size="small"
+                      @click.stop="removePreset(p.id)"
+                    >
+                      {{ t("aegis.common.delete") }}
+                    </el-button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </el-scrollbar>
           </el-tab-pane>
         </el-tabs>
       </aside>
@@ -745,6 +749,7 @@ onBeforeUnmount(() => {
         >
           <template v-if="camId">
             <WhepPlayer
+              class="monitor-tile__player"
               :camera-id="camId"
               :camera-name="cameraMap.get(camId)?.name || camId"
               :workstation-code="cameraMap.get(camId)?.workstation_code || ''"
@@ -836,48 +841,50 @@ onBeforeUnmount(() => {
           </el-select>
         </div>
 
-        <div class="aegis-scroll-region flex-1 flex flex-col gap-2">
-          <div
-            v-for="alert in filteredAlerts"
-            :key="alert.alarm_id"
-            class="p-2.5 rounded-md border text-xs flex flex-col gap-1.5"
-            :class="
-              alert.severity === 'critical'
-                ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30'
-                : 'border-amber-200 bg-amber-50/40 dark:bg-amber-950/20'
-            "
-          >
-            <div class="flex items-center justify-between font-medium gap-1">
-              <span class="truncate">{{ alert.title }}</span>
-              <el-tag size="small" :type="alert.severity === 'critical' ? 'danger' : 'warning'">
-                {{ alert.severity }}
-              </el-tag>
-            </div>
-            <div class="text-zinc-500 truncate">{{ alert.camera_name }} · {{ alert.rule_mode }}</div>
-            <img
-              :src="evidenceImageURL(alert.alarm_id)"
-              :alt="alert.title"
-              class="w-full aspect-video object-cover rounded bg-black/80"
-              loading="lazy"
-              @error="e => { (e.target as HTMLImageElement).style.display = 'none'; }"
-            />
-            <div class="flex items-center justify-between text-zinc-400 aegis-tabular">
-              <span>{{ formatDateTime(alert.triggered_at) }}</span>
-              <div v-if="allowHandle && !alert.handled" class="flex gap-1">
-                <el-button size="small" type="success" link @click="quickHandleAlert(alert, 'confirmed')">
-                  {{ t("aegis.alarms.confirm") }}
-                </el-button>
-                <el-button size="small" type="warning" link @click="quickHandleAlert(alert, 'false_positive')">
-                  {{ t("aegis.alarms.falsePositive") }}
-                </el-button>
+        <el-scrollbar class="monitor-sidebar__scroll">
+          <div class="flex flex-col gap-2 pr-1">
+            <div
+              v-for="alert in filteredAlerts"
+              :key="alert.alarm_id"
+              class="p-2.5 rounded-md border text-xs flex flex-col gap-1.5"
+              :class="
+                alert.severity === 'critical'
+                  ? 'border-red-300 bg-red-50/40 dark:bg-red-950/30'
+                  : 'border-amber-200 bg-amber-50/40 dark:bg-amber-950/20'
+              "
+            >
+              <div class="flex items-center justify-between font-medium gap-1">
+                <span class="truncate">{{ alert.title }}</span>
+                <el-tag size="small" :type="alert.severity === 'critical' ? 'danger' : 'warning'">
+                  {{ alert.severity }}
+                </el-tag>
               </div>
-              <el-tag v-else-if="alert.handled" size="small" type="success">OK</el-tag>
+              <div class="text-zinc-500 truncate">{{ alert.camera_name }} · {{ alert.rule_mode }}</div>
+              <img
+                :src="evidenceImageURL(alert.alarm_id)"
+                :alt="alert.title"
+                class="w-full aspect-video object-cover rounded bg-black/80"
+                loading="lazy"
+                @error="e => { (e.target as HTMLImageElement).style.display = 'none'; }"
+              />
+              <div class="flex items-center justify-between text-zinc-400 aegis-tabular">
+                <span>{{ formatDateTime(alert.triggered_at) }}</span>
+                <div v-if="allowHandle && !alert.handled" class="flex gap-1">
+                  <el-button size="small" type="success" link @click="quickHandleAlert(alert, 'confirmed')">
+                    {{ t("aegis.alarms.confirm") }}
+                  </el-button>
+                  <el-button size="small" type="warning" link @click="quickHandleAlert(alert, 'false_positive')">
+                    {{ t("aegis.alarms.falsePositive") }}
+                  </el-button>
+                </div>
+                <el-tag v-else-if="alert.handled" size="small" type="success">OK</el-tag>
+              </div>
+            </div>
+            <div v-if="filteredAlerts.length === 0" class="text-center text-xs text-zinc-400 py-8">
+              {{ t("aegis.dashboard.noRecentAlerts") }}
             </div>
           </div>
-          <div v-if="filteredAlerts.length === 0" class="text-center text-xs text-zinc-400 py-8">
-            {{ t("aegis.dashboard.noRecentAlerts") }}
-          </div>
-        </div>
+        </el-scrollbar>
       </aside>
     </div>
 
@@ -924,21 +931,22 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
-  block-size: calc(100dvh - 88px);
-  min-block-size: 560px;
+  height: calc(100vh - 166px);
+  min-height: 480px;
+  overflow: hidden;
 }
 
 .monitor-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: safe center;
+  flex-shrink: 0;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  background: var(--el-card-bg-color, var(--el-bg-color-overlay));
+  border: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+  border-radius: var(--el-card-border-radius, 4px);
 }
 
 .monitor-toolbar__group {
@@ -952,49 +960,85 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 10px;
   flex: 1 1 auto;
-  min-block-size: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .monitor-sidebar {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  background: var(--el-card-bg-color, var(--el-bg-color-overlay));
+  border: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+  border-radius: var(--el-card-border-radius, 4px);
   padding: 10px;
-  min-block-size: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
 .monitor-sidebar--left {
-  inline-size: 256px;
+  width: 256px;
 }
 
 .monitor-sidebar--right {
-  inline-size: 300px;
+  width: 300px;
+}
+
+.monitor-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.monitor-tabs :deep(.el-tabs__content) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.monitor-tabs :deep(.el-tab-pane) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.monitor-tab-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
 .monitor-sidebar__scroll {
-  max-block-size: calc(100dvh - 240px);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .monitor-wall {
   flex: 1 1 auto;
-  min-inline-size: 0;
-  min-block-size: 0;
+  min-width: 0;
+  min-height: 0;
   display: grid;
   gap: 8px;
+  overflow: hidden;
 }
 
 .monitor-tile {
   position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   background: #090d16;
-  border-radius: 8px;
-  overflow: clip;
+  border-radius: 6px;
+  overflow: hidden;
   border: 1px solid rgb(51 65 85 / 80%);
-  min-block-size: 130px;
   transition: border-color 150ms ease;
+}
+
+.monitor-tile__player {
+  position: absolute;
+  inset: 0;
 }
 
 .monitor-tile.is-active {
@@ -1004,8 +1048,9 @@ onBeforeUnmount(() => {
 
 .monitor-sop-bar {
   position: absolute;
-  inset-inline: 8px;
-  inset-block-end: 42px;
+  right: 8px;
+  bottom: 42px;
+  left: 8px;
   z-index: 15;
   display: flex;
   flex-direction: column;
@@ -1014,8 +1059,8 @@ onBeforeUnmount(() => {
 }
 
 .monitor-empty-slot {
-  inline-size: 100%;
-  block-size: 100%;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;

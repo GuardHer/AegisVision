@@ -298,33 +298,35 @@ onBeforeUnmount(() => {
           :description="t('aegis.dashboard.noRecentAlerts')"
           :image-size="60"
         />
-        <div v-else class="flex flex-col gap-2 max-h-72 aegis-scroll-region">
-          <div
-            v-for="alert in overview.recent_alerts"
-            :key="alert.id"
-            class="flex items-center justify-between gap-2 p-2.5 rounded border text-xs"
-          >
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2 font-medium truncate">
-                <el-tag :type="alert.severity === 'critical' ? 'danger' : 'warning'" size="small">
-                  {{ alert.severity }}
-                </el-tag>
-                <span class="truncate">{{ alert.title }}</span>
+        <el-scrollbar v-else max-height="288px">
+          <div class="flex flex-col gap-2 pr-1">
+            <div
+              v-for="alert in overview.recent_alerts"
+              :key="alert.id"
+              class="flex items-center justify-between gap-2 p-2.5 rounded border text-xs"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 font-medium truncate">
+                  <el-tag :type="alert.severity === 'critical' ? 'danger' : 'warning'" size="small">
+                    {{ alert.severity }}
+                  </el-tag>
+                  <span class="truncate">{{ alert.title }}</span>
+                </div>
+                <div class="text-zinc-500 mt-1 aegis-tabular truncate">
+                  {{ alert.zone_name || "—" }} · {{ alert.camera_name }} · {{ formatDateTime(alert.triggered_at) }}
+                </div>
               </div>
-              <div class="text-zinc-500 mt-1 aegis-tabular truncate">
-                {{ alert.zone_name || "—" }} · {{ alert.camera_name }} · {{ formatDateTime(alert.triggered_at) }}
+              <div v-if="allowHandle" class="flex gap-1 shrink-0">
+                <el-button size="small" type="success" plain @click="quickHandle(alert.id, 'confirmed')">
+                  {{ t("aegis.alarms.confirm") }}
+                </el-button>
+                <el-button size="small" type="warning" plain @click="quickHandle(alert.id, 'false_positive')">
+                  {{ t("aegis.alarms.falsePositive") }}
+                </el-button>
               </div>
-            </div>
-            <div v-if="allowHandle" class="flex gap-1 shrink-0">
-              <el-button size="small" type="success" plain @click="quickHandle(alert.id, 'confirmed')">
-                {{ t("aegis.alarms.confirm") }}
-              </el-button>
-              <el-button size="small" type="warning" plain @click="quickHandle(alert.id, 'false_positive')">
-                {{ t("aegis.alarms.falsePositive") }}
-              </el-button>
             </div>
           </div>
-        </div>
+        </el-scrollbar>
       </el-card>
     </div>
   </div>

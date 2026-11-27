@@ -53,6 +53,14 @@ const draftRoiName = ref("");
 const draftRoiColor = ref("#38bdf8");
 const draftPoints = ref<NormalizedPoint[]>([]);
 
+const IconBack = useRenderIcon(Back);
+const rulePage = ref(1);
+const rulePageSize = ref(10);
+const pagedRules = computed(() => {
+  const start = (rulePage.value - 1) * rulePageSize.value;
+  return rules.value.slice(start, start + rulePageSize.value);
+});
+
 const scheduleNameMap = computed(() => {
   const m = new Map<string, string>();
   for (const s of schedules.value) m.set(s.id, s.name);
@@ -464,8 +472,12 @@ onMounted(() => {
       editorResizeObserver = new ResizeObserver(entries => {
         const first = entries[0];
         if (first) {
-          editorContainerSize.width = first.contentRect.width;
-          editorContainerSize.height = first.contentRect.height;
+          const w = Math.round(first.contentRect.width);
+          const h = Math.round(first.contentRect.height);
+          if (w > 0 && h > 0 && (Math.abs(editorContainerSize.width - w) > 1 || Math.abs(editorContainerSize.height - h) > 1)) {
+            editorContainerSize.width = w;
+            editorContainerSize.height = h;
+          }
         }
       });
       editorResizeObserver.observe(el);
@@ -488,7 +500,7 @@ onBeforeUnmount(() => {
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <div class="flex flex-wrap items-center gap-2">
-            <el-button size="small" :icon="useRenderIcon(Back)" @click="router.push('/cameras/index')">
+            <el-button size="small" :icon="IconBack" @click="router.push('/cameras/index')">
               {{ t("aegis.common.back") }}
             </el-button>
             <h1 class="aegis-page-title">
@@ -519,6 +531,7 @@ onBeforeUnmount(() => {
             />
             <WhepPlayer
               v-else-if="cameraId"
+              class="roi-stage__player"
               :camera-id="cameraId"
               :camera-name="camera?.name"
               controls="minimal"
@@ -556,7 +569,7 @@ onBeforeUnmount(() => {
             {{ t("aegis.cameras.roiSection") }} ({{ rois.length }})
           </div>
           <div class="aegis-table-wrap">
-            <el-table :data="rois" size="small" border stripe>
+            <el-table :data="rois" size="small" max-height="380" border stripe>
               <el-table-column prop="name" label="ROI" min-width="115" show-overflow-tooltip />
               <el-table-column :label="t('aegis.cameras.roiColor')" width="64" align="center">
                 <template #default="{ row }">
@@ -598,7 +611,7 @@ onBeforeUnmount(() => {
       </header>
 
       <div class="aegis-table-wrap">
-        <el-table :data="rules" size="small" border stripe>
+        <el-table :data="pagedRules" size="small" max-height="420" border stripe>
           <el-table-column prop="name" :label="t('aegis.cameras.ruleName')" min-width="160" show-overflow-tooltip />
           <el-table-column :label="t('aegis.cameras.roi')" min-width="120" show-overflow-tooltip>
             <template #default="{ row }">
@@ -643,6 +656,17 @@ onBeforeUnmount(() => {
             </template>
           </el-table-column>
         </el-table>
+      </div>
+
+      <div v-if="rules.length > rulePageSize" class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="rulePage"
+          v-model:page-size="rulePageSize"
+          :page-sizes="[10, 20, 50]"
+          :total="rules.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="rulePage = 1"
+        />
       </div>
     </section>
 
@@ -805,11 +829,16 @@ onBeforeUnmount(() => {
 
 .roi-stage {
   position: relative;
-  inline-size: 100%;
+  width: 100%;
   aspect-ratio: 16 / 9;
   background: #0b1120;
   border-radius: 6px;
-  overflow: clip;
+  overflow: hidden;
+}
+
+.roi-stage__player {
+  position: absolute;
+  inset: 0;
 }
 
 @media (max-width: 1100px) {

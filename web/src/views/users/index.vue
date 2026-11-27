@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -21,6 +21,12 @@ defineOptions({ name: "AegisUsers" });
 const { t } = useI18n();
 const loading = ref(false);
 const users = ref<UserItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedUsers = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return users.value.slice(start, start + pageSize.value);
+});
 const zones = ref<ZoneTreeNode[]>([]);
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
@@ -170,8 +176,8 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("menus.aegisUsers") }}</h1>
@@ -182,8 +188,8 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div class="aegis-table-wrap">
-        <el-table v-loading="loading" :data="users" border stripe>
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedUsers" height="100%" border stripe>
           <el-table-column prop="username" :label="t('aegis.users.username')" width="145" show-overflow-tooltip>
             <template #default="{ row }">
               <span class="aegis-mono-id font-medium">{{ row.username }}</span>
@@ -243,6 +249,17 @@ onMounted(loadData);
           </el-table-column>
         </el-table>
       </div>
+
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="users.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
+      </div>
     </section>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? t('aegis.common.edit') : t('aegis.common.create')" width="480px">
@@ -283,18 +300,20 @@ onMounted(loadData);
           <el-switch v-model="scopeAllZones" :active-text="t('aegis.users.allZonesAccess')" />
           <div class="text-xs text-slate-400 mt-1">{{ t("aegis.users.allZonesHint") }}</div>
         </div>
-        <div v-show="!scopeAllZones" class="border rounded p-3 max-h-80 aegis-scroll-region">
+        <div v-show="!scopeAllZones" class="border rounded p-3">
           <div class="text-xs font-medium mb-2 text-slate-600">{{ t("aegis.users.assignedZones") }}</div>
-          <el-tree
-            ref="zoneTreeRef"
-            :data="zones"
-            node-key="id"
-            :default-checked-keys="scopeCheckedIds"
-            :props="{ label: 'name', children: 'children' }"
-            show-checkbox
-            check-strictly
-            default-expand-all
-          />
+          <el-scrollbar max-height="280px">
+            <el-tree
+              ref="zoneTreeRef"
+              :data="zones"
+              node-key="id"
+              :default-checked-keys="scopeCheckedIds"
+              :props="{ label: 'name', children: 'children' }"
+              show-checkbox
+              check-strictly
+              default-expand-all
+            />
+          </el-scrollbar>
         </div>
       </div>
       <template #footer>

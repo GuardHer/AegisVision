@@ -109,8 +109,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("aegis.datasets.title") }}</h1>
@@ -162,54 +162,58 @@ onMounted(() => {
         />
       </div>
 
-      <div v-loading="loading">
-        <el-empty v-if="items.length === 0" :description="t('aegis.datasets.empty')" />
-        <div v-else class="aegis-card-grid">
-          <article v-for="sample in items" :key="sample.alarm_id" class="aegis-sample-card">
-            <div class="aegis-sample-card__media">
-              <img
-                :src="evidenceImageURL(sample.alarm_id)"
-                :alt="sample.title"
-                loading="lazy"
-              />
-            </div>
-            <div class="aegis-sample-card__body">
-              <div class="flex items-center justify-between gap-2">
-                <span class="font-semibold text-sm truncate" :title="sample.title">
-                  {{ sample.title }}
-                </span>
-                <el-tag size="small" type="warning" class="shrink-0">
-                  {{ reasonLabel(sample.false_positive_reason) }}
-                </el-tag>
+      <div v-loading="loading" class="flex-1 min-h-0 flex flex-col">
+        <el-empty v-if="items.length === 0" :description="t('aegis.datasets.empty')" class="my-auto" />
+        <el-scrollbar v-else class="flex-1 min-h-0">
+          <div class="aegis-card-grid pr-1">
+            <article v-for="sample in items" :key="sample.alarm_id" class="aegis-sample-card">
+              <div class="aegis-sample-card__media">
+                <img
+                  :src="evidenceImageURL(sample.alarm_id)"
+                  :alt="sample.title"
+                  loading="lazy"
+                />
               </div>
-              <div class="text-xs text-slate-500 truncate">
-                {{ sample.zone_name || "—" }} / {{ sample.camera_name || sample.camera_id }}
+              <div class="aegis-sample-card__body">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-semibold text-sm truncate" :title="sample.title">
+                    {{ sample.title }}
+                  </span>
+                  <el-tag size="small" type="warning" class="shrink-0">
+                    {{ reasonLabel(sample.false_positive_reason) }}
+                  </el-tag>
+                </div>
+                <div class="text-xs text-slate-500 truncate">
+                  {{ sample.zone_name || "—" }} / {{ sample.camera_name || sample.camera_id }}
+                </div>
+                <div v-if="sample.algorithm_name" class="text-xs text-slate-500 truncate">
+                  {{ sample.algorithm_name }} {{ sample.algorithm_version }}
+                </div>
+                <div
+                  v-if="sample.handle_note"
+                  class="text-xs text-slate-600 dark:text-slate-300 truncate"
+                  :title="sample.handle_note"
+                >
+                  {{ sample.handle_note }}
+                </div>
+                <div class="mt-auto pt-2 border-t border-[var(--el-border-color-extra-light)] flex items-center justify-between text-[11px] text-slate-500 aegis-tabular">
+                  <span>{{ t("aegis.datasets.detectionsCount") }}: {{ sample.detections_snapshot?.length ?? 0 }}</span>
+                  <span>{{ formatDateTime(sample.triggered_at) }}</span>
+                </div>
               </div>
-              <div v-if="sample.algorithm_name" class="text-xs text-slate-500 truncate">
-                {{ sample.algorithm_name }} {{ sample.algorithm_version }}
-              </div>
-              <div
-                v-if="sample.handle_note"
-                class="text-xs text-slate-600 dark:text-slate-300 truncate"
-                :title="sample.handle_note"
-              >
-                {{ sample.handle_note }}
-              </div>
-              <div class="mt-auto pt-2 border-t border-[var(--el-border-color-extra-light)] flex items-center justify-between text-[11px] text-slate-500 aegis-tabular">
-                <span>{{ t("aegis.datasets.detectionsCount") }}: {{ sample.detections_snapshot?.length ?? 0 }}</span>
-                <span>{{ formatDateTime(sample.triggered_at) }}</span>
-              </div>
-            </div>
-          </article>
-        </div>
+            </article>
+          </div>
+        </el-scrollbar>
 
-        <div v-if="total > query.page_size" class="aegis-pagination">
+        <div class="aegis-pagination">
           <el-pagination
             v-model:current-page="query.page"
-            :page-size="query.page_size"
+            v-model:page-size="query.page_size"
+            :page-sizes="[12, 24, 48]"
             :total="total"
-            layout="total, prev, pager, next"
+            layout="total, sizes, prev, pager, next"
             @current-change="loadData"
+            @size-change="handleSearch"
           />
         </div>
       </div>

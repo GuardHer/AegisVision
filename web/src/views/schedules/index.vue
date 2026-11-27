@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -17,6 +17,12 @@ defineOptions({ name: "AegisSchedules" });
 const { t } = useI18n();
 const loading = ref(false);
 const schedules = ref<ArmingScheduleItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedSchedules = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return schedules.value.slice(start, start + pageSize.value);
+});
 
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
@@ -154,8 +160,8 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("aegis.schedules.title") }}</h1>
@@ -168,8 +174,8 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div class="aegis-table-wrap">
-        <el-table v-loading="loading" :data="schedules" border stripe>
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedSchedules" height="100%" border stripe>
           <el-table-column prop="name" :label="t('aegis.schedules.name')" min-width="165" show-overflow-tooltip />
           <el-table-column prop="timezone" :label="t('aegis.schedules.timezone')" width="145" />
           <el-table-column :label="t('aegis.schedules.weeklyWindows')" min-width="240">
@@ -206,6 +212,17 @@ onMounted(loadData);
             </template>
           </el-table-column>
         </el-table>
+      </div>
+
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="schedules.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
       </div>
     </section>
 

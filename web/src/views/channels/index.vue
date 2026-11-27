@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -19,6 +19,12 @@ defineOptions({ name: "AegisChannels" });
 const { t } = useI18n();
 const loading = ref(false);
 const channels = ref<AlarmChannelItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedChannels = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return channels.value.slice(start, start + pageSize.value);
+});
 const zones = ref<ZoneTreeNode[]>([]);
 const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
@@ -238,8 +244,8 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("menus.aegisChannels") }}</h1>
@@ -250,8 +256,8 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div class="aegis-table-wrap">
-        <el-table v-loading="loading" :data="channels" border stripe>
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedChannels" height="100%" border stripe>
           <el-table-column prop="name" :label="t('aegis.channels.name')" min-width="150" show-overflow-tooltip />
           <el-table-column :label="t('aegis.channels.type')" width="150">
             <template #default="{ row }">
@@ -305,6 +311,17 @@ onMounted(loadData);
             </template>
           </el-table-column>
         </el-table>
+      </div>
+
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="channels.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
       </div>
     </section>
 

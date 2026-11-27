@@ -19,6 +19,20 @@ import FullscreenExitFill from "~icons/ri/fullscreen-exit-fill";
 
 export type PlayerState = "connecting" | "playing" | "reconnecting" | "paused" | "error";
 
+const IconClose = useRenderIcon(Close);
+const IconRefresh = useRenderIcon(Refresh);
+const IconZoomIn = useRenderIcon(ZoomIn);
+const IconCamera = useRenderIcon(Camera);
+const IconDataLine = useRenderIcon(DataLine);
+const IconPause = useRenderIcon(PauseLine);
+const IconPlay = useRenderIcon(PlayLine);
+const IconMute = useRenderIcon(VolumeMuteLine);
+const IconVolume = useRenderIcon(VolumeUpLine);
+const IconOverlay = useRenderIcon(Focus3Line);
+const IconPip = useRenderIcon(PictureInPicture);
+const IconFullscreen = useRenderIcon(FullscreenFill);
+const IconExitFullscreen = useRenderIcon(FullscreenExitFill);
+
 const props = withDefaults(
   defineProps<{
     cameraId: string;
@@ -64,6 +78,7 @@ const isMuted = ref(true);
 const isPaused = ref(false);
 const isFullscreen = ref(false);
 const showStats = ref(false);
+const isCompact = ref(false);
 const zoom = ref(1);
 const pan = reactive({ x: 0, y: 0 });
 const dragging = ref(false);
@@ -85,13 +100,16 @@ let pc: RTCPeerConnection | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let statsTimer: ReturnType<typeof setInterval> | null = null;
+let rootResizeObserver: ResizeObserver | null = null;
 let prevBytes = 0;
 let prevStatsTs = 0;
-let backoffMs = 1000;
+let lastVideoWidth = 0;
+let lastVideoHeight = 0;
+let backoffMs = 2000;
 let unmounted = false;
 
 const videoStyle = computed(() => {
-  if (zoom.value <= 1) return {};
+  if (zoom.value <= 1) return undefined;
   return {
     transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${zoom.value})`,
     cursor: dragging.value ? "grabbing" : "grab"
@@ -99,8 +117,16 @@ const videoStyle = computed(() => {
 });
 
 function setStatus(next: PlayerState) {
+  if (status.value === next) return;
   status.value = next;
   emit("state-change", next);
+}
+
+function stopStatsPolling() {
+  if (statsTimer) {
+    clearInterval(statsTimer);
+    statsTimer = null;
+  }
 }
 
 function stopTimers() {
@@ -112,10 +138,7 @@ function stopTimers() {
     clearInterval(countdownTimer);
     countdownTimer = null;
   }
-  if (statsTimer) {
-    clearInterval(statsTimer);
-    statsTimer = null;
-  }
+  stopStatsPolling();
 }
 
 function cleanupPeer() {
@@ -134,42 +157,49 @@ function cleanupPeer() {
   }
 }
 
-function startStatsPolling(peer: RTCPeerConnection) {
-  if (statsTimer) clearInterval(statsTimer);
-  statsTimer = setInterval(async () => {
-    if (!pc || pc !== peer || unmounted) return;
-    try {
-      const report = await peer.getStats();
-      report.forEach((stat: any) => {
-        if (stat.type === "inbound-rtp" && stat.kind === "video") {
-          if (typeof stat.framesPerSecond === "number") {
-            telemetry.fps = Math.round(stat.framesPerSecond);
-          }
-          if (typeof stat.frameWidth === "number" && stat.frameWidth > 0) {
-            telemetry.width = stat.frameWidth;
-            telemetry.height = stat.frameHeight || telemetry.height;
-          }
-          if (typeof stat.bytesReceived === "number" && typeof stat.timestamp === "number") {
-            if (prevStatsTs > 0 && stat.timestamp > prevStatsTs) {
-              const dtSec = (stat.timestamp - prevStatsTs) / 1000;
-              const deltaBytes = Math.max(0, stat.bytesReceived - prevBytes);
-              telemetry.bitrateKbps = Math.round((deltaBytes * 8) / 1000 / dtSec);
-            }
-            prevBytes = stat.bytesReceived;
-            prevStatsTs = stat.timestamp;
-          }
+async function pollStatsOnce(peer: RTCPeerConnection) {
+  if (!pc || pc !== peer || unmounted || !showStats.value) return;
+  try {
+    const report = await peer.getStats();
+    report.forEach((stat: any) => {
+      if (stat.type === "inbound-rtp" && stat.kind === "video") {
+        if (typeof stat.framesPerSecond === "number") {
+          telemetry.fps = Math.round(stat.framesPerSecond);
         }
-        if (
-          stat.type === "candidate-pair" &&
-          (stat.state === "succeeded" || stat.nominated) &&
-          typeof stat.currentRoundTripTime === "number"
-        ) {
-          telemetry.rttMs = Math.round(stat.currentRoundTripTime * 1000);
+        if (typeof stat.frameWidth === "number" && stat.frameWidth > 0) {
+          telemetry.width = stat.frameWidth;
+          telemetry.height = stat.frameHeight || telemetry.height;
         }
-      });
-    } catch {
-      // Ignore transient getStats failures
-    }
+        if (typeof stat.bytesReceived === "number" && typeof stat.timestamp === "number") {
+          if (prevStatsTs > 0 && stat.timestamp > prevStatsTs) {
+            const dtSec = (stat.timestamp - prevStatsTs) / 1000;
+            const deltaBytes = Math.max(0, stat.bytesReceived - prevBytes);
+            telemetry.bitrateKbps = Math.round((deltaBytes * 8) / 1000 / dtSec);
+          }
+          prevBytes = stat.bytesReceived;
+          prevStatsTs = stat.timestamp;
+        }
+      }
+      if (
+        stat.type === "candidate-pair" &&
+        (stat.state === "succeeded" || stat.nominated) &&
+        typeof stat.currentRoundTripTime === "number"
+      ) {
+        telemetry.rttMs = Math.round(stat.currentRoundTripTime * 1000);
+      }
+    });
+  } catch {
+    // Ignore transient getStats failures
+  }
+}
+
+function syncStatsPolling() {
+  stopStatsPolling();
+  if (!showStats.value || !pc || unmounted) return;
+  const peer = pc;
+  void pollStatsOnce(peer);
+  statsTimer = setInterval(() => {
+    void pollStatsOnce(peer);
   }, 2000);
 }
 
@@ -179,7 +209,7 @@ function scheduleReconnect() {
     setStatus("reconnecting");
   }
   const delay = backoffMs;
-  backoffMs = Math.min(backoffMs * 2, 15000);
+  backoffMs = Math.min(backoffMs * 2, 30000);
   retryCountdown.value = Math.max(1, Math.ceil(delay / 1000));
   if (countdownTimer) clearInterval(countdownTimer);
   countdownTimer = setInterval(() => {
@@ -210,8 +240,9 @@ async function connect() {
     peer.addTransceiver("video", { direction: "recvonly" });
 
     peer.ontrack = evt => {
-      if (videoRef.value && evt.streams[0]) {
-        videoRef.value.srcObject = evt.streams[0];
+      const stream = evt.streams[0];
+      if (videoRef.value && stream && videoRef.value.srcObject !== stream) {
+        videoRef.value.srcObject = stream;
         videoRef.value.muted = isMuted.value;
         void videoRef.value.play().catch(() => {});
       }
@@ -219,10 +250,10 @@ async function connect() {
 
     peer.oniceconnectionstatechange = () => {
       if (peer.iceConnectionState === "connected" || peer.iceConnectionState === "completed") {
-        backoffMs = 1000;
+        backoffMs = 2000;
         lastError.value = "";
         setStatus(isPaused.value ? "paused" : "playing");
-        startStatsPolling(peer);
+        syncStatsPolling();
       } else if (
         peer.iceConnectionState === "failed" ||
         peer.iceConnectionState === "disconnected"
@@ -253,7 +284,7 @@ async function connect() {
 }
 
 function manualReconnect() {
-  backoffMs = 1000;
+  backoffMs = 2000;
   void connect();
 }
 
@@ -360,14 +391,17 @@ function handleFullscreenChange() {
 }
 
 function onLoadedMetadata() {
-  if (videoRef.value) {
-    telemetry.width = videoRef.value.videoWidth;
-    telemetry.height = videoRef.value.videoHeight;
-    emit("video-resize", {
-      width: videoRef.value.videoWidth,
-      height: videoRef.value.videoHeight
-    });
-  }
+  const v = videoRef.value;
+  if (!v || v.videoWidth <= 0 || v.videoHeight <= 0) return;
+  if (v.videoWidth === lastVideoWidth && v.videoHeight === lastVideoHeight) return;
+  lastVideoWidth = v.videoWidth;
+  lastVideoHeight = v.videoHeight;
+  telemetry.width = v.videoWidth;
+  telemetry.height = v.videoHeight;
+  emit("video-resize", {
+    width: v.videoWidth,
+    height: v.videoHeight
+  });
 }
 
 function onDoubleClick() {
@@ -376,10 +410,27 @@ function onDoubleClick() {
   }
 }
 
+function updateCompactByWidth(w: number) {
+  if (w <= 0) return;
+  // Hysteresis band (300..340px) prevents threshold oscillation
+  if (w < 300 && !isCompact.value) {
+    isCompact.value = true;
+  } else if (w > 340 && isCompact.value) {
+    isCompact.value = false;
+  }
+}
+
+watch(showStats, () => {
+  syncStatsPolling();
+});
+
 watch(
-  () => [props.cameraId, props.stream],
-  () => {
-    backoffMs = 1000;
+  [() => props.cameraId, () => props.stream],
+  ([newId, newStream], [oldId, oldStream]) => {
+    if (newId === oldId && newStream === oldStream) return;
+    backoffMs = 2000;
+    lastVideoWidth = 0;
+    lastVideoHeight = 0;
     resetZoom();
     if (props.autoConnect) {
       void connect();
@@ -389,6 +440,17 @@ watch(
 
 onMounted(() => {
   document.addEventListener("fullscreenchange", handleFullscreenChange);
+  const el = rootRef.value;
+  if (el) {
+    updateCompactByWidth(el.clientWidth);
+    if (typeof ResizeObserver !== "undefined") {
+      rootResizeObserver = new ResizeObserver(entries => {
+        const first = entries[0];
+        if (first) updateCompactByWidth(first.contentRect.width);
+      });
+      rootResizeObserver.observe(el);
+    }
+  }
   if (props.autoConnect && props.cameraId) {
     void connect();
   }
@@ -397,6 +459,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unmounted = true;
   document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  if (rootResizeObserver) {
+    rootResizeObserver.disconnect();
+    rootResizeObserver = null;
+  }
   cleanupPeer();
 });
 
@@ -412,6 +478,7 @@ defineExpose({
   <div
     ref="rootRef"
     class="aegis-whep-player"
+    :class="{ 'is-compact': isCompact }"
     @wheel="onWheel"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
@@ -422,6 +489,7 @@ defineExpose({
     <video
       ref="videoRef"
       class="aegis-whep-video"
+      :class="{ 'is-zoomed': zoom > 1, 'is-dragging': dragging }"
       :style="videoStyle"
       autoplay
       :muted="isMuted"
@@ -433,7 +501,7 @@ defineExpose({
     <!-- Optional overlay slot inside player stage (kept below HUD controls) -->
     <slot name="overlay" />
 
-    <!-- Top OSD Bar: Camera Identity + Status Dot + Quick Stream Pill -->
+    <!-- Top OSD Bar: Camera Identity + Status Dot -->
     <div v-if="controls !== 'none'" class="aegis-whep-top">
       <div class="aegis-whep-identity">
         <span
@@ -469,7 +537,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn"
-          :icon="useRenderIcon(Close)"
+          :icon="IconClose"
           :title="t('aegis.player.closeSlot')"
           data-test="player-close"
           @click.stop="emit('close')"
@@ -498,10 +566,7 @@ defineExpose({
     >
       <div class="aegis-whep-state-card">
         <div v-if="status !== 'error'" class="aegis-whep-spinner" aria-hidden="true" />
-        <svg v-else aria-hidden="true" viewBox="0 0 24 24" class="w-6 h-6 text-red-400">
-          <path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-        </svg>
-        <div class="text-xs font-medium text-white">
+        <div class="text-xs font-medium text-white aegis-tabular">
           {{
             status === "connecting"
               ? t("aegis.player.connecting")
@@ -517,7 +582,7 @@ defineExpose({
           v-if="status === 'error' || status === 'reconnecting'"
           type="primary"
           size="small"
-          :icon="useRenderIcon(Refresh)"
+          :icon="IconRefresh"
           data-test="player-reconnect"
           @click.stop="manualReconnect"
         >
@@ -539,7 +604,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn"
-          :icon="useRenderIcon(isPaused ? PlayLine : PauseLine)"
+          :icon="isPaused ? IconPlay : IconPause"
           :title="isPaused ? t('aegis.player.resume') : t('aegis.player.pause')"
           data-test="player-pause"
           @click="togglePause"
@@ -551,7 +616,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn"
-          :icon="useRenderIcon(isMuted ? VolumeMuteLine : VolumeUpLine)"
+          :icon="isMuted ? IconMute : IconVolume"
           :title="isMuted ? t('aegis.player.unmute') : t('aegis.player.mute')"
           data-test="player-mute"
           @click="toggleMute"
@@ -562,7 +627,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn"
-          :icon="useRenderIcon(Refresh)"
+          :icon="IconRefresh"
           :title="t('aegis.player.retryNow')"
           @click="manualReconnect"
         />
@@ -589,7 +654,7 @@ defineExpose({
           circle
           class="aegis-hud-btn aegis-hud-secondary"
           :class="{ 'is-active': zoom > 1 }"
-          :icon="useRenderIcon(ZoomIn)"
+          :icon="IconZoomIn"
           :title="t('aegis.player.zoomIn')"
           data-test="player-zoom"
           @click="cycleZoom"
@@ -613,7 +678,7 @@ defineExpose({
           circle
           class="aegis-hud-btn"
           :class="{ 'is-active': showOverlay }"
-          :icon="useRenderIcon(Focus3Line)"
+          :icon="IconOverlay"
           :title="t('aegis.player.overlayToggle')"
           data-test="player-overlay-toggle"
           @click="emit('update:showOverlay', !showOverlay)"
@@ -625,7 +690,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn"
-          :icon="useRenderIcon(Camera)"
+          :icon="IconCamera"
           :title="t('aegis.player.snapshot')"
           data-test="player-snapshot"
           @click="emit('snapshot', videoRef)"
@@ -637,7 +702,7 @@ defineExpose({
           circle
           class="aegis-hud-btn aegis-hud-secondary"
           :class="{ 'is-active': showStats }"
-          :icon="useRenderIcon(DataLine)"
+          :icon="IconDataLine"
           :title="t('aegis.player.statsHud')"
           data-test="player-stats-toggle"
           @click="showStats = !showStats"
@@ -649,7 +714,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn aegis-hud-secondary"
-          :icon="useRenderIcon(PictureInPicture)"
+          :icon="IconPip"
           :title="t('aegis.player.pip')"
           @click="togglePiP"
         />
@@ -660,7 +725,7 @@ defineExpose({
           size="small"
           circle
           class="aegis-hud-btn"
-          :icon="useRenderIcon(isFullscreen ? FullscreenExitFill : FullscreenFill)"
+          :icon="isFullscreen ? IconExitFullscreen : IconFullscreen"
           :title="isFullscreen ? t('aegis.player.exitFullscreen') : t('aegis.player.fullscreen')"
           data-test="player-fullscreen"
           @click="toggleFullscreen"
@@ -672,28 +737,34 @@ defineExpose({
 
 <style scoped>
 .aegis-whep-player {
-  container: player / inline-size;
   position: relative;
-  inline-size: 100%;
-  block-size: 100%;
+  width: 100%;
+  height: 100%;
   background: #090d16;
-  overflow: clip;
+  overflow: hidden;
   user-select: none;
 }
 
+/* Keep <video> strictly out of layout flow so intrinsic frames never cause reflow/jitter */
 .aegis-whep-video {
+  position: absolute;
+  inset: 0;
   display: block;
-  inline-size: 100%;
-  block-size: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  transition: transform 140ms ease-out;
   transform-origin: center center;
+}
+
+.aegis-whep-video.is-zoomed:not(.is-dragging) {
+  transition: transform 140ms ease-out;
 }
 
 .aegis-whep-top {
   position: absolute;
-  inset-block-start: 0;
-  inset-inline: 0;
+  top: 0;
+  right: 0;
+  left: 0;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -709,12 +780,12 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 6px;
-  min-inline-size: 0;
+  min-width: 0;
 }
 
 .aegis-whep-dot {
-  inline-size: 7px;
-  block-size: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 9999px;
   flex-shrink: 0;
   background: #94a3b8;
@@ -790,15 +861,14 @@ defineExpose({
   transition: opacity 160ms ease;
 }
 
-.aegis-whep-player:hover .aegis-whep-top-actions,
-.aegis-whep-player:focus-within .aegis-whep-top-actions {
+.aegis-whep-player:hover .aegis-whep-top-actions {
   opacity: 1;
 }
 
 .aegis-whep-stats {
   position: absolute;
-  inset-block-start: 34px;
-  inset-inline-start: 8px;
+  top: 34px;
+  left: 8px;
   z-index: 22;
   display: grid;
   grid-template-columns: repeat(2, auto);
@@ -826,8 +896,9 @@ defineExpose({
   position: absolute;
   inset: 0;
   z-index: 18;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgb(9 13 22 / 72%);
   padding: 12px;
 }
@@ -841,8 +912,8 @@ defineExpose({
 }
 
 .aegis-whep-spinner {
-  inline-size: 22px;
-  block-size: 22px;
+  width: 22px;
+  height: 22px;
   border-radius: 9999px;
   border: 2px solid rgb(255 255 255 / 22%);
   border-top-color: #38bdf8;
@@ -857,8 +928,9 @@ defineExpose({
 
 .aegis-whep-controls {
   position: absolute;
-  inset-block-end: 0;
-  inset-inline: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 25;
   display: flex;
   align-items: center;
@@ -870,8 +942,7 @@ defineExpose({
   transition: opacity 160ms ease;
 }
 
-.aegis-whep-player:hover .aegis-whep-controls,
-.aegis-whep-player:focus-within .aegis-whep-controls {
+.aegis-whep-player:hover .aegis-whep-controls {
   opacity: 1;
 }
 
@@ -909,24 +980,14 @@ defineExpose({
   font-variant-numeric: tabular-nums;
 }
 
-/* Compact mode for 9-grid / 16-grid narrow tiles */
-@container player (inline-size < 320px) {
-  .aegis-whep-code,
-  .aegis-whep-live-tag,
-  .aegis-hud-secondary {
-    display: none;
-  }
-
-  .aegis-whep-controls {
-    padding: 12px 5px 4px;
-  }
+/* Compact mode for 9-grid / 16-grid narrow tiles (driven by JS hysteresis, zero CSS container oscillation) */
+.aegis-whep-player.is-compact .aegis-whep-code,
+.aegis-whep-player.is-compact .aegis-whep-live-tag,
+.aegis-whep-player.is-compact .aegis-hud-secondary {
+  display: none;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .aegis-whep-video,
-  .aegis-whep-controls,
-  .aegis-whep-top-actions {
-    transition: none;
-  }
+.aegis-whep-player.is-compact .aegis-whep-controls {
+  padding: 12px 5px 4px;
 }
 </style>

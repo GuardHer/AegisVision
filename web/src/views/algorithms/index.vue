@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -18,6 +18,12 @@ defineOptions({ name: "AegisAlgorithms" });
 const { t } = useI18n();
 const loading = ref(false);
 const algorithms = ref<AlgorithmItem[]>([]);
+const page = ref(1);
+const pageSize = ref(20);
+const pagedAlgorithms = computed(() => {
+  const start = (page.value - 1) * pageSize.value;
+  return algorithms.value.slice(start, start + pageSize.value);
+});
 const versionsByAlgo = reactive<Record<string, AlgorithmVersionItem[]>>({});
 
 const algoDialog = ref(false);
@@ -139,8 +145,8 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("menus.aegisAlgorithms") }}</h1>
@@ -153,8 +159,8 @@ onMounted(loadData);
         </div>
       </header>
 
-      <div class="aegis-table-wrap">
-        <el-table v-loading="loading" :data="algorithms" border stripe row-key="id">
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="pagedAlgorithms" height="100%" border stripe row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="p-3 bg-[var(--el-fill-color-lighter)]">
@@ -250,6 +256,17 @@ onMounted(loadData);
             </template>
           </el-table-column>
         </el-table>
+      </div>
+
+      <div class="aegis-pagination">
+        <el-pagination
+          v-model:current-page="page"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="algorithms.length"
+          layout="total, sizes, prev, pager, next"
+          @size-change="page = 1"
+        />
       </div>
     </section>
 

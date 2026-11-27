@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { ElMessage } from "element-plus";
 import {
@@ -19,6 +19,20 @@ const activeTab = ref("nodes");
 const loading = ref(false);
 const nodes = ref<AgentNodeItem[]>([]);
 const tasks = ref<InferenceTaskItem[]>([]);
+const nodesPage = ref(1);
+const nodesPageSize = ref(20);
+const tasksPage = ref(1);
+const tasksPageSize = ref(20);
+
+const pagedNodes = computed(() => {
+  const start = (nodesPage.value - 1) * nodesPageSize.value;
+  return nodes.value.slice(start, start + nodesPageSize.value);
+});
+
+const pagedTasks = computed(() => {
+  const start = (tasksPage.value - 1) * tasksPageSize.value;
+  return tasks.value.slice(start, start + tasksPageSize.value);
+});
 
 function nodeStatusType(status: string): "success" | "warning" | "danger" | "info" {
   if (status === "online") return "success";
@@ -84,8 +98,8 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("menus.aegisNodes") }}</h1>
@@ -95,10 +109,10 @@ onMounted(loadData);
         </div>
       </header>
 
-      <el-tabs v-model="activeTab">
+      <el-tabs v-model="activeTab" class="aegis-tabs--fill">
         <el-tab-pane :label="`${t('aegis.nodes.nodesTab')} (${nodes.length})`" name="nodes">
-          <div class="aegis-table-wrap">
-            <el-table v-loading="loading" :data="nodes" border stripe>
+          <div class="aegis-table-wrap aegis-table-wrap--fill">
+            <el-table v-loading="loading" :data="pagedNodes" height="100%" border stripe>
               <el-table-column prop="node_id" :label="t('aegis.nodes.nodeId')" min-width="150" show-overflow-tooltip>
                 <template #default="{ row }">
                   <span class="aegis-mono-id">{{ row.node_id }}</span>
@@ -195,11 +209,21 @@ onMounted(loadData);
               </el-table-column>
             </el-table>
           </div>
+          <div class="aegis-pagination">
+            <el-pagination
+              v-model:current-page="nodesPage"
+              v-model:page-size="nodesPageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="nodes.length"
+              layout="total, sizes, prev, pager, next"
+              @size-change="nodesPage = 1"
+            />
+          </div>
         </el-tab-pane>
 
         <el-tab-pane :label="`${t('aegis.nodes.tasksTab')} (${tasks.length})`" name="tasks">
-          <div class="aegis-table-wrap">
-            <el-table v-loading="loading" :data="tasks" border stripe>
+          <div class="aegis-table-wrap aegis-table-wrap--fill">
+            <el-table v-loading="loading" :data="pagedTasks" height="100%" border stripe>
               <el-table-column label="Task ID" width="140">
                 <template #default="{ row }">
                   <span class="aegis-mono-id" :title="row.id">{{ shortId(row.id, 12) }}</span>
@@ -243,6 +267,16 @@ onMounted(loadData);
                 </template>
               </el-table-column>
             </el-table>
+          </div>
+          <div class="aegis-pagination">
+            <el-pagination
+              v-model:current-page="tasksPage"
+              v-model:page-size="tasksPageSize"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="tasks.length"
+              layout="total, sizes, prev, pager, next"
+              @size-change="tasksPage = 1"
+            />
           </div>
         </el-tab-pane>
       </el-tabs>

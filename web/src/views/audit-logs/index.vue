@@ -84,8 +84,8 @@ onMounted(loadData);
 </script>
 
 <template>
-  <div class="aegis-page">
-    <section class="aegis-panel">
+  <div class="aegis-page aegis-page--fixed">
+    <section class="aegis-panel aegis-panel--fill">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <h1 class="aegis-page-title">{{ t("aegis.auditLogs.title") }}</h1>
@@ -132,8 +132,8 @@ onMounted(loadData);
         </div>
       </div>
 
-      <div class="aegis-table-wrap">
-        <el-table v-loading="loading" :data="items" border stripe row-key="id">
+      <div class="aegis-table-wrap aegis-table-wrap--fill">
+        <el-table v-loading="loading" :data="items" height="100%" border stripe row-key="id">
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="p-3 bg-[var(--el-fill-color-lighter)] rounded">
