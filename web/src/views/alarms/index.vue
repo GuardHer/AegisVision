@@ -451,6 +451,57 @@ onMounted(async () => {
             />
           </div>
 
+          <!-- SOP Violation Step Timeline -->
+          <div
+            v-if="selectedAlarm.rule_mode === 'sop_sequence' && selectedAlarm.sop_trace"
+            class="border rounded p-3 bg-amber-50/40 dark:bg-amber-950/20"
+            data-test="sop-violation-timeline"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium text-sm">{{ t("aegis.alarms.sopTimeline") }}</span>
+              <div class="flex items-center gap-2 text-xs">
+                <el-tag size="small" type="danger">
+                  {{ selectedAlarm.sop_trace.violation_type }}
+                </el-tag>
+                <span class="text-zinc-500">
+                  {{ (selectedAlarm.sop_trace.duration_ms / 1000).toFixed(1) }}s
+                </span>
+              </div>
+            </div>
+            <el-timeline>
+              <el-timeline-item
+                v-for="(step, idx) in selectedAlarm.sop_trace.steps || []"
+                :key="step.step_id || idx"
+                :type="
+                  step.status === 'completed'
+                    ? 'success'
+                    : step.status === 'violated'
+                      ? 'danger'
+                      : step.status === 'skipped'
+                        ? 'info'
+                        : 'primary'
+                "
+                :timestamp="step.completed_at || (step.elapsed_ms ? `${(step.elapsed_ms / 1000).toFixed(1)}s` : '')"
+              >
+                <div class="flex items-center gap-2 text-xs">
+                  <span class="font-medium">#{{ idx + 1 }} {{ step.name }}</span>
+                  <el-tag
+                    size="small"
+                    :type="
+                      step.status === 'completed'
+                        ? 'success'
+                        : step.status === 'violated'
+                          ? 'danger'
+                          : 'info'
+                    "
+                  >
+                    {{ step.status }}
+                  </el-tag>
+                </div>
+              </el-timeline-item>
+            </el-timeline>
+          </div>
+
           <div v-if="allowHandle" class="border rounded p-3">
             <div class="font-medium text-sm mb-2">{{ t("aegis.alarms.handle") }}</div>
             <el-form label-width="110px" size="small">

@@ -46,9 +46,16 @@ vi.mock("@/api/aegis", () => ({
 
 class FakeWebSocket {
   static OPEN = 1;
+  static lastInstance: FakeWebSocket | null = null;
   readyState = 1;
+  onopen: (() => void) | null = null;
+  onmessage: ((evt: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
   send = vi.fn();
   close = vi.fn();
+  constructor() {
+    FakeWebSocket.lastInstance = this;
+  }
 }
 
 describe("Duty Monitor Center", () => {
@@ -95,5 +102,32 @@ describe("Duty Monitor Center", () => {
     expect(soundBtn.text()).toContain("aegis.monitor.soundOn");
     await soundBtn.trigger("click");
     expect(soundBtn.text()).toContain("aegis.monitor.soundOff");
+
+    // Emit WS frame_detections with sop_progress -> video tile renders SOP step progress bar
+    FakeWebSocket.lastInstance?.onmessage?.({
+      data: JSON.stringify({
+        type: "frame_detections",
+        camera_id: "c1",
+        detections: [],
+        roi_counts: {},
+        sop_progress: [
+          {
+            rule_id: "sop-1",
+            rule_name: "ESD SOP",
+            state: "in_progress",
+            current_step_index: 1,
+            steps: [
+              { step_id: "s1", name: "Wear ESD", status: "completed" },
+              { step_id: "s2", name: "Scan Barcode", status: "active" }
+            ]
+          }
+        ]
+      })
+    });
+    await flushPromises();
+    const sopBar = wrapper.get('[data-test="sop-progress-bar"]');
+    expect(sopBar.text()).toContain("ESD SOP");
+    expect(sopBar.text()).toContain("Wear ESD");
+    expect(sopBar.text()).toContain("Scan Barcode");
   });
 });
