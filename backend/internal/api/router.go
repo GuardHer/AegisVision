@@ -106,6 +106,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	rulesH := NewRulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	nodesH := NewNodesTasksHandler(deps.Store, deps.Publisher, deps.Logger)
 	alarmsH := NewAlarmsHandler(deps.Store, deps.Storage, deps.Publisher, deps.Logger)
+	datasetsH := NewDatasetsHandler(deps.Store, deps.Storage, deps.Logger)
 	channelsH := NewChannelsHandler(deps.Store, deps.Publisher, nil, deps.Logger)
 	evidenceH := NewEvidenceHandler(deps.Store.Queries(), deps.Storage, deps.Tokens, deps.Cache, deps.Signer)
 
@@ -203,6 +204,10 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/alarms/:id/handle", opRoles, alarmsH.Handle)
 	authed.GET("/alarms/:id/deliveries", allRoles, alarmsH.ListDeliveries)
 	authed.POST("/deliveries/:delivery_id/retry", opRoles, alarmsH.RetryDelivery)
+
+	// False-positive training datasets (admin & operator)
+	authed.GET("/datasets/false-positives", opRoles, datasetsH.ListFalsePositives)
+	authed.POST("/datasets/export", opRoles, datasetsH.ExportFalsePositives)
 
 	// Alarm channels (admin only; reset allowed for operator/admin)
 	authed.GET("/channels", adminOnly, channelsH.List)
