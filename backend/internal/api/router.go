@@ -97,6 +97,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authH := NewAuthHandler(deps.Store, deps.Tokens, deps.Cache, deps.RefreshTokenTTL)
 	usersH := NewUsersHandler(deps.Store)
 	zonesH := NewZonesHandler(deps.Store, deps.Publisher, deps.Logger)
+	schedulesH := NewSchedulesHandler(deps.Store, deps.Publisher, deps.Logger)
 	presetsH := NewPresetsHandler(deps.Store)
 	dashboardH := NewDashboardHandler(deps.Store)
 	algosH := NewAlgorithmsHandler(deps.Store, deps.Publisher, deps.Logger)
@@ -157,6 +158,12 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 	authed.POST("/zones", adminOnly, zonesH.Create)
 	authed.PUT("/zones/:id", adminOnly, zonesH.Update)
 	authed.DELETE("/zones/:id", adminOnly, zonesH.Delete)
+
+	// Arming schedules
+	authed.GET("/schedules", allRoles, schedulesH.List)
+	authed.POST("/schedules", adminOnly, schedulesH.Create)
+	authed.PUT("/schedules/:id", adminOnly, schedulesH.Update)
+	authed.DELETE("/schedules/:id", adminOnly, schedulesH.Delete)
 
 	// Cameras, stream token, ROIs, rules
 	authed.GET("/cameras", allRoles, camsH.ListCameras)

@@ -62,9 +62,9 @@ const createROIAlgorithmRule = `-- name: CreateROIAlgorithmRule :one
 INSERT INTO roi_algorithm_rules (
     id, camera_id, roi_id, algorithm_version_id, name, rule_mode,
     params, algo_params_override, schedule_mode, pinned_node_id,
-    record_video, video_pre_seconds, video_post_seconds, enabled
+    record_video, video_pre_seconds, video_post_seconds, enabled, schedule_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id
 `
 
@@ -83,6 +83,7 @@ type CreateROIAlgorithmRuleParams struct {
 	VideoPreSeconds    int32           `json:"video_pre_seconds"`
 	VideoPostSeconds   int32           `json:"video_post_seconds"`
 	Enabled            bool            `json:"enabled"`
+	ScheduleID         uuid.NullUUID   `json:"schedule_id"`
 }
 
 func (q *Queries) CreateROIAlgorithmRule(ctx context.Context, arg CreateROIAlgorithmRuleParams) (RoiAlgorithmRule, error) {
@@ -101,6 +102,7 @@ func (q *Queries) CreateROIAlgorithmRule(ctx context.Context, arg CreateROIAlgor
 		arg.VideoPreSeconds,
 		arg.VideoPostSeconds,
 		arg.Enabled,
+		arg.ScheduleID,
 	)
 	var i RoiAlgorithmRule
 	err := row.Scan(
@@ -419,6 +421,7 @@ SET name = $2,
     video_pre_seconds = $9,
     video_post_seconds = $10,
     enabled = $11,
+    schedule_id = $12,
     updated_at = NOW()
 WHERE id = $1
 RETURNING id, camera_id, roi_id, algorithm_version_id, name, rule_mode, params, algo_params_override, schedule_mode, pinned_node_id, record_video, video_pre_seconds, video_post_seconds, enabled, created_at, updated_at, schedule_id
@@ -436,6 +439,7 @@ type UpdateROIAlgorithmRuleParams struct {
 	VideoPreSeconds    int32           `json:"video_pre_seconds"`
 	VideoPostSeconds   int32           `json:"video_post_seconds"`
 	Enabled            bool            `json:"enabled"`
+	ScheduleID         uuid.NullUUID   `json:"schedule_id"`
 }
 
 func (q *Queries) UpdateROIAlgorithmRule(ctx context.Context, arg UpdateROIAlgorithmRuleParams) (RoiAlgorithmRule, error) {
@@ -451,6 +455,7 @@ func (q *Queries) UpdateROIAlgorithmRule(ctx context.Context, arg UpdateROIAlgor
 		arg.VideoPreSeconds,
 		arg.VideoPostSeconds,
 		arg.Enabled,
+		arg.ScheduleID,
 	)
 	var i RoiAlgorithmRule
 	err := row.Scan(

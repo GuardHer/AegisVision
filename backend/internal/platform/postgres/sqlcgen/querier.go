@@ -20,12 +20,14 @@ type Querier interface {
 	CountAlarms(ctx context.Context, arg CountAlarmsParams) (int64, error)
 	CountCamerasInZone(ctx context.Context, zoneID uuid.NullUUID) (int64, error)
 	CountChildZones(ctx context.Context, parentID uuid.NullUUID) (int64, error)
+	CountRulesUsingSchedule(ctx context.Context, scheduleID uuid.NullUUID) (int64, error)
 	CountUsers(ctx context.Context) (int64, error)
 	CreateAlarm(ctx context.Context, arg CreateAlarmParams) (Alarm, error)
 	CreateAlarmChannel(ctx context.Context, arg CreateAlarmChannelParams) (AlarmChannel, error)
 	CreateAlarmDelivery(ctx context.Context, arg CreateAlarmDeliveryParams) (AlarmDelivery, error)
 	CreateAlgorithm(ctx context.Context, arg CreateAlgorithmParams) (Algorithm, error)
 	CreateAlgorithmVersion(ctx context.Context, arg CreateAlgorithmVersionParams) (AlgorithmVersion, error)
+	CreateArmingSchedule(ctx context.Context, arg CreateArmingScheduleParams) (ArmingSchedule, error)
 	CreateCamera(ctx context.Context, arg CreateCameraParams) (Camera, error)
 	CreateCameraROI(ctx context.Context, arg CreateCameraROIParams) (CameraRoi, error)
 	CreateInferenceTask(ctx context.Context, arg CreateInferenceTaskParams) (InferenceTask, error)
@@ -36,6 +38,7 @@ type Querier interface {
 	CreateZone(ctx context.Context, arg CreateZoneParams) (Zone, error)
 	DeleteAlarmChannel(ctx context.Context, id uuid.UUID) error
 	DeleteAlgorithm(ctx context.Context, id uuid.UUID) error
+	DeleteArmingSchedule(ctx context.Context, id uuid.UUID) error
 	DeleteCamera(ctx context.Context, id uuid.UUID) error
 	DeleteCameraROI(ctx context.Context, id uuid.UUID) error
 	DeleteMonitorPreset(ctx context.Context, id uuid.UUID) error
@@ -52,6 +55,7 @@ type Querier interface {
 	GetAlgorithmByID(ctx context.Context, id uuid.UUID) (Algorithm, error)
 	GetAlgorithmByKey(ctx context.Context, algorithmKey string) (Algorithm, error)
 	GetAlgorithmVersionByID(ctx context.Context, id uuid.UUID) (AlgorithmVersion, error)
+	GetArmingScheduleByID(ctx context.Context, id uuid.UUID) (ArmingSchedule, error)
 	GetCameraByID(ctx context.Context, id uuid.UUID) (Camera, error)
 	GetCameraByStreamPath(ctx context.Context, streamPath string) (Camera, error)
 	GetCameraROIByID(ctx context.Context, id uuid.UUID) (CameraRoi, error)
@@ -76,6 +80,7 @@ type Querier interface {
 	ListAlgorithmVersionsByAlgorithm(ctx context.Context, algorithmID uuid.UUID) ([]AlgorithmVersion, error)
 	ListAlgorithms(ctx context.Context) ([]Algorithm, error)
 	ListAllAlgorithmVersions(ctx context.Context) ([]AlgorithmVersion, error)
+	ListArmingSchedules(ctx context.Context) ([]ListArmingSchedulesRow, error)
 	ListCameraCountsByZone(ctx context.Context) ([]ListCameraCountsByZoneRow, error)
 	ListCameraROIsByCamera(ctx context.Context, cameraID uuid.UUID) ([]CameraRoi, error)
 	ListCameras(ctx context.Context) ([]Camera, error)
@@ -102,6 +107,7 @@ type Querier interface {
 	UpdateAlarmVideoEvidence(ctx context.Context, arg UpdateAlarmVideoEvidenceParams) error
 	UpdateAlgorithm(ctx context.Context, arg UpdateAlgorithmParams) (Algorithm, error)
 	UpdateAlgorithmVersion(ctx context.Context, arg UpdateAlgorithmVersionParams) (AlgorithmVersion, error)
+	UpdateArmingSchedule(ctx context.Context, arg UpdateArmingScheduleParams) (ArmingSchedule, error)
 	UpdateCamera(ctx context.Context, arg UpdateCameraParams) (Camera, error)
 	UpdateCameraROI(ctx context.Context, arg UpdateCameraROIParams) (CameraRoi, error)
 	UpdateCameraStatus(ctx context.Context, arg UpdateCameraStatusParams) error

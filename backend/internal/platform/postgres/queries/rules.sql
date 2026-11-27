@@ -2,9 +2,9 @@
 INSERT INTO roi_algorithm_rules (
     id, camera_id, roi_id, algorithm_version_id, name, rule_mode,
     params, algo_params_override, schedule_mode, pinned_node_id,
-    record_video, video_pre_seconds, video_post_seconds, enabled
+    record_video, video_pre_seconds, video_post_seconds, enabled, schedule_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
 
 -- name: GetROIAlgorithmRuleByID :one
@@ -32,6 +32,7 @@ SET name = $2,
     video_pre_seconds = $9,
     video_post_seconds = $10,
     enabled = $11,
+    schedule_id = $12,
     updated_at = NOW()
 WHERE id = $1
 RETURNING *;

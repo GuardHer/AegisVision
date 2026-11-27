@@ -48,11 +48,13 @@ type Rule struct {
 	ID                 string
 	CameraID           string
 	ROI                ROI
+	CameraROIs         map[string]ROI
 	AlgorithmVersionID string
 	AlgorithmKey       string
 	Name               string
 	RuleMode           string
 	Params             RuleParams
+	Schedule           *ArmingSchedule
 	RecordVideo        bool
 	VideoPreSeconds    int
 	VideoPostSeconds   int
@@ -89,6 +91,13 @@ type ruleRuntimeState struct {
 	lastHeartbeatAt time.Time
 	absentElapsed   time.Duration
 	lastAlarmAt     time.Time
+}
+
+func (s *ruleRuntimeState) resetTransient() {
+	s.consecutiveHits = 0
+	s.conditionSince = time.Time{}
+	s.lastHeartbeatAt = time.Time{}
+	s.absentElapsed = 0
 }
 
 type cameraBucket struct {
@@ -175,6 +184,13 @@ func (e *Engine) Evaluate(frame DetectionFrame) EvalOutput {
 		if st == nil {
 			st = &ruleRuntimeState{}
 			b.states[rule.ID] = st
+		}
+
+		// When disarmed by arming schedule, clear transient counters so re-entry starts cleanly
+		// while preserving live ROICounts for monitor wall visualization.
+		if rule.Schedule != nil && !rule.Schedule.IsArmed(ts) {
+			st.resetTransient()
+			continue
 		}
 
 		if alarm, ok := evaluateSingleRule(rule, st, matched, count, ts); ok {

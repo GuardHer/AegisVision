@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strings"
 
@@ -35,6 +36,7 @@ type createRuleRequest struct {
 	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
 	ScheduleMode       string          `json:"schedule_mode"`
 	PinnedNodeID       string          `json:"pinned_node_id"`
+	ScheduleID         string          `json:"schedule_id"`
 	RecordVideo        bool            `json:"record_video"`
 	VideoPreSeconds    *int32          `json:"video_pre_seconds"`
 	VideoPostSeconds   *int32          `json:"video_post_seconds"`
@@ -49,6 +51,7 @@ type updateRuleRequest struct {
 	AlgoParamsOverride json.RawMessage `json:"algo_params_override"`
 	ScheduleMode       string          `json:"schedule_mode"`
 	PinnedNodeID       string          `json:"pinned_node_id"`
+	ScheduleID         string          `json:"schedule_id"`
 	RecordVideo        bool            `json:"record_video"`
 	VideoPreSeconds    *int32          `json:"video_pre_seconds"`
 	VideoPostSeconds   *int32          `json:"video_post_seconds"`
@@ -59,7 +62,80 @@ type updateRuleRequest struct {
 func isValidRuleMode(mode string) bool {
 	return mode == domain.RuleModeAnomalyDetect ||
 		mode == domain.RuleModeCountThreshold ||
-		mode == domain.RuleModeAbsenceDetect
+		mode == domain.RuleModeAbsenceDetect ||
+		mode == domain.RuleModeSOPSequence
+}
+
+type sopStepValidationSpec struct {
+	StepID        string   `json:"step_id"`
+	Name          string   `json:"name"`
+	Labels        []string `json:"labels"`
+	MinConfidence float64  `json:"min_confidence"`
+	Required      *bool    `json:"required"`
+}
+
+type sopParamsValidationSpec struct {
+	TriggerMode    string                  `json:"trigger_mode"`
+	ViolationTypes []string                `json:"violation_types"`
+	Steps          []sopStepValidationSpec `json:"steps"`
+}
+
+func validateSOPSequenceParams(raw json.RawMessage) error {
+	var spec sopParamsValidationSpec
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return domain.NewInvalidArgumentError("invalid sop_sequence params json", err)
+	}
+	if spec.TriggerMode != "" && spec.TriggerMode != "first_step" && spec.TriggerMode != "zone_entry" {
+		return domain.NewInvalidArgumentError("sop_sequence trigger_mode must be first_step or zone_entry", nil)
+	}
+	for _, vt := range spec.ViolationTypes {
+		if vt != "missing_step" && vt != "out_of_order" && vt != "step_timeout" {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("invalid sop violation_type %q", vt), nil)
+		}
+	}
+	if len(spec.Steps) == 0 {
+		return domain.NewInvalidArgumentError("sop_sequence requires at least 1 step", nil)
+	}
+	seenIDs := make(map[string]struct{}, len(spec.Steps))
+	requiredCount := 0
+	for i, s := range spec.Steps {
+		sid := strings.TrimSpace(s.StepID)
+		if sid == "" {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].step_id is required", i), nil)
+		}
+		if _, dup := seenIDs[sid]; dup {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("duplicate step_id %q", sid), nil)
+		}
+		seenIDs[sid] = struct{}{}
+		if strings.TrimSpace(s.Name) == "" {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].name is required", i), nil)
+		}
+		if len(s.Labels) == 0 {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].labels cannot be empty", i), nil)
+		}
+		if s.MinConfidence < 0 || s.MinConfidence > 1 {
+			return domain.NewInvalidArgumentError(fmt.Sprintf("steps[%d].min_confidence must be within [0, 1]", i), nil)
+		}
+		if s.Required == nil || *s.Required {
+			requiredCount++
+		}
+	}
+	if requiredCount == 0 {
+		return domain.NewInvalidArgumentError("sop_sequence must contain at least 1 required step", nil)
+	}
+	return nil
+}
+
+func parseOptionalUUID(raw string) (uuid.NullUUID, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return uuid.NullUUID{}, nil
+	}
+	id, err := uuid.Parse(trimmed)
+	if err != nil {
+		return uuid.NullUUID{}, err
+	}
+	return uuid.NullUUID{UUID: id, Valid: true}, nil
 }
 
 func toNullableText(s string) pgtype.Text {
@@ -111,6 +187,17 @@ func (h *RulesHandler) Create(c *gin.Context) {
 	}
 	if !isValidRuleMode(req.RuleMode) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid rule_mode", nil))
+		return
+	}
+	if req.RuleMode == domain.RuleModeSOPSequence {
+		if valErr := validateSOPSequenceParams(req.Params); valErr != nil {
+			respondErr(c, valErr)
+			return
+		}
+	}
+	scheduleID, err := parseOptionalUUID(req.ScheduleID)
+	if err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid schedule_id", err))
 		return
 	}
 	roiID, err := uuid.Parse(req.ROIID)
@@ -174,6 +261,7 @@ func (h *RulesHandler) Create(c *gin.Context) {
 			VideoPreSeconds:    preSec,
 			VideoPostSeconds:   postSec,
 			Enabled:            enabled,
+			ScheduleID:         scheduleID,
 		})
 		if txErr != nil {
 			return txErr
@@ -210,6 +298,17 @@ func (h *RulesHandler) Update(c *gin.Context) {
 	}
 	if !isValidRuleMode(req.RuleMode) {
 		respondErr(c, domain.NewInvalidArgumentError("invalid rule_mode", nil))
+		return
+	}
+	if req.RuleMode == domain.RuleModeSOPSequence {
+		if valErr := validateSOPSequenceParams(req.Params); valErr != nil {
+			respondErr(c, valErr)
+			return
+		}
+	}
+	scheduleID, err := parseOptionalUUID(req.ScheduleID)
+	if err != nil {
+		respondErr(c, domain.NewInvalidArgumentError("invalid schedule_id", err))
 		return
 	}
 	schedMode := strings.TrimSpace(req.ScheduleMode)
@@ -255,6 +354,7 @@ func (h *RulesHandler) Update(c *gin.Context) {
 			VideoPreSeconds:    preSec,
 			VideoPostSeconds:   postSec,
 			Enabled:            req.Enabled,
+			ScheduleID:         scheduleID,
 		})
 		if txErr != nil {
 			return txErr
