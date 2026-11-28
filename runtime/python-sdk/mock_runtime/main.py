@@ -1,4 +1,8 @@
-"""Mock Python Runtime simulating anomaly, count_threshold, and absence scenarios."""
+"""Mock Python Runtime：用于联调与端到端测试（模拟异常检测、人数阈值、离岗与 SOP 场景）。
+
+本示例继承任务级基类 :class:`BaseAlgorithm`，不依赖真实 RTSP 视频源即可模拟四类检测流。
+生产级图像推理算法请参考 ``examples/yolo_style_algorithm.py``（继承 :class:`FrameAlgorithm`）。
+"""
 
 from __future__ import annotations
 
@@ -7,9 +11,16 @@ import os
 import struct
 import time
 
-from aegis_runtime_sdk import BaseAlgorithm, Detection, FrameOutput, TaskContext, serve
+from aegis_runtime_sdk.contract import (
+    AlgorithmMetadata,
+    BaseAlgorithm,
+    Detection,
+    FrameOutput,
+    TaskContext,
+)
+from aegis_runtime_sdk.runtime import serve
 
-# Minimal valid 1x1 JPEG bytes for mock abnormal snapshots
+# 最小合法 1x1 JPEG 字节流，用于在 Mock 模式下测试告警抓拍落库与前端展示
 _MOCK_JPEG = bytes([
     0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
     0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
@@ -29,10 +40,18 @@ _MOCK_JPEG = bytes([
 
 
 class MockAlgorithm(BaseAlgorithm):
-    """Configurable mock detector driven by task algo_params['mock_mode'] or AEGIS_MOCK_MODE."""
+    """可配置的模拟检测算法，通过 ``task_ctx.algo_params['mock_mode']`` 或 ``AEGIS_MOCK_MODE`` 切换场景。"""
 
     def __init__(self) -> None:
         self._task_steps: dict[str, int] = {}
+
+    def metadata(self) -> AlgorithmMetadata:
+        return AlgorithmMetadata(
+            runtime_key="py-mock-v1",
+            version="0.2.0",
+            supported_labels=("person", "no_helmet", "wear_esd_strap", "scan_barcode"),
+            description="Built-in mock algorithm for integration testing",
+        )
 
     def load(self) -> None:
         logging.info("MockAlgorithm loaded")
@@ -46,36 +65,45 @@ class MockAlgorithm(BaseAlgorithm):
     def infer_task(self, task_ctx: TaskContext) -> FrameOutput:
         step = self._task_steps.get(task_ctx.task_id, 0) + 1
         self._task_steps[task_ctx.task_id] = step
-        mode = str(task_ctx.algo_params.get("mock_mode") or os.getenv("AEGIS_MOCK_MODE", "anomaly"))
+        mode = str(task_ctx.get_param("mock_mode") or os.getenv("AEGIS_MOCK_MODE", "anomaly"))
 
         if mode == "absence":
-            # Emit empty frames -> RuntimeServer sends periodic is_heartbeat=True frames.
+            # 返回有效空帧 -> Runtime 自动按心跳周期补发 is_heartbeat=True
             return FrameOutput(detections=[], frame_width=1920, frame_height=1080)
 
         if mode == "sop":
-            script = str(task_ctx.algo_params.get("sop_script") or os.getenv("AEGIS_SOP_SCRIPT", "compliant"))
+            script = str(task_ctx.get_param("sop_script") or os.getenv("AEGIS_SOP_SCRIPT", "compliant"))
             phase = step % 6
             if script == "out_of_order":
-                # Jump straight to step 2 (scan_barcode) skipping required step 1 (wear_esd_strap)
                 return FrameOutput(
                     detections=[
-                        Detection(bbox=(0.3, 0.25, 0.6, 0.75), label="scan_barcode", confidence=0.95, track_id="op-1", is_abnormal=False)
+                        Detection(
+                            bbox=(0.3, 0.25, 0.6, 0.75),
+                            label="scan_barcode",
+                            confidence=0.95,
+                            track_id="op-1",
+                            is_abnormal=False,
+                        )
                     ],
                     frame_width=1920,
                     frame_height=1080,
                 )
             if script == "timeout":
-                # Perform step 1 on first two frames, then emit empty frames to trigger step_timeout
                 if step <= 2:
                     return FrameOutput(
                         detections=[
-                            Detection(bbox=(0.2, 0.25, 0.45, 0.75), label="wear_esd_strap", confidence=0.95, track_id="op-1", is_abnormal=False)
+                            Detection(
+                                bbox=(0.2, 0.25, 0.45, 0.75),
+                                label="wear_esd_strap",
+                                confidence=0.95,
+                                track_id="op-1",
+                                is_abnormal=False,
+                            )
                         ],
                         frame_width=1920,
                         frame_height=1080,
                     )
                 return FrameOutput(detections=[], frame_width=1920, frame_height=1080)
-            # Default "compliant": step 1 (2 frames) -> step 2 (1 frame, matching default min_dwell_frames=1) -> idle pause (3 frames)
             if phase in (1, 2):
                 label = "wear_esd_strap"
             elif phase == 3:
@@ -84,14 +112,20 @@ class MockAlgorithm(BaseAlgorithm):
                 return FrameOutput(detections=[], frame_width=1920, frame_height=1080)
             return FrameOutput(
                 detections=[
-                    Detection(bbox=(0.25, 0.25, 0.55, 0.75), label=label, confidence=0.95, track_id="op-1", is_abnormal=False)
+                    Detection(
+                        bbox=(0.25, 0.25, 0.55, 0.75),
+                        label=label,
+                        confidence=0.95,
+                        track_id="op-1",
+                        is_abnormal=False,
+                    )
                 ],
                 frame_width=1920,
                 frame_height=1080,
             )
 
         if mode == "count":
-            count = int(task_ctx.algo_params.get("mock_count", 3))
+            count = int(task_ctx.get_param("mock_count", 3))
             dets = []
             for idx in range(count):
                 x1 = min(0.8, 0.1 + idx * 0.18)
@@ -106,11 +140,10 @@ class MockAlgorithm(BaseAlgorithm):
                 )
             return FrameOutput(detections=dets, frame_width=1920, frame_height=1080)
 
-        # Default "anomaly" mode: emit abnormal no_helmet detection + valid JPEG snapshot.
         offset = (step % 5) * 0.02
         det = Detection(
             bbox=(0.2 + offset, 0.2, 0.45 + offset, 0.8),
-            label=str(task_ctx.algo_params.get("mock_label", "no_helmet")),
+            label=str(task_ctx.get_param("mock_label", "no_helmet")),
             confidence=0.94,
             track_id="trk-1",
             is_abnormal=True,
