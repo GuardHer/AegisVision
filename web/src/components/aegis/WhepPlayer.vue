@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import { useI18n } from "vue-i18n";
 import Hls from "hls.js";
 import { createStreamToken } from "@/api/aegis";
+import { extractErrorMessage } from "@/utils/error";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 import Close from "~icons/ep/close";
 import Refresh from "~icons/ep/refresh";
@@ -478,7 +479,7 @@ async function connect() {
       await connectWebRTC(whepUrl);
     }
   } catch (err: any) {
-    lastError.value = err?.message || "Stream handshake failed";
+    lastError.value = extractErrorMessage(err, "Stream handshake failed");
     setStatus("error");
     scheduleReconnect();
   }

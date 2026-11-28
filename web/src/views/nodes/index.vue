@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
 import {
   listNodes,
   listTasks,
@@ -11,14 +10,19 @@ import {
   type InferenceTaskItem
 } from "@/api/aegis";
 import { formatDateTime, shortId } from "@/utils/format";
+import { showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisNodes" });
 
 const { t } = useI18n();
 const activeTab = ref("nodes");
 const loading = ref(false);
+const loadError = ref("");
 const nodes = ref<AgentNodeItem[]>([]);
 const tasks = ref<InferenceTaskItem[]>([]);
+const failedTaskCount = computed(
+  () => tasks.value.filter(item => item.actual_state === "failed" || item.actual_state === "error" || Boolean(item.error_message)).length
+);
 const nodesPage = ref(1);
 const nodesPageSize = ref(20);
 const tasksPage = ref(1);
@@ -54,8 +58,9 @@ async function loadData() {
     const [nRes, tRes] = await Promise.all([listNodes(), listTasks()]);
     nodes.value = nRes?.data ?? [];
     tasks.value = tRes?.data ?? [];
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load compute cluster");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -65,20 +70,20 @@ async function toggleDrain(node: AgentNodeItem) {
   try {
     const next = node.status === "draining" ? "online" : "draining";
     await updateNodeStatus(node.node_id, next);
-    ElMessage.success(`Node ${node.node_id} -> ${next}`);
+    showSuccess(`${node.node_id} -> ${next}`);
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to update node status");
+    showError(err, "Failed to update node status");
   }
 }
 
 async function onReschedule(taskId: string) {
   try {
     await rescheduleTask(taskId);
-    ElMessage.success("Reschedule requested");
+    showSuccess(t("aegis.nodes.rescheduleSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to reschedule task");
+    showError(err, "Failed to reschedule task");
   }
 }
 
@@ -108,6 +113,43 @@ onMounted(loadData);
           <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
         </div>
       </header>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
+
+      <el-alert
+        v-else-if="!loading && nodes.length === 0"
+        type="warning"
+        show-icon
+        :closable="false"
+        :title="t('aegis.nodes.noNodesHint')"
+        class="mb-3 shrink-0"
+      />
+
+      <el-alert
+        v-else-if="!loading && failedTaskCount > 0"
+        type="error"
+        show-icon
+        :closable="false"
+        :title="`${t('aegis.nodes.failedTasksBanner')} (${failedTaskCount})`"
+        class="mb-3 shrink-0"
+      />
 
       <el-tabs v-model="activeTab" class="aegis-tabs--fill">
         <el-tab-pane :label="`${t('aegis.nodes.nodesTab')} (${nodes.length})`" name="nodes">
@@ -202,9 +244,17 @@ onMounted(loadData);
               </el-table-column>
               <el-table-column :label="t('aegis.common.actions')" width="118" fixed="right">
                 <template #default="{ row }">
-                  <el-button link type="warning" @click="toggleDrain(row)">
-                    {{ row.status === "draining" ? t("aegis.nodes.resume") : t("aegis.nodes.drain") }}
-                  </el-button>
+                  <el-popconfirm
+                    :title="row.status === 'draining' ? t('aegis.nodes.confirmResume') : t('aegis.nodes.confirmDrain')"
+                    width="240"
+                    @confirm="toggleDrain(row)"
+                  >
+                    <template #reference>
+                      <el-button link type="warning">
+                        {{ row.status === "draining" ? t("aegis.nodes.resume") : t("aegis.nodes.drain") }}
+                      </el-button>
+                    </template>
+                  </el-popconfirm>
                 </template>
               </el-table-column>
             </el-table>
@@ -226,7 +276,9 @@ onMounted(loadData);
             <el-table v-loading="loading" :data="pagedTasks" height="100%" border stripe>
               <el-table-column label="Task ID" width="140">
                 <template #default="{ row }">
-                  <span class="aegis-mono-id" :title="row.id">{{ shortId(row.id, 12) }}</span>
+                  <el-tooltip :content="row.id" placement="top">
+                    <span class="aegis-mono-id">{{ shortId(row.id, 12) }}</span>
+                  </el-tooltip>
                 </template>
               </el-table-column>
               <el-table-column prop="runtime_key" label="Runtime Key" min-width="140" show-overflow-tooltip>
@@ -259,11 +311,27 @@ onMounted(loadData);
                   <span class="aegis-tabular">{{ formatDateTime(row.last_frame_at) }}</span>
                 </template>
               </el-table-column>
+              <el-table-column :label="t('aegis.nodes.errorMessage')" min-width="180" show-overflow-tooltip>
+                <template #default="{ row }">
+                  <el-tag v-if="row.error_message" size="small" type="danger" effect="plain">
+                    {{ row.error_message }}
+                  </el-tag>
+                  <span v-else class="text-slate-400">—</span>
+                </template>
+              </el-table-column>
               <el-table-column :label="t('aegis.common.actions')" width="118" fixed="right">
                 <template #default="{ row }">
-                  <el-button link type="primary" @click="onReschedule(row.id)">
-                    {{ t("aegis.nodes.reschedule") }}
-                  </el-button>
+                  <el-popconfirm
+                    :title="t('aegis.nodes.confirmReschedule')"
+                    width="240"
+                    @confirm="onReschedule(row.id)"
+                  >
+                    <template #reference>
+                      <el-button link type="primary">
+                        {{ t("aegis.nodes.reschedule") }}
+                      </el-button>
+                    </template>
+                  </el-popconfirm>
                 </template>
               </el-table-column>
             </el-table>

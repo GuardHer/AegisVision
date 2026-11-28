@@ -61,6 +61,8 @@ describe("DatasetsPage", () => {
           "el-card": { template: "<div><slot /></div>" },
           "el-button": { template: "<button v-bind='$attrs'><slot /></button>" },
           "el-tag": { template: "<span><slot /></span>" },
+          "el-alert": { props: ["title"], template: "<div>{{ title }}<slot /></div>" },
+          "el-scrollbar": { template: "<div><slot /></div>" },
           "el-empty": { template: "<div class='empty' />" },
           "el-tree-select": true,
           "el-select": true,

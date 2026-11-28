@@ -27,6 +27,7 @@ import type { NormalizedPoint } from "@/utils/videoRect";
 import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import RoiEditor from "@/components/aegis/RoiEditor.vue";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
+import { isCancelError, showError, showSuccess } from "@/utils/error";
 import Back from "~icons/ep/back";
 
 defineOptions({ name: "AegisCameraConfig" });
@@ -37,6 +38,10 @@ const { t } = useI18n();
 const cameraId = String(route.params.id ?? "");
 
 const camera = ref<CameraItem | null>(null);
+const loading = ref(false);
+const loadError = ref("");
+const savingRoi = ref(false);
+const savingRule = ref(false);
 const rois = ref<CameraROIItem[]>([]);
 const rules = ref<ROIAlgorithmRuleItem[]>([]);
 const versions = ref<(AlgorithmVersionItem & { algoName: string })[]>([]);
@@ -150,6 +155,7 @@ function createDefaultSOPSteps(): SOPStepForm[] {
 }
 
 async function loadAll() {
+  loading.value = true;
   try {
     const [camRes, roiRes, ruleRes, algoRes, chRes, schedRes] = await Promise.all([
       getCamera(cameraId),
@@ -173,8 +179,11 @@ async function loadAll() {
       })
     );
     versions.value = versionGroups.flat();
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load camera config");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
+  } finally {
+    loading.value = false;
   }
 }
 
@@ -202,6 +211,7 @@ async function savePolygonROI() {
     ElMessage.warning("Provide ROI name and at least 3 vertices");
     return;
   }
+  savingRoi.value = true;
   try {
     await createROI(cameraId, {
       name: draftRoiName.value.trim(),
@@ -211,14 +221,17 @@ async function savePolygonROI() {
     });
     draftRoiName.value = "";
     draftPoints.value = [];
-    ElMessage.success("ROI saved");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save ROI");
+    showError(err, "Failed to save ROI");
+  } finally {
+    savingRoi.value = false;
   }
 }
 
 async function saveFullFrameROI() {
+  savingRoi.value = true;
   try {
     await createROI(cameraId, {
       name: draftRoiName.value.trim() || "Full Frame",
@@ -227,21 +240,28 @@ async function saveFullFrameROI() {
       color: draftRoiColor.value
     });
     draftRoiName.value = "";
-    ElMessage.success("Full-frame ROI saved");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save ROI");
+    showError(err, "Failed to save ROI");
+  } finally {
+    savingRoi.value = false;
   }
 }
 
 async function removeROI(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteROI(id);
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadAll();
   } catch (err: any) {
-    if (err === "cancel" || err === "close") return;
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to delete ROI");
+    if (isCancelError(err)) return;
+    showError(err, "Failed to delete ROI");
   }
 }
 
@@ -359,6 +379,13 @@ function removeSOPStep(idx: number) {
 }
 
 async function saveRule() {
+  if (
+    !ruleForm.name.trim() ||
+    (!editingRuleId.value && (!ruleForm.roi_id || !ruleForm.algorithm_version_id))
+  ) {
+    ElMessage.warning(t("aegis.cameras.ruleFieldsRequired"));
+    return;
+  }
   const params: Record<string, any> = {
     cooldown_seconds: ruleForm.cooldown_seconds,
     heartbeat_timeout_seconds: ruleForm.heartbeat_timeout_seconds,
@@ -406,10 +433,11 @@ async function saveRule() {
     }
   }
 
+  savingRule.value = true;
   try {
     if (editingRuleId.value) {
       await updateRule(editingRuleId.value, {
-        name: ruleForm.name,
+        name: ruleForm.name.trim(),
         rule_mode: ruleForm.rule_mode,
         params,
         algo_params_override: ruleForm.algo_params_override,
@@ -426,7 +454,7 @@ async function saveRule() {
       await createRule(cameraId, {
         roi_id: ruleForm.roi_id,
         algorithm_version_id: ruleForm.algorithm_version_id,
-        name: ruleForm.name,
+        name: ruleForm.name.trim(),
         rule_mode: ruleForm.rule_mode,
         params,
         algo_params_override: ruleForm.algo_params_override,
@@ -441,21 +469,28 @@ async function saveRule() {
       });
     }
     ruleDialogVisible.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save rule");
+    showError(err, "Failed to save rule");
+  } finally {
+    savingRule.value = false;
   }
 }
 
 async function removeRule(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteRule(id);
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadAll();
   } catch (err: any) {
-    if (err === "cancel" || err === "close") return;
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to delete rule");
+    if (isCancelError(err)) return;
+    showError(err, "Failed to delete rule");
   }
 }
 
@@ -495,8 +530,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="aegis-page">
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      closable
+      :title="t('aegis.common.loadFailed')"
+      @close="loadError = ''"
+    >
+      <template #default>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span>{{ loadError }}</span>
+          <el-button size="small" type="danger" plain @click="loadAll">
+            {{ t("aegis.common.retry") }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <!-- ROI Visual Workspace -->
-    <section class="aegis-panel">
+    <section v-loading="loading" class="aegis-panel">
       <header class="aegis-page-header">
         <div class="aegis-page-title-group">
           <div class="flex flex-wrap items-center gap-2">
@@ -551,10 +604,10 @@ onBeforeUnmount(() => {
           <div class="aegis-filter-bar !mb-0">
             <el-input v-model="draftRoiName" placeholder="ROI Name" style="width: 185px" size="small" />
             <el-color-picker v-model="draftRoiColor" size="small" />
-            <el-button type="primary" size="small" @click="savePolygonROI">
+            <el-button type="primary" size="small" :loading="savingRoi" @click="savePolygonROI">
               {{ t("aegis.cameras.addPolygonRoi") }} ({{ draftPoints.length }})
             </el-button>
-            <el-button size="small" @click="saveFullFrameROI">
+            <el-button size="small" :loading="savingRoi" @click="saveFullFrameROI">
               {{ t("aegis.cameras.addFullFrameRoi") }}
             </el-button>
             <el-button size="small" @click="draftPoints = []">
@@ -609,6 +662,15 @@ onBeforeUnmount(() => {
           </el-button>
         </div>
       </header>
+
+      <el-alert
+        v-if="!loading && rois.length === 0"
+        type="warning"
+        show-icon
+        :closable="false"
+        :title="t('aegis.cameras.noRoiWarning')"
+        class="mb-3"
+      />
 
       <div class="aegis-table-wrap">
         <el-table :data="pagedRules" size="small" max-height="420" border stripe>
@@ -813,7 +875,7 @@ onBeforeUnmount(() => {
       </el-form>
       <template #footer>
         <el-button @click="ruleDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="saveRule">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingRule" @click="saveRule">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

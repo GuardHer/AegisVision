@@ -69,6 +69,8 @@ describe("Analytics Report Center", () => {
           "el-option": { template: "<option />" },
           "el-table": { props: ["data"], template: "<div><slot /></div>" },
           "el-table-column": { template: "<div />" },
+          "el-date-picker": { template: "<input />" },
+          "el-alert": { props: ["title"], template: "<div>{{ title }}<slot /></div>" },
           "el-tag": { template: "<span><slot /></span>" }
         }
       }

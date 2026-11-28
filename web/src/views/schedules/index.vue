@@ -11,11 +11,14 @@ import {
   type IncludeDateWindow,
   type WeeklyWindow
 } from "@/api/aegis";
+import { isCancelError, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisSchedules" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
+const saving = ref(false);
 const schedules = ref<ArmingScheduleItem[]>([]);
 const page = ref(1);
 const pageSize = ref(20);
@@ -53,8 +56,9 @@ async function loadData() {
   try {
     const res = await listSchedules();
     schedules.value = res?.data ?? [];
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load schedules");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -96,9 +100,15 @@ function removeWeeklyWindow(idx: number) {
   form.weekly_windows.splice(idx, 1);
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 function addExcludeDate() {
   const d = newExcludeDate.value.trim();
   if (!d) return;
+  if (!DATE_RE.test(d)) {
+    ElMessage.warning(t("aegis.common.invalidDateFormat"));
+    return;
+  }
   if (!form.exclude_dates.includes(d)) form.exclude_dates.push(d);
   newExcludeDate.value = "";
 }
@@ -106,6 +116,10 @@ function addExcludeDate() {
 function addIncludeDate() {
   const d = newIncludeDate.date.trim();
   if (!d) return;
+  if (!DATE_RE.test(d)) {
+    ElMessage.warning(t("aegis.common.invalidDateFormat"));
+    return;
+  }
   form.include_dates.push({
     date: d,
     start: newIncludeDate.start.trim() || undefined,
@@ -130,6 +144,7 @@ async function submitForm() {
     exclude_dates: form.exclude_dates,
     include_dates: form.include_dates
   };
+  saving.value = true;
   try {
     if (editingId.value) {
       await updateSchedule(editingId.value, payload);
@@ -137,22 +152,28 @@ async function submitForm() {
       await createSchedule(payload);
     }
     dialogVisible.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save schedule");
+    showError(err, "Failed to save schedule");
+  } finally {
+    saving.value = false;
   }
 }
 
 async function onDelete(row: ArmingScheduleItem) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteSchedule(row.id);
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadData();
   } catch (err: any) {
-    if (err === "cancel" || err === "close") return;
-    ElMessage.error(err?.response?.data?.message || "Cannot delete schedule referenced by rules");
+    if (isCancelError(err)) return;
+    showError(err, "Cannot delete schedule referenced by rules");
   }
 }
 
@@ -173,6 +194,25 @@ onMounted(loadData);
           <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
         </div>
       </header>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table v-loading="loading" :data="pagedSchedules" height="100%" border stripe>
@@ -244,7 +284,12 @@ onMounted(loadData);
 
         <el-form-item :label="t('aegis.schedules.weeklyWindows')">
           <div class="w-full flex flex-col gap-2">
-            <div class="text-xs text-zinc-400">{{ t("aegis.schedules.overnightHint") }}</div>
+            <el-alert
+              type="info"
+              show-icon
+              :closable="false"
+              :title="t('aegis.schedules.overnightHint')"
+            />
             <div
               v-for="(w, idx) in form.weekly_windows"
               :key="idx"
@@ -315,7 +360,7 @@ onMounted(loadData);
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitForm">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="saving" @click="submitForm">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

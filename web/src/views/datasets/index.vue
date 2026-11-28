@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
 import {
   evidenceImageURL,
   exportFalsePositiveDatasetBlob,
@@ -11,11 +10,13 @@ import {
   type ZoneTreeNode
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
+import { showAsyncError, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisDatasets" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
 const exporting = ref(false);
 const items = ref<FalsePositiveSampleItem[]>([]);
 const total = ref(0);
@@ -63,8 +64,9 @@ async function loadData() {
     });
     items.value = res?.data?.items ?? [];
     total.value = res?.data?.total ?? 0;
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load false-positive samples");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -89,9 +91,9 @@ async function handleExportZip() {
     a.download = `aegis-fp-dataset-${new Date().toISOString().slice(0, 10)}.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    ElMessage.success(t("aegis.datasets.exportSuccess"));
+    showSuccess(t("aegis.datasets.exportSuccess"));
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to export training dataset");
+    await showAsyncError(err, "Failed to export training dataset");
   } finally {
     exporting.value = false;
   }
@@ -161,6 +163,25 @@ onMounted(() => {
           @change="handleSearch"
         />
       </div>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <div v-loading="loading" class="flex-1 min-h-0 flex flex-col">
         <el-empty v-if="items.length === 0" :description="t('aegis.datasets.empty')" class="my-auto" />

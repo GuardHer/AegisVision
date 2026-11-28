@@ -107,6 +107,17 @@ aegis:
     enabled: Enabled
     disabled: Disabled
     confirmDelete: Confirm deleting this item?
+    confirmTitle: Confirmation
+    retry: Retry
+    loadFailed: Failed to load data
+    saveSuccess: Saved successfully
+    deleteSuccess: Deleted successfully
+    actionSuccess: Operation succeeded
+    exportSuccess: Export completed
+    partialLoadWarning: Some auxiliary data failed to load
+    validationRequired: Please fill in all required fields
+    invalidDateFormat: Date format must be YYYY-MM-DD
+    passwordMinLength: Password must be at least 8 characters
   dashboard:
     title: Factory Safety & SOP Operations Overview
     todayAlarms: Today Alarms
@@ -157,6 +168,12 @@ aegis:
     exitSolo: Restore Grid
     wsConnected: Realtime WS Connected
     wsDisconnected: Realtime WS Disconnected
+    wsDisconnectedBanner: Realtime WebSocket is disconnected; reconnecting automatically
+    wsReconnectNow: Reconnect
+    wsReconnected: Realtime WebSocket connection restored
+    snapshotSaved: Snapshot saved
+    snapshotNotReady: Video stream is not ready for snapshot yet
+    noPresets: No saved tour presets yet
   player:
     live: LIVE
     connecting: Connecting low-latency stream…
@@ -216,6 +233,11 @@ aegis:
     videoClip: Video Evidence Clip
     sopTimeline: SOP Violation Step Timeline
     violationType: Violation Type
+    videoRecordingHint: Video clip is recording asynchronously; refresh shortly to play
+    videoFailedHint: Video evidence recording failed; check stream source or dispatcher logs
+    batchHandledCount: Selected alarms handled successfully
+    retryEnqueued: Delivery retry enqueued
+    noDeliveries: No delivery logs recorded
   cameras:
     name: Name
     zone: Zone
@@ -270,6 +292,11 @@ aegis:
     stepRequired: Required
     stepDwell: Dwell Frames
     stepMaxWait: Max Wait (s)
+    noRoiWarning: No ROI configured for this camera yet. Add a polygon or full-frame ROI above before creating rules.
+    importPartialSummary: Batch import finished
+    nameAndRtspRequired: Please provide camera name and main RTSP URL
+    zoneNameRequired: Please enter a zone name
+    ruleFieldsRequired: Please enter rule name and select ROI and algorithm version
   schedules:
     title: Arming Schedule Templates
     name: Template Name
@@ -338,6 +365,13 @@ aegis:
     drain: Drain Node
     resume: Resume
     reschedule: Reschedule
+    confirmDrain: Drain this node for maintenance? Active tasks will be migrated.
+    confirmResume: Resume scheduling tasks on this node?
+    confirmReschedule: Force reschedule this inference task?
+    noNodesHint: No compute nodes (aegis-agent) are currently registered. Tasks will be scheduled once a node joins.
+    failedTasksBanner: Failed inference tasks detected; inspect error details below
+    errorMessage: Error Detail
+    rescheduleSuccess: Task reschedule requested
   channels:
     name: Channel Name
     type: Type
@@ -360,6 +394,9 @@ aegis:
     test: Test Connection
     reset: Silence / Reset
     resetQueued: Sound-light reset command queued
+    testSuccessTitle: Channel Test Passed
+    testFailedTitle: Channel Test Failed
+    nameAndUrlRequired: Please enter channel name and target URL
   users:
     username: Username
     displayName: Display Name
@@ -396,6 +433,9 @@ aegis:
     component: Component
     latency: Latency
     clusterSummary: Live Cluster Summary
+    healthAllHealthy: All core infrastructure components are healthy
+    healthDegradedWarning: Some infrastructure components are degraded; please investigate
+    healthEmpty: No component health data available
 status:
   pureLoad: Loading...
   pureMessage: Message
@@ -413,3 +453,8 @@ login:
   pureUsernameReg: Please enter username
   purePassWordReg: Please enter password
   purePassWordRuleReg: The password format should be any combination of 8-18 digits
+  invalidCredentials: Invalid username or password
+  accountDisabled: This account has been disabled; contact an administrator
+  credentialsRequired: Please enter both username and password
+  networkError: Unable to reach authentication server; verify backend service is running
+  timeoutError: Login request timed out; please retry

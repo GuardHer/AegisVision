@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElNotification } from "element-plus";
 import {
   batchHandleAlarms,
   evidenceImageURL,
@@ -22,6 +22,7 @@ import {
 import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
 import { formatDateTime, formatDurationMs } from "@/utils/format";
+import { showAsyncError, showError, showSuccess } from "@/utils/error";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
 defineOptions({ name: "AegisAlarms" });
@@ -34,7 +35,12 @@ const allowHandle = computed(() =>
 );
 
 const loading = ref(false);
+const loadError = ref("");
 const exporting = ref(false);
+const savingBatch = ref(false);
+const savingHandle = ref(false);
+const loadingDeliveries = ref(false);
+const retryingDeliveryId = ref("");
 const zonesTree = ref<ZoneTreeNode[]>([]);
 const cameras = ref<CameraItem[]>([]);
 const alarms = ref<AlarmItem[]>([]);
@@ -181,6 +187,9 @@ async function loadData() {
     const res = await listAlarms({ ...query });
     alarms.value = res?.data?.items ?? [];
     total.value = res?.data?.total ?? 0;
+    loadError.value = "";
+  } catch (err: any) {
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -213,17 +222,21 @@ async function openDetail(row: AlarmItem) {
   handleForm.false_positive_reason = row.false_positive_reason || "lighting";
   handleForm.handle_note = row.handle_note || "";
   drawerVisible.value = true;
+  loadingDeliveries.value = true;
   try {
     const delRes = await listAlarmDeliveries(row.id);
     deliveries.value = delRes?.data ?? [];
   } catch (err: any) {
     deliveries.value = [];
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load deliveries");
+    showError(err, "Failed to load deliveries");
+  } finally {
+    loadingDeliveries.value = false;
   }
 }
 
 async function submitHandle() {
   if (!selectedAlarm.value) return;
+  savingHandle.value = true;
   try {
     const res = await handleAlarm(selectedAlarm.value.id, {
       handle_status: handleForm.handle_status,
@@ -233,20 +246,26 @@ async function submitHandle() {
           : "",
       handle_note: handleForm.handle_note
     });
-    if (res?.code === 0) {
-      ElMessage.success("OK");
-      selectedAlarm.value = res.data;
-      await loadData();
+    if (res && res.code !== 0) {
+      throw new Error(res.message || "Failed to handle alarm");
     }
+    showSuccess(t("aegis.common.saveSuccess"));
+    if (res?.data) {
+      selectedAlarm.value = res.data;
+    }
+    await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to handle alarm");
+    showError(err, "Failed to handle alarm");
+  } finally {
+    savingHandle.value = false;
   }
 }
 
 async function submitBatchHandle() {
   if (selectedAlarmIds.value.length === 0) return;
+  savingBatch.value = true;
   try {
-    await batchHandleAlarms({
+    const res = await batchHandleAlarms({
       alarm_ids: selectedAlarmIds.value,
       handle_status: batchForm.handle_status,
       false_positive_reason:
@@ -255,11 +274,19 @@ async function submitBatchHandle() {
           : "",
       handle_note: batchForm.handle_note
     });
+    const updatedCount = res?.data?.updated_count ?? selectedAlarmIds.value.length;
     batchDialogVisible.value = false;
-    ElMessage.success("OK");
+    ElNotification({
+      title: t("aegis.alarms.batchHandledCount"),
+      message: `${updatedCount}`,
+      type: "success",
+      duration: 3000
+    });
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Batch handle failed");
+    showError(err, "Batch handle failed");
+  } finally {
+    savingBatch.value = false;
   }
 }
 
@@ -284,23 +311,27 @@ async function triggerExport(format: "csv" | "zip") {
         : `aegis-evidence-${Date.now()}.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showSuccess(t("aegis.common.exportSuccess"));
   } catch (err: any) {
-    ElMessage.error(err?.message || "Export failed");
+    await showAsyncError(err, "Export failed");
   } finally {
     exporting.value = false;
   }
 }
 
 async function onRetryDelivery(deliveryId: string) {
+  retryingDeliveryId.value = deliveryId;
   try {
     await retryDelivery(deliveryId);
-    ElMessage.success("Retry enqueued");
+    showSuccess(t("aegis.alarms.retryEnqueued"));
     if (selectedAlarm.value) {
       const delRes = await listAlarmDeliveries(selectedAlarm.value.id);
       deliveries.value = delRes?.data ?? [];
     }
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Retry failed");
+    showError(err, "Retry failed");
+  } finally {
+    retryingDeliveryId.value = "";
   }
 }
 
@@ -320,12 +351,18 @@ onMounted(async () => {
   if (typeof route.query.handle_status === "string") {
     query.handle_status = route.query.handle_status;
   }
-  const [zoneRes, camRes] = await Promise.all([
-    getZonesTree().catch(() => ({ data: [] as ZoneTreeNode[] })),
-    listCameras().catch(() => ({ data: [] as CameraItem[] }))
+  const [zoneRes, camRes] = await Promise.allSettled([
+    getZonesTree(),
+    listCameras()
   ]);
-  zonesTree.value = zoneRes?.data ?? [];
-  cameras.value = camRes?.data ?? [];
+  zonesTree.value = zoneRes.status === "fulfilled" ? (zoneRes.value?.data ?? []) : [];
+  cameras.value = camRes.status === "fulfilled" ? (camRes.value?.data ?? []) : [];
+  if (zoneRes.status === "rejected" || camRes.status === "rejected") {
+    ElMessage.warning({
+      message: t("aegis.common.partialLoadWarning"),
+      grouping: true
+    });
+  }
   await loadData();
 });
 </script>
@@ -425,6 +462,25 @@ onMounted(async () => {
           </el-button>
         </div>
       </div>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table
@@ -536,7 +592,7 @@ onMounted(async () => {
       </el-form>
       <template #footer>
         <el-button @click="batchDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitBatchHandle">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingBatch" @click="submitBatchHandle">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
 
@@ -624,6 +680,20 @@ onMounted(async () => {
               :src="evidenceVideoURL(selectedAlarm.id)"
             />
           </div>
+          <el-alert
+            v-else-if="selectedAlarm.video_status === 'recording'"
+            type="info"
+            show-icon
+            :closable="false"
+            :title="t('aegis.alarms.videoRecordingHint')"
+          />
+          <el-alert
+            v-else-if="selectedAlarm.video_status === 'failed'"
+            type="error"
+            show-icon
+            :closable="false"
+            :title="t('aegis.alarms.videoFailedHint')"
+          />
 
           <!-- SOP Violation Step Timeline -->
           <div
@@ -701,7 +771,7 @@ onMounted(async () => {
                 <el-input v-model="handleForm.handle_note" type="textarea" :rows="2" />
               </el-form-item>
               <el-form-item>
-                <el-button type="primary" @click="submitHandle">
+                <el-button type="primary" :loading="savingHandle" @click="submitHandle">
                   {{ t("aegis.common.save") }}
                 </el-button>
               </el-form-item>
@@ -711,7 +781,10 @@ onMounted(async () => {
           <div>
             <div class="font-medium text-sm mb-2">{{ t("aegis.alarms.deliveries") }}</div>
             <div class="aegis-table-wrap">
-              <el-table :data="deliveries" size="small" border>
+              <el-table v-loading="loadingDeliveries" :data="deliveries" size="small" border>
+                <template #empty>
+                  <el-empty :image-size="48" :description="t('aegis.alarms.noDeliveries')" />
+                </template>
                 <el-table-column prop="channel_type" label="Type" width="100" />
                 <el-table-column :label="t('aegis.common.status')" width="100">
                   <template #default="{ row }">
@@ -732,6 +805,7 @@ onMounted(async () => {
                       v-if="row.status !== 'success'"
                       link
                       type="primary"
+                      :loading="retryingDeliveryId === row.id"
                       @click="onRetryDelivery(row.id)"
                     >
                       {{ t("aegis.alarms.retry") }}

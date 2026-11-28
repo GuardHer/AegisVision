@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox, ElNotification } from "element-plus";
 import {
   batchUpdateCameras,
   createCamera,
@@ -18,6 +18,7 @@ import {
   type ZoneTreeNode
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
+import { isCancelError, showError, showSuccess } from "@/utils/error";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 import Plus from "~icons/ep/plus";
 import EditPen from "~icons/ep/edit-pen";
@@ -29,6 +30,11 @@ const { t } = useI18n();
 const router = useRouter();
 
 const loading = ref(false);
+const loadError = ref("");
+const savingZone = ref(false);
+const savingCamera = ref(false);
+const savingMove = ref(false);
+const importingCsv = ref(false);
 const zonesTree = ref<ZoneTreeNode[]>([]);
 const selectedZoneId = ref<string>("");
 const cameras = ref<CameraItem[]>([]);
@@ -124,8 +130,12 @@ const importCSVText = ref(
 const importResult = ref<{ created_count: number; errors: string[] } | null>(null);
 
 async function loadZones() {
-  const res = await getZonesTree();
-  zonesTree.value = res?.data ?? [];
+  try {
+    const res = await getZonesTree();
+    zonesTree.value = res?.data ?? [];
+  } catch (err: any) {
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
+  }
 }
 
 async function loadCameras() {
@@ -133,12 +143,16 @@ async function loadCameras() {
   try {
     const res = await listCameras(selectedZoneId.value || undefined);
     cameras.value = res?.data ?? [];
+    loadError.value = "";
+  } catch (err: any) {
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
 }
 
 async function loadAll() {
+  loadError.value = "";
   await Promise.all([loadZones(), loadCameras()]);
 }
 
@@ -179,31 +193,41 @@ function openEditZone(node: ZoneTreeNode) {
 }
 
 async function submitZone() {
-  if (!zoneForm.name.trim()) return;
+  if (!zoneForm.name.trim()) {
+    ElMessage.warning(t("aegis.cameras.zoneNameRequired"));
+    return;
+  }
+  savingZone.value = true;
   try {
     if (editingZoneId.value) {
       await updateZone(editingZoneId.value, { ...zoneForm });
     } else {
       await createZone({ ...zoneForm });
     }
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     zoneDialogVisible.value = false;
     await loadZones();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save zone");
+    showError(err, "Failed to save zone");
+  } finally {
+    savingZone.value = false;
   }
 }
 
 async function onDeleteZone(node: ZoneTreeNode) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteZone(node.id);
     if (selectedZoneId.value === node.id) selectedZoneId.value = "";
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadAll();
   } catch (err: any) {
-    if (err === "cancel" || err === "close") return;
-    ElMessage.error(err?.response?.data?.message || "Cannot delete non-empty zone");
+    if (isCancelError(err)) return;
+    showError(err, "Cannot delete non-empty zone");
   }
 }
 
@@ -240,43 +264,54 @@ function openEditCamera(row: CameraItem) {
 }
 
 async function submitCamera() {
+  if (!form.name.trim() || !form.rtsp_url.trim()) {
+    ElMessage.warning(t("aegis.cameras.nameAndRtspRequired"));
+    return;
+  }
   const payload = {
-    name: form.name,
+    name: form.name.trim(),
     zone_id: form.zone_id,
-    workstation_code: form.workstation_code,
+    workstation_code: form.workstation_code.trim(),
     tags: form.tags_text
       .split(",")
       .map(s => s.trim())
       .filter(Boolean),
-    location: form.location,
-    rtsp_url: form.rtsp_url,
-    sub_stream_url: form.sub_stream_url,
+    location: form.location.trim(),
+    rtsp_url: form.rtsp_url.trim(),
+    sub_stream_url: form.sub_stream_url.trim(),
     codec_hint: form.codec_hint,
     enabled: form.enabled
   };
+  savingCamera.value = true;
   try {
     if (editingId.value) {
       await updateCamera(editingId.value, payload);
     } else {
       await createCamera(payload);
     }
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     dialogVisible.value = false;
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save camera");
+    showError(err, "Failed to save camera");
+  } finally {
+    savingCamera.value = false;
   }
 }
 
 async function onDeleteCamera(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteCamera(id);
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadAll();
   } catch (err: any) {
-    if (err === "cancel" || err === "close") return;
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to delete camera");
+    if (isCancelError(err)) return;
+    showError(err, "Failed to delete camera");
   }
 }
 
@@ -287,14 +322,19 @@ function onSelectionChange(rows: CameraItem[]) {
 async function runBatchEnable(enabled: boolean) {
   if (selectedCameraIds.value.length === 0) return;
   try {
-    await batchUpdateCameras({
+    const res = await batchUpdateCameras({
       camera_ids: selectedCameraIds.value,
       action: enabled ? "enable" : "disable"
     });
-    ElMessage.success("OK");
+    ElNotification({
+      title: t("aegis.common.actionSuccess"),
+      message: `${res?.data?.updated_count ?? selectedCameraIds.value.length}`,
+      type: "success",
+      duration: 3000
+    });
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Batch update failed");
+    showError(err, "Batch update failed");
   }
 }
 
@@ -305,6 +345,7 @@ function openMoveZone() {
 }
 
 async function submitMoveZone() {
+  savingMove.value = true;
   try {
     await batchUpdateCameras({
       camera_ids: selectedCameraIds.value,
@@ -312,24 +353,34 @@ async function submitMoveZone() {
       zone_id: moveTargetZoneId.value
     });
     moveDialogVisible.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Batch move failed");
+    showError(err, "Batch move failed");
+  } finally {
+    savingMove.value = false;
   }
 }
 
 async function submitImportCSV() {
+  importingCsv.value = true;
   try {
     const res = await importCamerasCSV(importCSVText.value);
     importResult.value = {
       created_count: res?.data?.created_count ?? 0,
       errors: res?.data?.errors ?? []
     };
-    ElMessage.success(`Imported ${importResult.value.created_count} cameras`);
+    ElNotification({
+      title: t("aegis.cameras.importPartialSummary"),
+      message: `Created: ${importResult.value.created_count}${importResult.value.errors.length ? ` · Errors: ${importResult.value.errors.length}` : ""}`,
+      type: importResult.value.errors.length ? "warning" : "success",
+      duration: 4500
+    });
     await loadAll();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "CSV import failed");
+    showError(err, "CSV import failed");
+  } finally {
+    importingCsv.value = false;
   }
 }
 
@@ -374,30 +425,33 @@ onMounted(loadAll);
                   <span class="text-zinc-400 aegis-tabular">({{ data.online_camera_count }}/{{ data.camera_count }})</span>
                 </span>
                 <span class="zone-tree-row__actions">
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :icon="IconPlus"
-                    :title="t('aegis.cameras.addChildZone')"
-                    @click.stop="openCreateZone(data.id)"
-                  />
-                  <el-button
-                    link
-                    type="primary"
-                    size="small"
-                    :icon="IconEditPen"
-                    :title="t('aegis.common.edit')"
-                    @click.stop="openEditZone(data)"
-                  />
-                  <el-button
-                    link
-                    type="danger"
-                    size="small"
-                    :icon="IconDelete"
-                    :title="t('aegis.common.delete')"
-                    @click.stop="onDeleteZone(data)"
-                  />
+                  <el-tooltip :content="t('aegis.cameras.addChildZone')" placement="top">
+                    <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      :icon="IconPlus"
+                      @click.stop="openCreateZone(data.id)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="t('aegis.common.edit')" placement="top">
+                    <el-button
+                      link
+                      type="primary"
+                      size="small"
+                      :icon="IconEditPen"
+                      @click.stop="openEditZone(data)"
+                    />
+                  </el-tooltip>
+                  <el-tooltip :content="t('aegis.common.delete')" placement="top">
+                    <el-button
+                      link
+                      type="danger"
+                      size="small"
+                      :icon="IconDelete"
+                      @click.stop="onDeleteZone(data)"
+                    />
+                  </el-tooltip>
                 </span>
               </div>
             </template>
@@ -454,6 +508,25 @@ onMounted(loadAll);
             </el-button>
           </div>
         </div>
+
+        <el-alert
+          v-if="loadError"
+          type="error"
+          show-icon
+          closable
+          :title="t('aegis.common.loadFailed')"
+          class="mb-3 shrink-0"
+          @close="loadError = ''"
+        >
+          <template #default>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span>{{ loadError }}</span>
+              <el-button size="small" type="danger" plain @click="loadAll">
+                {{ t("aegis.common.retry") }}
+              </el-button>
+            </div>
+          </template>
+        </el-alert>
 
         <div class="aegis-table-wrap aegis-table-wrap--fill">
           <el-table
@@ -565,7 +638,7 @@ onMounted(loadAll);
       </el-form>
       <template #footer>
         <el-button @click="zoneDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitZone">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingZone" @click="submitZone">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
 
@@ -607,7 +680,7 @@ onMounted(loadAll);
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitCamera">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingCamera" @click="submitCamera">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
 
@@ -618,21 +691,37 @@ onMounted(loadAll);
       </el-select>
       <template #footer>
         <el-button @click="moveDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitMoveZone">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingMove" @click="submitMoveZone">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
 
     <!-- CSV Import Dialog -->
     <el-dialog v-model="importDialogVisible" :title="t('aegis.cameras.importCsv')" width="600px">
-      <div class="text-xs text-zinc-500 mb-2">{{ t("aegis.cameras.importHint") }}</div>
+      <el-alert
+        type="info"
+        show-icon
+        :closable="false"
+        :title="t('aegis.cameras.importHint')"
+        class="mb-3"
+      />
       <el-input v-model="importCSVText" type="textarea" :rows="8" />
-      <div v-if="importResult" class="mt-2 text-xs">
-        <div class="text-emerald-600">Created: {{ importResult.created_count }}</div>
-        <div v-for="(e, idx) in importResult.errors" :key="idx" class="text-red-500">{{ e }}</div>
-      </div>
+      <el-alert
+        v-if="importResult"
+        :type="importResult.errors.length ? 'warning' : 'success'"
+        show-icon
+        :closable="false"
+        :title="`Created: ${importResult.created_count}${importResult.errors.length ? ` · Errors: ${importResult.errors.length}` : ''}`"
+        class="mt-3"
+      >
+        <template v-if="importResult.errors.length" #default>
+          <ul class="m-0 pl-4 text-xs space-y-0.5">
+            <li v-for="(e, idx) in importResult.errors" :key="idx">{{ e }}</li>
+          </ul>
+        </template>
+      </el-alert>
       <template #footer>
         <el-button @click="importDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitImportCSV">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="importingCsv" @click="submitImportCSV">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

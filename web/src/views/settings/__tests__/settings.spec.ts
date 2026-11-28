@@ -66,6 +66,8 @@ describe("SettingsPage", () => {
           "el-input-number": { template: "<input type='number' />" },
           "el-divider": { template: "<hr />" },
           "el-tag": { template: "<span><slot /></span>" },
+          "el-alert": { props: ["title"], template: "<div>{{ title }}<slot /></div>" },
+          "el-empty": { template: "<div />" },
           "el-button": { template: "<button v-bind='$attrs'><slot /></button>" }
         },
         directives: { loading: () => {} }

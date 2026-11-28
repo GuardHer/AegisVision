@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
 import {
   getPlatformSettings,
   getSystemHealth,
@@ -9,14 +8,20 @@ import {
   type PlatformSettings,
   type SystemHealthPayload
 } from "@/api/aegis";
+import { showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisSettings" });
 
 const { t } = useI18n();
 const loadingSettings = ref(false);
+const settingsError = ref("");
 const savingSettings = ref(false);
 const loadingHealth = ref(false);
+const healthError = ref("");
 const health = ref<SystemHealthPayload | null>(null);
+const hasDegradedComponents = computed(() =>
+  (health.value?.components ?? []).some(c => c.status === "degraded")
+);
 
 const form = reactive<PlatformSettings>({
   platform_title: "AegisVision EHS 智能视频监控平台",
@@ -42,8 +47,9 @@ async function loadSettings() {
     if (res?.data) {
       Object.assign(form, res.data);
     }
+    settingsError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load settings");
+    settingsError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loadingSettings.value = false;
   }
@@ -54,8 +60,9 @@ async function loadHealth() {
   try {
     const res = await getSystemHealth();
     health.value = res?.data ?? null;
+    healthError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load system health");
+    healthError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loadingHealth.value = false;
   }
@@ -68,9 +75,9 @@ async function saveSettings() {
     if (res?.data) {
       Object.assign(form, res.data);
     }
-    ElMessage.success(t("aegis.settings.saved"));
+    showSuccess(t("aegis.settings.saved"));
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to save settings");
+    showError(err, "Failed to save settings");
   } finally {
     savingSettings.value = false;
   }
@@ -97,6 +104,25 @@ onMounted(() => {
             <h1 class="aegis-page-title">{{ t("aegis.settings.platformConfig") }}</h1>
           </div>
         </header>
+
+        <el-alert
+          v-if="settingsError"
+          type="error"
+          show-icon
+          closable
+          :title="t('aegis.common.loadFailed')"
+          class="mb-3"
+          @close="settingsError = ''"
+        >
+          <template #default>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span>{{ settingsError }}</span>
+              <el-button size="small" type="danger" plain @click="loadSettings">
+                {{ t("aegis.common.retry") }}
+              </el-button>
+            </div>
+          </template>
+        </el-alert>
 
         <el-form label-width="190px" size="default">
           <el-form-item :label="t('aegis.settings.platformTitle')">
@@ -143,7 +169,32 @@ onMounted(() => {
           </div>
         </header>
 
+        <el-alert
+          v-if="healthError"
+          type="error"
+          show-icon
+          closable
+          :title="t('aegis.common.loadFailed')"
+          class="mb-3"
+          @close="healthError = ''"
+        >
+          <template #default>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span>{{ healthError }}</span>
+              <el-button size="small" type="danger" plain @click="loadHealth">
+                {{ t("aegis.common.retry") }}
+              </el-button>
+            </div>
+          </template>
+        </el-alert>
+
         <div v-if="health" class="space-y-4">
+          <el-alert
+            :type="hasDegradedComponents ? 'warning' : 'success'"
+            show-icon
+            :closable="false"
+            :title="hasDegradedComponents ? t('aegis.settings.healthDegradedWarning') : t('aegis.settings.healthAllHealthy')"
+          />
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div
               v-for="comp in health.components"
@@ -184,6 +235,7 @@ onMounted(() => {
             </div>
           </div>
         </div>
+        <el-empty v-else-if="!loadingHealth" :image-size="60" :description="t('aegis.settings.healthEmpty')" />
       </section>
     </div>
   </div>

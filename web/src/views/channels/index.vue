@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox, ElNotification } from "element-plus";
 import {
   createChannel,
   deleteChannel,
@@ -13,11 +13,15 @@ import {
   type AlarmChannelItem,
   type ZoneTreeNode
 } from "@/api/aegis";
+import { isCancelError, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisChannels" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
+const saving = ref(false);
+const testingId = ref("");
 const channels = ref<AlarmChannelItem[]>([]);
 const page = ref(1);
 const pageSize = ref(20);
@@ -87,8 +91,9 @@ async function loadData() {
     const [chRes, zRes] = await Promise.all([listChannels(), getZonesTree().catch(() => ({ data: [] }))]);
     channels.value = chRes?.data ?? [];
     zones.value = zRes?.data ?? [];
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load channels");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -179,6 +184,17 @@ function buildConfig(): Record<string, any> {
 }
 
 async function submit() {
+  const targetUrl =
+    form.channel_type === "sound_light"
+      ? form.trigger_url.trim()
+      : form.channel_type === "wecom" || form.channel_type === "dingtalk"
+        ? form.webhook_url.trim()
+        : form.url.trim();
+  if (!form.name.trim() || !targetUrl) {
+    ElMessage.warning(t("aegis.channels.nameAndUrlRequired"));
+    return;
+  }
+  saving.value = true;
   try {
     const payload = {
       name: form.name.trim(),
@@ -198,44 +214,57 @@ async function submit() {
       await createChannel(payload);
     }
     dialogVisible.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to save channel");
+    showError(err, "Failed to save channel");
+  } finally {
+    saving.value = false;
   }
 }
 
 async function onTest(id: string) {
+  testingId.value = id;
   try {
     const res = await testChannel(id);
-    const msg = `HTTP ${res?.data?.status_code} (${res?.data?.latency_ms}ms)`;
-    if (res?.data?.ok) {
-      ElMessage.success(msg);
-    } else {
-      ElMessage.error(msg);
-    }
+    const msg = `HTTP ${res?.data?.status_code} · ${res?.data?.latency_ms}ms`;
+    ElNotification({
+      title: res?.data?.ok
+        ? t("aegis.channels.testSuccessTitle")
+        : t("aegis.channels.testFailedTitle"),
+      message: msg,
+      type: res?.data?.ok ? "success" : "error",
+      duration: 4000
+    });
   } catch (err: any) {
-    ElMessage.error(err?.message || "Channel test failed");
+    showError(err, "Channel test failed");
+  } finally {
+    testingId.value = "";
   }
 }
 
 async function onReset(id: string) {
   try {
     await resetChannel(id);
-    ElMessage.success(t("aegis.channels.resetQueued"));
+    showSuccess(t("aegis.channels.resetQueued"));
   } catch (err: any) {
-    ElMessage.error(err?.message || "Channel reset failed");
+    showError(err, "Channel reset failed");
   }
 }
 
 async function onDelete(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteChannel(id);
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadData();
   } catch (err: any) {
-    if (err !== "cancel" && err !== "close") {
-      ElMessage.error(err?.message || "Failed to delete channel");
+    if (!isCancelError(err)) {
+      showError(err, "Failed to delete channel");
     }
   }
 }
@@ -255,6 +284,25 @@ onMounted(loadData);
           <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
         </div>
       </header>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table v-loading="loading" :data="pagedChannels" height="100%" border stripe>
@@ -291,7 +339,7 @@ onMounted(loadData);
           </el-table-column>
           <el-table-column :label="t('aegis.common.actions')" width="270" fixed="right">
             <template #default="{ row }">
-              <el-button link type="success" @click="onTest(row.id)">
+              <el-button link type="success" :loading="testingId === row.id" @click="onTest(row.id)">
                 {{ t("aegis.channels.test") }}
               </el-button>
               <el-button
@@ -385,9 +433,14 @@ onMounted(loadData);
 
         <el-divider content-position="left">{{ t("aegis.channels.routing") }}</el-divider>
         <el-form-item :label="t('aegis.channels.autoRoute')">
-          <el-switch v-model="form.auto_route" />
-          <div class="text-xs text-slate-400 leading-5 mt-1">
-            {{ t("aegis.channels.autoRouteHint") }}
+          <div class="w-full flex flex-col gap-2">
+            <el-switch v-model="form.auto_route" />
+            <el-alert
+              type="info"
+              show-icon
+              :closable="false"
+              :title="t('aegis.channels.autoRouteHint')"
+            />
           </div>
         </el-form-item>
 
@@ -426,7 +479,7 @@ onMounted(loadData);
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submit">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

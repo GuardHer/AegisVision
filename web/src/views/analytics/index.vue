@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
 import * as echarts from "echarts";
 import {
   exportAnalyticsCSVBlob,
@@ -10,11 +9,13 @@ import {
   type AnalyticsSummary,
   type ZoneTreeNode
 } from "@/api/aegis";
+import { showAsyncError, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisAnalytics" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
 const exporting = ref(false);
 const zonesTree = ref<ZoneTreeNode[]>([]);
 
@@ -174,10 +175,11 @@ async function loadData() {
     if (res?.data) {
       summary.value = res.data;
     }
+    loadError.value = "";
     await nextTick();
     renderCharts();
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to load analytics");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -193,8 +195,9 @@ async function onExportCSV() {
     a.download = `aegis-analytics-${Date.now()}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showSuccess(t("aegis.common.exportSuccess"));
   } catch (err: any) {
-    ElMessage.error(err?.message || "Export failed");
+    await showAsyncError(err, "Export failed");
   } finally {
     exporting.value = false;
   }
@@ -269,6 +272,24 @@ onBeforeUnmount(() => {
         </el-radio-group>
       </div>
     </section>
+
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      closable
+      :title="t('aegis.common.loadFailed')"
+      @close="loadError = ''"
+    >
+      <template #default>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span>{{ loadError }}</span>
+          <el-button size="small" type="danger" plain @click="loadData">
+            {{ t("aegis.common.retry") }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
 
     <!-- 4 Period Summary KPI Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 aegis-tabular">

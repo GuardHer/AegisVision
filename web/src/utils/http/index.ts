@@ -10,6 +10,7 @@ import type {
   PureHttpRequestConfig
 } from "./types.d";
 import { stringify } from "qs";
+import { ElNotification } from "element-plus";
 import { getToken, formatToken } from "@/utils/auth";
 import { useUserStoreHook } from "@/store/modules/user";
 
@@ -42,6 +43,9 @@ class PureHttp {
 
   /** 防止重复刷新`token` */
   private static isRefreshing = false;
+
+  /** 防止并发 401 触发重复登出提示 */
+  private static isHandlingUnauthorized = false;
 
   /** 初始化配置对象 */
   private static initConfig: PureHttpRequestConfig = {};
@@ -149,6 +153,47 @@ class PureHttp {
       (error: PureHttpError) => {
         const $error = error;
         $error.isCancelRequest = Axios.isCancel($error);
+
+        // 将后端标准错误体中的 message 透出到 error.message，防止调用方仅读 err.message 时丢失原因
+        const respData = $error.response?.data as Record<string, any> | undefined;
+        if (
+          respData &&
+          typeof respData === "object" &&
+          !(respData instanceof Blob) &&
+          typeof respData.message === "string" &&
+          respData.message.trim()
+        ) {
+          $error.message = respData.message.trim();
+        }
+
+        // 非认证接口返回 401 说明会话已被服务端注销或失效，统一提示并跳转登录页
+        const reqUrl = String($error.config?.url ?? "");
+        const isAuthEndpoint =
+          reqUrl.endsWith("/api/v1/auth/login") ||
+          reqUrl.endsWith("/api/v1/auth/refresh") ||
+          reqUrl.endsWith("/api/v1/auth/logout");
+        if (
+          $error.response?.status === 401 &&
+          !isAuthEndpoint &&
+          !PureHttp.isHandlingUnauthorized &&
+          getToken()?.accessToken
+        ) {
+          PureHttp.isHandlingUnauthorized = true;
+          ElNotification({
+            title: "Session Expired",
+            message: $error.message || "Authentication expired, please sign in again.",
+            type: "warning",
+            duration: 4500
+          });
+          void useUserStoreHook()
+            .logOut()
+            .finally(() => {
+              setTimeout(() => {
+                PureHttp.isHandlingUnauthorized = false;
+              }, 1500);
+            });
+        }
+
         // 所有的响应异常 区分来源为取消请求/非取消请求
         return Promise.reject($error);
       }

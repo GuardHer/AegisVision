@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
 import { listAuditLogs, type AuditLogItem } from "@/api/aegis";
 import { formatDateTime, shortId } from "@/utils/format";
+import { showError } from "@/utils/error";
 
 defineOptions({ name: "AegisAuditLogs" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
 const items = ref<AuditLogItem[]>([]);
 const total = ref(0);
 
@@ -51,8 +52,9 @@ async function loadData() {
     const res = await listAuditLogs(params);
     items.value = res?.data?.items ?? [];
     total.value = res?.data?.total ?? 0;
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load audit logs");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -132,6 +134,25 @@ onMounted(loadData);
         </div>
       </div>
 
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
+
       <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table v-loading="loading" :data="items" height="100%" border stripe row-key="id">
           <el-table-column type="expand">
@@ -158,7 +179,10 @@ onMounted(loadData);
           <el-table-column prop="resource_type" :label="t('aegis.auditLogs.resourceType')" width="135" />
           <el-table-column :label="t('aegis.auditLogs.resourceId')" width="125">
             <template #default="{ row }">
-              <span class="aegis-mono-id" :title="row.resource_id">{{ shortId(row.resource_id, 10) }}</span>
+              <el-tooltip v-if="row.resource_id" :content="row.resource_id" placement="top">
+                <span class="aegis-mono-id">{{ shortId(row.resource_id, 10) }}</span>
+              </el-tooltip>
+              <span v-else class="aegis-mono-id">—</span>
             </template>
           </el-table-column>
           <el-table-column prop="summary" :label="t('aegis.auditLogs.summary')" min-width="220" show-overflow-tooltip />

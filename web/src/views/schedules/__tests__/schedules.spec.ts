@@ -38,6 +38,8 @@ describe("Arming Schedules Page", () => {
           "el-table": { props: ["data"], template: "<div class='tbl'><slot /></div>" },
           "el-table-column": { template: "<div />" },
           "el-tag": { template: "<span><slot /></span>" },
+          "el-alert": { props: ["title"], template: "<div>{{ title }}<slot /></div>" },
+          "el-pagination": { template: "<div />" },
           "el-dialog": { props: ["modelValue"], template: "<div v-if='modelValue'><slot /><slot name='footer' /></div>" },
           "el-form": { template: "<form><slot /></form>" },
           "el-form-item": { template: "<div><slot /></div>" },

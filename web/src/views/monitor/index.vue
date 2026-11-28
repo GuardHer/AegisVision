@@ -31,6 +31,7 @@ import { canHandleAlarms } from "@/utils/permissions";
 import { playDutyAlertChime } from "@/utils/alertSound";
 import { computeContainedVideoRect } from "@/utils/videoRect";
 import { formatDateTime } from "@/utils/format";
+import { extractErrorMessage, isCancelError, showError, showSuccess } from "@/utils/error";
 import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
@@ -75,6 +76,8 @@ let tourTimer: ReturnType<typeof setInterval> | null = null;
 
 // Save preset dialog
 const presetDialogVisible = ref(false);
+const savingPreset = ref(false);
+const loadError = ref("");
 const presetForm = reactive({
   name: "",
   is_shared: false,
@@ -107,6 +110,8 @@ interface RealtimeAlert {
 
 const recentAlerts = ref<RealtimeAlert[]>([]);
 const wsConnected = ref(false);
+const wsDisconnectedAlert = ref(false);
+let wsEverConnected = false;
 let ws: WebSocket | null = null;
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let unmounted = false;
@@ -257,14 +262,47 @@ function setSlotRef(idx: number, el: unknown) {
 }
 
 async function loadInitialData() {
-  const [zoneRes, camRes, presetRes] = await Promise.all([
-    getZonesTree().catch(() => ({ data: [] as ZoneTreeNode[] })),
-    listCameras().catch(() => ({ data: [] as CameraItem[] })),
-    listMonitorPresets().catch(() => ({ data: [] as MonitorPresetItem[] }))
+  loadError.value = "";
+  const [zoneRes, camRes, presetRes] = await Promise.allSettled([
+    getZonesTree(),
+    listCameras(),
+    listMonitorPresets()
   ]);
-  zonesTree.value = zoneRes?.data ?? [];
-  cameras.value = camRes?.data ?? [];
-  presets.value = presetRes?.data ?? [];
+
+  const errors: string[] = [];
+  if (zoneRes.status === "fulfilled") {
+    zonesTree.value = zoneRes.value?.data ?? [];
+  } else {
+    zonesTree.value = [];
+    errors.push(extractErrorMessage(zoneRes.reason, t("aegis.common.loadFailed")));
+  }
+
+  if (camRes.status === "fulfilled") {
+    cameras.value = camRes.value?.data ?? [];
+  } else {
+    cameras.value = [];
+    errors.push(extractErrorMessage(camRes.reason, t("aegis.common.loadFailed")));
+  }
+
+  if (presetRes.status === "fulfilled") {
+    presets.value = presetRes.value?.data ?? [];
+  } else {
+    presets.value = [];
+    errors.push(extractErrorMessage(presetRes.reason, t("aegis.common.loadFailed")));
+  }
+
+  if (errors.length > 0) {
+    loadError.value = errors[0];
+    if (camRes.status === "rejected") {
+      showError(camRes.reason, t("aegis.common.loadFailed"));
+    } else {
+      ElMessage.warning({
+        message: `${t("aegis.common.partialLoadWarning")}: ${errors[0]}`,
+        grouping: true,
+        showClose: true
+      });
+    }
+  }
 
   cameras.value.slice(0, 16).forEach((cam, idx) => {
     if (!selectedSlots.value[idx]) {
@@ -365,6 +403,7 @@ async function submitPreset() {
     ElMessage.warning(t("aegis.monitor.presetName"));
     return;
   }
+  savingPreset.value = true;
   try {
     await createMonitorPreset({
       name: presetForm.name.trim(),
@@ -374,25 +413,31 @@ async function submitPreset() {
       tour_interval_seconds: presetForm.tour_interval_seconds
     });
     presetDialogVisible.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     const res = await listMonitorPresets();
     presets.value = res?.data ?? [];
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to save preset");
+    showError(err, "Failed to save preset");
+  } finally {
+    savingPreset.value = false;
   }
 }
 
 async function removePreset(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteMonitorPreset(id);
     if (activeTourPreset.value?.id === id) stopTour();
     const res = await listMonitorPresets();
     presets.value = res?.data ?? [];
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.deleteSuccess"));
   } catch (err: any) {
-    if (err === "cancel" || err === "close") return;
-    ElMessage.error(err?.response?.data?.message || err?.message || "Failed to delete preset");
+    if (isCancelError(err)) return;
+    showError(err, "Failed to delete preset");
   }
 }
 
@@ -411,8 +456,12 @@ function captureSlotSnapshot(idx: number, camId: string, videoEl?: HTMLVideoElem
   if (!container) return;
   const video = videoEl || (container.querySelector("video") as HTMLVideoElement | null);
   const overlay = container.querySelector("canvas") as HTMLCanvasElement | null;
-  const w = video?.videoWidth || container.clientWidth || 640;
-  const h = video?.videoHeight || container.clientHeight || 360;
+  if (!video || video.readyState < 2 || video.videoWidth === 0) {
+    ElMessage.warning(t("aegis.monitor.snapshotNotReady"));
+    return;
+  }
+  const w = video.videoWidth || container.clientWidth || 640;
+  const h = video.videoHeight || container.clientHeight || 360;
   const out = document.createElement("canvas");
   out.width = w;
   out.height = h;
@@ -420,9 +469,7 @@ function captureSlotSnapshot(idx: number, camId: string, videoEl?: HTMLVideoElem
   if (!ctx) return;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, w, h);
-  if (video && video.readyState >= 2) {
-    ctx.drawImage(video, 0, 0, w, h);
-  }
+  ctx.drawImage(video, 0, 0, w, h);
   if (overlay && effectiveOverlayFor(idx) && overlay.width > 0 && overlay.height > 0) {
     const crop = computeContainedVideoRect(overlay.width, overlay.height, w, h);
     ctx.drawImage(overlay, crop.x, crop.y, crop.width, crop.height, 0, 0, w, h);
@@ -432,6 +479,7 @@ function captureSlotSnapshot(idx: number, camId: string, videoEl?: HTMLVideoElem
   link.download = `${camName}-${Date.now()}.png`;
   link.href = out.toDataURL("image/png");
   link.click();
+  showSuccess(t("aegis.monitor.snapshotSaved"));
 }
 
 async function quickHandleAlert(
@@ -444,9 +492,9 @@ async function quickHandleAlert(
       handle_note: "Duty monitor quick handle"
     });
     alert.handled = true;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.actionSuccess"));
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Action failed");
+    showError(err, "Action failed");
   }
 }
 
@@ -482,8 +530,14 @@ function connectWS() {
   ws = socket;
 
   socket.onopen = () => {
+    const reconnected = wsEverConnected && wsDisconnectedAlert.value;
+    wsEverConnected = true;
     wsConnected.value = true;
+    wsDisconnectedAlert.value = false;
     sendSubscribe();
+    if (reconnected) {
+      showSuccess(t("aegis.monitor.wsReconnected"));
+    }
   };
 
   socket.onmessage = evt => {
@@ -518,6 +572,7 @@ function connectWS() {
 
   socket.onclose = () => {
     wsConnected.value = false;
+    wsDisconnectedAlert.value = true;
     if (unmounted) return;
     wsReconnectTimer = setTimeout(connectWS, 3000);
   };
@@ -662,6 +717,42 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      closable
+      :title="t('aegis.common.loadFailed')"
+      class="shrink-0"
+      @close="loadError = ''"
+    >
+      <template #default>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span>{{ loadError }}</span>
+          <el-button size="small" type="danger" plain @click="loadInitialData">
+            {{ t("aegis.common.retry") }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+
+    <el-alert
+      v-else-if="wsDisconnectedAlert && !wsConnected"
+      type="warning"
+      show-icon
+      :closable="false"
+      class="shrink-0"
+    >
+      <template #title>
+        <div class="flex flex-wrap items-center justify-between gap-2 w-full">
+          <span>{{ t("aegis.monitor.wsDisconnectedBanner") }}</span>
+          <el-button size="small" type="warning" plain @click="connectWS">
+            {{ t("aegis.monitor.wsReconnectNow") }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
+
     <!-- 3-Column Duty Workspace -->
     <div class="monitor-workspace">
       <!-- Left Collapsible Sidebar: Zone Tree + Tour Presets -->
@@ -702,7 +793,12 @@ onBeforeUnmount(() => {
 
           <el-tab-pane :label="t('aegis.monitor.presets')" name="presets">
             <el-scrollbar class="monitor-sidebar__scroll">
-              <div class="flex flex-col gap-2 pr-1">
+              <el-empty
+                v-if="presets.length === 0"
+                :image-size="56"
+                :description="t('aegis.monitor.noPresets')"
+              />
+              <div v-else class="flex flex-col gap-2 pr-1">
                 <div
                   v-for="p in presets"
                   :key="p.id"
@@ -880,9 +976,11 @@ onBeforeUnmount(() => {
                 <el-tag v-else-if="alert.handled" size="small" type="success">OK</el-tag>
               </div>
             </div>
-            <div v-if="filteredAlerts.length === 0" class="text-center text-xs text-zinc-400 py-8">
-              {{ t("aegis.dashboard.noRecentAlerts") }}
-            </div>
+            <el-empty
+              v-if="filteredAlerts.length === 0"
+              :image-size="56"
+              :description="t('aegis.dashboard.noRecentAlerts')"
+            />
           </div>
         </el-scrollbar>
       </aside>
@@ -920,7 +1018,7 @@ onBeforeUnmount(() => {
       </el-form>
       <template #footer>
         <el-button @click="presetDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitPreset">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingPreset" @click="submitPreset">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

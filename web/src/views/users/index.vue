@@ -15,11 +15,15 @@ import {
   type ZoneTreeNode
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
+import { isCancelError, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisUsers" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
+const saving = ref(false);
+const savingScope = ref(false);
 const users = ref<UserItem[]>([]);
 const page = ref(1);
 const pageSize = ref(20);
@@ -57,8 +61,9 @@ async function loadData() {
     const [uRes, zRes] = await Promise.all([listUsers(), getZonesTree().catch(() => ({ data: [] }))]);
     users.value = uRes?.data ?? [];
     zones.value = zRes?.data ?? [];
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load users");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
@@ -100,12 +105,13 @@ async function openScopeDialog(row: UserItem) {
       zoneTreeRef.value.setCheckedKeys(scopeCheckedIds.value);
     }
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load workshop scope");
+    showError(err, "Failed to load workshop scope");
   }
 }
 
 async function submitScope() {
   if (!scopeUser.value) return;
+  savingScope.value = true;
   try {
     let selectedIds: string[] = [];
     if (!scopeAllZones.value && zoneTreeRef.value?.getCheckedKeys) {
@@ -116,29 +122,46 @@ async function submitScope() {
       zone_ids: selectedIds
     });
     scopeDialogVisible.value = false;
-    ElMessage.success(t("aegis.users.scopeSaved"));
+    showSuccess(t("aegis.users.scopeSaved"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to update workshop scope");
+    showError(err, "Failed to update workshop scope");
+  } finally {
+    savingScope.value = false;
   }
 }
 
 async function submit() {
+  if (!form.display_name.trim() || (!editingId.value && !form.username.trim())) {
+    ElMessage.warning(t("aegis.common.validationRequired"));
+    return;
+  }
+  if (!editingId.value && form.password.length < 8) {
+    ElMessage.warning(t("aegis.common.passwordMinLength"));
+    return;
+  }
+  saving.value = true;
   try {
     if (editingId.value) {
       await updateUser(editingId.value, {
-        display_name: form.display_name,
+        display_name: form.display_name.trim(),
         role: form.role,
         enabled: form.enabled
       });
     } else {
-      await createUser({ ...form });
+      await createUser({
+        ...form,
+        username: form.username.trim(),
+        display_name: form.display_name.trim()
+      });
     }
     dialogVisible.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to save user");
+    showError(err, "Failed to save user");
+  } finally {
+    saving.value = false;
   }
 }
 
@@ -147,27 +170,36 @@ async function onResetPassword(row: UserItem) {
     const { value } = await ElMessageBox.prompt(
       t("aegis.users.resetPassword"),
       row.username,
-      { inputType: "password" }
+      {
+        inputType: "password",
+        inputValidator: (val: string) =>
+          val && val.length >= 8 ? true : t("aegis.common.passwordMinLength")
+      }
     );
     if (value) {
       await resetUserPassword(row.id, value);
-      ElMessage.success("Password updated");
+      showSuccess(t("aegis.common.saveSuccess"));
     }
   } catch (err: any) {
-    if (err !== "cancel" && err !== "close") {
-      ElMessage.error(err?.message || "Failed to reset password");
+    if (!isCancelError(err)) {
+      showError(err, "Failed to reset password");
     }
   }
 }
 
 async function onDelete(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteUser(id);
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadData();
   } catch (err: any) {
-    if (err !== "cancel" && err !== "close") {
-      ElMessage.error(err?.message || "Failed to delete user");
+    if (!isCancelError(err)) {
+      showError(err, "Failed to delete user");
     }
   }
 }
@@ -187,6 +219,25 @@ onMounted(loadData);
           <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
         </div>
       </header>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table v-loading="loading" :data="pagedUsers" height="100%" border stripe>
@@ -286,7 +337,7 @@ onMounted(loadData);
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submit">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
 
@@ -296,9 +347,14 @@ onMounted(loadData);
       width="520px"
     >
       <div class="space-y-4">
-        <div>
+        <div class="space-y-2">
           <el-switch v-model="scopeAllZones" :active-text="t('aegis.users.allZonesAccess')" />
-          <div class="text-xs text-slate-400 mt-1">{{ t("aegis.users.allZonesHint") }}</div>
+          <el-alert
+            type="info"
+            show-icon
+            :closable="false"
+            :title="t('aegis.users.allZonesHint')"
+          />
         </div>
         <div v-show="!scopeAllZones" class="border rounded p-3">
           <div class="text-xs font-medium mb-2 text-slate-600">{{ t("aegis.users.assignedZones") }}</div>
@@ -318,7 +374,7 @@ onMounted(loadData);
       </div>
       <template #footer>
         <el-button @click="scopeDialogVisible = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitScope">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingScope" @click="submitScope">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

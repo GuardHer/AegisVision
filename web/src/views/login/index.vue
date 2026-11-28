@@ -4,12 +4,13 @@ import Motion from "./utils/motion";
 import { useRouter } from "vue-router";
 import { message } from "@/utils/message";
 import { loginRules } from "./utils/rule";
-import { ref, reactive, toRaw } from "vue";
+import { ref, reactive, toRaw, watch } from "vue";
 import { debounce } from "@pureadmin/utils";
 import { useNav } from "@/layout/hooks/useNav";
 import { useEventListener } from "@vueuse/core";
 import type { FormInstance } from "element-plus";
 import { $t, transformI18n } from "@/plugins/i18n";
+import { formatAuthError } from "@/utils/error";
 import { useLayout } from "@/layout/hooks/useLayout";
 import { useUserStoreHook } from "@/store/modules/user";
 import { initRouter, getTopMenu } from "@/router/utils";
@@ -32,6 +33,7 @@ defineOptions({
 const router = useRouter();
 const loading = ref(false);
 const disabled = ref(false);
+const loginError = ref("");
 const ruleFormRef = ref<FormInstance>();
 
 const { initStorage } = useLayout();
@@ -48,35 +50,46 @@ const ruleForm = reactive({
   password: "admin123"
 });
 
+watch(
+  () => [ruleForm.username, ruleForm.password],
+  () => {
+    if (loginError.value) loginError.value = "";
+  }
+);
+
 const onLogin = async (formEl: FormInstance | undefined) => {
   if (!formEl) return;
-  await formEl.validate(valid => {
-    if (valid) {
-      loading.value = true;
-      useUserStoreHook()
-        .loginByUsername({
-          username: ruleForm.username,
-          password: ruleForm.password
-        })
-        .then(res => {
-          if (res.success) {
-            // 获取后端路由
-            return initRouter().then(() => {
-              disabled.value = true;
-              router
-                .push(getTopMenu(true).path)
-                .then(() => {
-                  message(t("login.pureLoginSuccess"), { type: "success" });
-                })
-                .finally(() => (disabled.value = false));
-            });
-          } else {
-            message(t("login.pureLoginFail"), { type: "error" });
-          }
-        })
-        .finally(() => (loading.value = false));
+  const valid = await formEl.validate().catch(() => false);
+  if (!valid) return;
+
+  loading.value = true;
+  loginError.value = "";
+  try {
+    const res = await useUserStoreHook().loginByUsername({
+      username: ruleForm.username.trim(),
+      password: ruleForm.password
+    });
+    if (res?.success) {
+      await initRouter();
+      disabled.value = true;
+      try {
+        await router.push(getTopMenu(true).path);
+        message(t("login.pureLoginSuccess"), { type: "success" });
+      } finally {
+        disabled.value = false;
+      }
+    } else {
+      const errMsg = t("login.pureLoginFail");
+      loginError.value = errMsg;
+      message(errMsg, { type: "error", showClose: true, duration: 4000 });
     }
-  });
+  } catch (err: any) {
+    const errMsg = formatAuthError(err, t);
+    loginError.value = errMsg;
+    message(errMsg, { type: "error", showClose: true, duration: 4000 });
+  } finally {
+    loading.value = false;
+  }
 };
 
 const immediateDebounce: any = debounce(
@@ -189,11 +202,25 @@ useEventListener(document, "keydown", ({ code }) => {
               </el-form-item>
             </Motion>
 
+            <Motion :delay="200">
+              <el-alert
+                v-if="loginError"
+                :title="loginError"
+                type="error"
+                show-icon
+                closable
+                class="mb-3"
+                data-test="login-error-alert"
+                @close="loginError = ''"
+              />
+            </Motion>
+
             <Motion :delay="250">
               <el-button
                 class="w-full mt-4!"
                 size="default"
                 type="primary"
+                data-test="login-submit-btn"
                 :loading="loading"
                 :disabled="disabled"
                 @click="onLogin(ruleFormRef)"

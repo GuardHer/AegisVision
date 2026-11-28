@@ -12,11 +12,15 @@ import {
   type AlgorithmItem,
   type AlgorithmVersionItem
 } from "@/api/aegis";
+import { isCancelError, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisAlgorithms" });
 
 const { t } = useI18n();
 const loading = ref(false);
+const loadError = ref("");
+const savingAlgo = ref(false);
+const savingVer = ref(false);
 const algorithms = ref<AlgorithmItem[]>([]);
 const page = ref(1);
 const pageSize = ref(20);
@@ -60,40 +64,53 @@ async function loadData() {
         versionsByAlgo[a.id] = vRes?.data ?? [];
       })
     );
+    loadError.value = "";
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to load algorithms");
+    loadError.value = showError(err, t("aegis.common.loadFailed"));
   } finally {
     loading.value = false;
   }
 }
 
 async function submitAlgo() {
+  if (!algoForm.algorithm_key.trim() || !algoForm.name.trim()) {
+    ElMessage.warning(t("aegis.common.validationRequired"));
+    return;
+  }
+  savingAlgo.value = true;
   try {
     await createAlgorithm({
-      algorithm_key: algoForm.algorithm_key,
-      name: algoForm.name,
-      description: algoForm.description,
+      algorithm_key: algoForm.algorithm_key.trim(),
+      name: algoForm.name.trim(),
+      description: algoForm.description.trim(),
       supported_labels: algoForm.supported_labels
         .split(",")
         .map(s => s.trim())
         .filter(Boolean)
     });
     algoDialog.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to create algorithm");
+    showError(err, "Failed to create algorithm");
+  } finally {
+    savingAlgo.value = false;
   }
 }
 
 async function removeAlgo(id: string) {
   try {
-    await ElMessageBox.confirm(t("aegis.common.confirmDelete"));
+    await ElMessageBox.confirm(
+      t("aegis.common.confirmDelete"),
+      t("aegis.common.confirmTitle"),
+      { type: "warning" }
+    );
     await deleteAlgorithm(id);
+    showSuccess(t("aegis.common.deleteSuccess"));
     await loadData();
   } catch (err: any) {
-    if (err !== "cancel" && err !== "close") {
-      ElMessage.error(err?.message || "Failed to delete algorithm");
+    if (!isCancelError(err)) {
+      showError(err, "Failed to delete algorithm");
     }
   }
 }
@@ -104,6 +121,10 @@ function openAddVersion(algoId: string) {
 }
 
 async function submitVersion() {
+  if (!verForm.version.trim() || !verForm.runtime_key.trim()) {
+    ElMessage.warning(t("aegis.common.validationRequired"));
+    return;
+  }
   let defaultParams = {};
   try {
     defaultParams = JSON.parse(verForm.default_params || "{}");
@@ -111,18 +132,21 @@ async function submitVersion() {
     ElMessage.error("Invalid JSON in default_params");
     return;
   }
+  savingVer.value = true;
   try {
     await createAlgorithmVersion(targetAlgoId.value, {
-      version: verForm.version,
-      runtime_key: verForm.runtime_key,
+      version: verForm.version.trim(),
+      runtime_key: verForm.runtime_key.trim(),
       default_params: defaultParams,
       status: verForm.status
     });
     verDialog.value = false;
-    ElMessage.success("OK");
+    showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to create algorithm version");
+    showError(err, "Failed to create algorithm version");
+  } finally {
+    savingVer.value = false;
   }
 }
 
@@ -135,9 +159,10 @@ async function toggleVersionStatus(v: AlgorithmVersionItem) {
       default_params: v.default_params ?? {},
       status: nextStatus
     });
+    showSuccess(t("aegis.common.actionSuccess"));
     await loadData();
   } catch (err: any) {
-    ElMessage.error(err?.message || "Failed to update version status");
+    showError(err, "Failed to update version status");
   }
 }
 
@@ -158,6 +183,25 @@ onMounted(loadData);
           <el-button @click="loadData">{{ t("aegis.common.refresh") }}</el-button>
         </div>
       </header>
+
+      <el-alert
+        v-if="loadError"
+        type="error"
+        show-icon
+        closable
+        :title="t('aegis.common.loadFailed')"
+        class="mb-3 shrink-0"
+        @close="loadError = ''"
+      >
+        <template #default>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span>{{ loadError }}</span>
+            <el-button size="small" type="danger" plain @click="loadData">
+              {{ t("aegis.common.retry") }}
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
 
       <div class="aegis-table-wrap aegis-table-wrap--fill">
         <el-table v-loading="loading" :data="pagedAlgorithms" height="100%" border stripe row-key="id">
@@ -287,7 +331,7 @@ onMounted(loadData);
       </el-form>
       <template #footer>
         <el-button @click="algoDialog = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitAlgo">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingAlgo" @click="submitAlgo">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
 
@@ -312,7 +356,7 @@ onMounted(loadData);
       </el-form>
       <template #footer>
         <el-button @click="verDialog = false">{{ t("aegis.common.cancel") }}</el-button>
-        <el-button type="primary" @click="submitVersion">{{ t("aegis.common.save") }}</el-button>
+        <el-button type="primary" :loading="savingVer" @click="submitVersion">{{ t("aegis.common.save") }}</el-button>
       </template>
     </el-dialog>
   </div>

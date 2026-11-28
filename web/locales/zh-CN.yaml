@@ -107,6 +107,17 @@ aegis:
     enabled: 启用
     disabled: 停用
     confirmDelete: 确认删除该记录？
+    confirmTitle: 操作确认
+    retry: 重试
+    loadFailed: 数据加载失败
+    saveSuccess: 保存成功
+    deleteSuccess: 删除成功
+    actionSuccess: 操作成功
+    exportSuccess: 导出成功
+    partialLoadWarning: 部分辅助数据加载失败，请稍后重试
+    validationRequired: 请填写必填项
+    invalidDateFormat: 日期格式应为 YYYY-MM-DD
+    passwordMinLength: 密码长度不能少于 8 位
   dashboard:
     title: 工厂安全与 SOP 运营态势总览
     todayAlarms: 今日告警总数
@@ -157,6 +168,12 @@ aegis:
     exitSolo: 还原分屏
     wsConnected: 实时连接正常
     wsDisconnected: 实时连接断开
+    wsDisconnectedBanner: 实时告警与检测框 WebSocket 已断开，系统正在自动重连
+    wsReconnectNow: 立即重连
+    wsReconnected: 实时 WebSocket 连接已恢复
+    snapshotSaved: 画面抓拍已保存
+    snapshotNotReady: 视频尚未出图，暂时无法抓拍
+    noPresets: 暂无已保存的轮巡方案
   player:
     live: 实时
     connecting: 正在建立低延迟视频流…
@@ -216,6 +233,11 @@ aegis:
     videoClip: 短视频证据
     sopTimeline: SOP 违规步骤时间线
     violationType: 违规类型
+    videoRecordingHint: 短视频证据正在后台异步录制中，稍后刷新即可播放
+    videoFailedHint: 短视频证据录制失败，请检查流媒体源或 dispatcher 日志
+    batchHandledCount: 已批量处置所选告警
+    retryEnqueued: 已加入联动重发队列
+    noDeliveries: 暂无联动投递记录
   cameras:
     name: 名称
     zone: 所属区域
@@ -270,6 +292,11 @@ aegis:
     stepRequired: 必做步骤
     stepDwell: 确认帧数
     stepMaxWait: 等待超时 (秒)
+    noRoiWarning: 当前点位尚未配置 ROI 检测区域，请先在上方画布添加多边形或全画面 ROI 后再创建规则
+    importPartialSummary: 批量导入完成
+    nameAndRtspRequired: 请填写点位名称和主码流 RTSP 地址
+    zoneNameRequired: 请填写区域名称
+    ruleFieldsRequired: 请填写规则名称并选择 ROI 与算法版本
   schedules:
     title: 布防排班模板管理
     name: 模板名称
@@ -338,6 +365,13 @@ aegis:
     drain: 排水维护
     resume: 恢复调度
     reschedule: 重新调度
+    confirmDrain: 确认将该节点切换为排水维护状态？现有任务将被迁移
+    confirmResume: 确认恢复该节点的正常任务调度？
+    confirmReschedule: 确认强制重新调度该推理任务？
+    noNodesHint: 当前暂无在线算力节点（aegis-agent），推理任务将等待节点注册后自动调度
+    failedTasksBanner: 检测到异常推理任务，请展开或悬停查看错误详情
+    errorMessage: 异常信息
+    rescheduleSuccess: 已提交重新调度请求
   channels:
     name: 通道名称
     type: 通道类型
@@ -360,6 +394,9 @@ aegis:
     test: 测试连通
     reset: 现场消音/复位
     resetQueued: 已下发声光消音复位指令
+    testSuccessTitle: 通道连通测试成功
+    testFailedTitle: 通道连通测试失败
+    nameAndUrlRequired: 请填写通道名称及目标地址
   users:
     username: 账号
     displayName: 显示名称
@@ -396,6 +433,9 @@ aegis:
     component: 组件
     latency: 响应耗时
     clusterSummary: 集群实时概况
+    healthAllHealthy: 所有核心基础设施组件运行正常
+    healthDegradedWarning: 检测到部分基础设施组件处于降级或异常状态，请尽快排查
+    healthEmpty: 暂无组件健康检查数据
 status:
   pureLoad: 加载中...
   pureMessage: 消息
@@ -413,3 +453,8 @@ login:
   pureUsernameReg: 请输入账号
   purePassWordReg: 请输入密码
   purePassWordRuleReg: 密码格式应为8-18位数字、字母、符号的任意两种组合
+  invalidCredentials: 账号或密码错误，请重新输入
+  accountDisabled: 该账号已被停用，请联系管理员
+  credentialsRequired: 请输入账号和密码
+  networkError: 无法连接认证服务，请检查后端接口是否已启动
+  timeoutError: 登录请求超时，请稍后重试

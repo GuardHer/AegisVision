@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ElMessage } from "element-plus";
 import * as echarts from "echarts";
 import {
   getDashboardOverview,
@@ -12,6 +11,7 @@ import {
 import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
 import { formatDateTime } from "@/utils/format";
+import { extractErrorMessage, showError, showSuccess } from "@/utils/error";
 
 defineOptions({ name: "AegisDashboard" });
 
@@ -23,6 +23,8 @@ const allowHandle = computed(() =>
 );
 
 const loading = ref(false);
+const loadError = ref("");
+const handlingAlarmId = ref("");
 const overview = ref<DashboardOverview>({
   kpis: {
     today_alarms: 0,
@@ -130,30 +132,39 @@ function renderCharts() {
   }
 }
 
-async function loadData() {
+async function loadData(silent = false) {
   loading.value = true;
   try {
     const res = await getDashboardOverview();
     if (res?.data) {
       overview.value = res.data;
     }
+    loadError.value = "";
     await nextTick();
     renderCharts();
+  } catch (err: any) {
+    loadError.value = extractErrorMessage(err, t("aegis.common.loadFailed"));
+    if (!silent) {
+      showError(err, t("aegis.common.loadFailed"));
+    }
   } finally {
     loading.value = false;
   }
 }
 
 async function quickHandle(alarmId: string, status: "confirmed" | "false_positive") {
+  handlingAlarmId.value = alarmId;
   try {
     await handleAlarm(alarmId, {
       handle_status: status,
       handle_note: "Dashboard quick action"
     });
-    ElMessage.success("OK");
-    await loadData();
+    showSuccess(t("aegis.common.actionSuccess"));
+    await loadData(true);
   } catch (err: any) {
-    ElMessage.error(err?.response?.data?.message || err?.message || "Action failed");
+    showError(err, "Action failed");
+  } finally {
+    handlingAlarmId.value = "";
   }
 }
 
@@ -169,7 +180,7 @@ onMounted(() => {
     if (zonesChartRef.value) resizeObserver.observe(zonesChartRef.value);
     if (modeChartRef.value) resizeObserver.observe(modeChartRef.value);
   }
-  refreshTimer = setInterval(() => void loadData(), 30000);
+  refreshTimer = setInterval(() => void loadData(true), 30000);
 });
 
 onBeforeUnmount(() => {
@@ -189,11 +200,30 @@ onBeforeUnmount(() => {
         <el-button size="small" @click="router.push('/monitor/index')">
           {{ t("menus.aegisMonitor") }}
         </el-button>
-        <el-button size="small" type="primary" :loading="loading" @click="loadData">
+        <el-button size="small" type="primary" :loading="loading" @click="loadData(false)">
           {{ t("aegis.common.refresh") }}
         </el-button>
       </div>
     </div>
+
+    <el-alert
+      v-if="loadError"
+      type="error"
+      show-icon
+      closable
+      :title="t('aegis.common.loadFailed')"
+      data-test="dashboard-load-error"
+      @close="loadError = ''"
+    >
+      <template #default>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span>{{ loadError }}</span>
+          <el-button size="small" type="danger" plain @click="loadData(false)">
+            {{ t("aegis.common.retry") }}
+          </el-button>
+        </div>
+      </template>
+    </el-alert>
 
     <!-- 6 Enterprise KPI Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 aegis-tabular">
@@ -317,10 +347,22 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div v-if="allowHandle" class="flex gap-1 shrink-0">
-                <el-button size="small" type="success" plain @click="quickHandle(alert.id, 'confirmed')">
+                <el-button
+                  size="small"
+                  type="success"
+                  plain
+                  :loading="handlingAlarmId === alert.id"
+                  @click="quickHandle(alert.id, 'confirmed')"
+                >
                   {{ t("aegis.alarms.confirm") }}
                 </el-button>
-                <el-button size="small" type="warning" plain @click="quickHandle(alert.id, 'false_positive')">
+                <el-button
+                  size="small"
+                  type="warning"
+                  plain
+                  :loading="handlingAlarmId === alert.id"
+                  @click="quickHandle(alert.id, 'false_positive')"
+                >
                   {{ t("aegis.alarms.falsePositive") }}
                 </el-button>
               </div>
