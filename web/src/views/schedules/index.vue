@@ -12,6 +12,7 @@ import {
   type WeeklyWindow
 } from "@/api/aegis";
 import { isCancelError, showError, showSuccess } from "@/utils/error";
+import { formatWeekday } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisSchedules" });
 
@@ -41,15 +42,14 @@ const form = reactive({
 const newExcludeDate = ref("");
 const newIncludeDate = reactive({ date: "", start: "", end: "" });
 
-const weekdayOptions = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 7, label: "Sun" }
-];
+const weekdayOptions = computed(() => [1, 2, 3, 4, 5, 6, 7].map(d => ({
+  value: d,
+  label: formatWeekday(d, t)
+})));
+
+function formatWindowDays(days: number[] | undefined): string {
+  return (days ?? []).map(d => formatWeekday(d, t)).join("、");
+}
 
 async function loadData() {
   loading.value = true;
@@ -155,7 +155,7 @@ async function submitForm() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to save schedule");
+    showError(err);
   } finally {
     saving.value = false;
   }
@@ -173,7 +173,7 @@ async function onDelete(row: ArmingScheduleItem) {
     await loadData();
   } catch (err: any) {
     if (isCancelError(err)) return;
-    showError(err, "Cannot delete schedule referenced by rules");
+    showError(err, t("aegis.errors.scheduleReferenced"));
   }
 }
 
@@ -228,7 +228,7 @@ onMounted(loadData);
                   :type="w.end < w.start ? 'warning' : 'info'"
                   effect="plain"
                 >
-                  D{{ (w.days || []).join(",") }} {{ w.start }}-{{ w.end }}
+                  {{ formatWindowDays(w.days) }} {{ w.start }}-{{ w.end }}
                 </el-tag>
               </div>
             </template>
@@ -273,7 +273,7 @@ onMounted(loadData);
     >
       <el-form label-width="140px" size="small">
         <el-form-item :label="t('aegis.schedules.name')">
-          <el-input v-model="form.name" placeholder="Day Shift 08:00-20:00" />
+          <el-input v-model="form.name" :placeholder="t('aegis.schedules.namePlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('aegis.schedules.timezone')">
           <el-input v-model="form.timezone" placeholder="Asia/Shanghai" />
@@ -309,7 +309,7 @@ onMounted(loadData);
                 <el-input v-model="w.start" class="w-28" placeholder="08:00" />
                 <span>→</span>
                 <el-input v-model="w.end" class="w-28" placeholder="20:00" />
-                <el-tag v-if="w.end < w.start" size="small" type="warning">Overnight</el-tag>
+                <el-tag v-if="w.end < w.start" size="small" type="warning">{{ t("aegis.schedules.overnight") }}</el-tag>
               </div>
             </div>
             <el-button size="small" @click="addWeeklyWindow">+ {{ t("aegis.schedules.addWindow") }}</el-button>
@@ -352,7 +352,7 @@ onMounted(loadData);
                 type="success"
                 @close="form.include_dates.splice(idx, 1)"
               >
-                {{ inc.date }} {{ inc.start && inc.end ? `${inc.start}-${inc.end}` : "00:00-24:00" }}
+                {{ inc.date }} {{ inc.start && inc.end ? `${inc.start}-${inc.end}` : t("aegis.schedules.allDay") }}
               </el-tag>
             </div>
           </div>

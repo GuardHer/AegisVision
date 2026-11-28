@@ -9,6 +9,11 @@ import {
   type SystemHealthPayload
 } from "@/api/aegis";
 import { showError, showSuccess } from "@/utils/error";
+import {
+  formatHealthComponent,
+  formatHealthStatus,
+  formatSeverity
+} from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisSettings" });
 
@@ -77,7 +82,7 @@ async function saveSettings() {
     }
     showSuccess(t("aegis.settings.saved"));
   } catch (err: any) {
-    showError(err, "Failed to save settings");
+    showError(err);
   } finally {
     savingSettings.value = false;
   }
@@ -133,9 +138,9 @@ onMounted(() => {
           </el-form-item>
           <el-form-item :label="t('aegis.settings.popupMinSeverity')">
             <el-select v-model="form.popup_min_severity" class="w-full">
-              <el-option label="info" value="info" />
-              <el-option label="warning" value="warning" />
-              <el-option label="critical" value="critical" />
+              <el-option :label="formatSeverity('info', t)" value="info" />
+              <el-option :label="formatSeverity('warning', t)" value="warning" />
+              <el-option :label="formatSeverity('critical', t)" value="critical" />
             </el-select>
           </el-form-item>
           <el-form-item :label="t('aegis.settings.maxExportRows')">
@@ -202,13 +207,13 @@ onMounted(() => {
               class="border border-[var(--el-border-color-lighter)] rounded-md p-3 flex items-center justify-between gap-2"
             >
               <div class="min-w-0">
-                <div class="font-medium text-sm uppercase truncate">{{ comp.name }}</div>
+                <div class="font-medium text-sm truncate">{{ formatHealthComponent(comp.name, t) }}</div>
                 <div class="text-xs text-slate-400 truncate aegis-tabular">
                   {{ comp.detail || "—" }} · {{ comp.latency_ms }}ms
                 </div>
               </div>
               <el-tag size="small" :type="healthTagType(comp.status)" class="shrink-0">
-                {{ comp.status }}
+                {{ formatHealthStatus(comp.status, t) }}
               </el-tag>
             </div>
           </div>

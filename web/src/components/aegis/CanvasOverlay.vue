@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { CameraROIItem, DetectionBox } from "@/api/aegis";
 import { computeContainedVideoRect, normalizedToPixel } from "@/utils/videoRect";
+import { formatBehaviorLabel } from "@/utils/aegisLabels";
 
 const props = withDefaults(
   defineProps<{
@@ -105,7 +106,7 @@ function render() {
     ctx.lineWidth = 2;
     ctx.strokeRect(p1.x, p1.y, w, h);
 
-    const text = `${det.label} ${(det.confidence * 100).toFixed(0)}%`;
+    const text = `${formatBehaviorLabel(det.label)} ${(det.confidence * 100).toFixed(0)}%`;
     ctx.font = "12px sans-serif";
     const textW = ctx.measureText(text).width + 8;
     const labelY = Math.max(0, p1.y - 18);

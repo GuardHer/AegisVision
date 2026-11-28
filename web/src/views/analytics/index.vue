@@ -10,6 +10,7 @@ import {
   type ZoneTreeNode
 } from "@/api/aegis";
 import { showAsyncError, showError, showSuccess } from "@/utils/error";
+import { formatViolationType } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisAnalytics" });
 
@@ -155,7 +156,10 @@ function renderCharts() {
       tooltip: { trigger: "axis" },
       grid: { left: 120, right: 20, top: 14, bottom: 24 },
       xAxis: { type: "value", minInterval: 1 },
-      yAxis: { type: "category", data: items.map(s => `${s.step_name} (${s.violation_type})`) },
+      yAxis: {
+        type: "category",
+        data: items.map(s => `${s.step_name} (${formatViolationType(s.violation_type, t)})`)
+      },
       series: [
         {
           type: "bar",
@@ -197,7 +201,7 @@ async function onExportCSV() {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     showSuccess(t("aegis.common.exportSuccess"));
   } catch (err: any) {
-    await showAsyncError(err, "Export failed");
+    await showAsyncError(err);
   } finally {
     exporting.value = false;
   }
@@ -248,7 +252,7 @@ onBeforeUnmount(() => {
           <el-radio-button value="today">{{ t("aegis.analytics.today") }}</el-radio-button>
           <el-radio-button value="7d">{{ t("aegis.analytics.last7d") }}</el-radio-button>
           <el-radio-button value="30d">{{ t("aegis.analytics.last30d") }}</el-radio-button>
-          <el-radio-button value="custom">Custom</el-radio-button>
+          <el-radio-button value="custom">{{ t("aegis.common.custom") }}</el-radio-button>
         </el-radio-group>
         <el-date-picker
           v-if="filters.rangePreset === 'custom'"
@@ -297,7 +301,7 @@ onBeforeUnmount(() => {
         <div class="text-xs text-zinc-500">{{ t("aegis.analytics.totalAlarms") }}</div>
         <div class="text-2xl font-bold mt-1" data-test="an-total-alarms">{{ summary.kpis.total_alarms }}</div>
         <div class="text-xs text-zinc-400 mt-1">
-          Safety: {{ summary.kpis.safety_alarms }} · SOP: {{ summary.kpis.sop_alarms }}
+          {{ t("aegis.analytics.safetyShort") }}: {{ summary.kpis.safety_alarms }} · {{ t("aegis.analytics.sopShort") }}: {{ summary.kpis.sop_alarms }}
         </div>
       </el-card>
 
@@ -307,7 +311,7 @@ onBeforeUnmount(() => {
           {{ summary.kpis.sop_compliance_rate }}%
         </div>
         <div class="text-xs text-zinc-400 mt-1">
-          OK: {{ summary.kpis.sop_compliant_cycles }} / Violated: {{ summary.kpis.sop_violated_cycles }}
+          {{ t("aegis.analytics.compliantShort") }}: {{ summary.kpis.sop_compliant_cycles }} / {{ t("aegis.analytics.violatedShort") }}: {{ summary.kpis.sop_violated_cycles }}
         </div>
       </el-card>
 
@@ -324,7 +328,7 @@ onBeforeUnmount(() => {
           {{ summary.kpis.false_positive_rate }}%
         </div>
         <div class="text-xs text-zinc-400 mt-1">
-          Confirmed: {{ summary.kpis.confirmed_count }} / FP: {{ summary.kpis.false_positive_count }}
+          {{ t("aegis.analytics.confirmedShort") }}: {{ summary.kpis.confirmed_count }} / {{ t("aegis.analytics.fpShort") }}: {{ summary.kpis.false_positive_count }}
         </div>
       </el-card>
     </div>
@@ -355,10 +359,10 @@ onBeforeUnmount(() => {
           <el-table :data="summary.algo_precision" size="small" border stripe max-height="288">
             <el-table-column prop="algorithm_name" :label="t('aegis.algorithms.name')" min-width="130" show-overflow-tooltip />
             <el-table-column prop="version" :label="t('aegis.algorithms.version')" width="85" />
-            <el-table-column prop="total_alarms" label="Total" width="72" align="right" />
-            <el-table-column prop="confirmed_count" label="Confirmed" width="88" align="right" />
-            <el-table-column prop="false_positive_count" label="FP" width="60" align="right" />
-            <el-table-column label="FP Rate" width="86">
+            <el-table-column prop="total_alarms" :label="t('aegis.analytics.totalCol')" width="78" align="right" />
+            <el-table-column prop="confirmed_count" :label="t('aegis.analytics.confirmedCol')" width="84" align="right" />
+            <el-table-column prop="false_positive_count" :label="t('aegis.analytics.fpCol')" width="78" align="right" />
+            <el-table-column :label="t('aegis.analytics.fpRateCol')" width="86">
               <template #default="{ row }">
                 <el-tag :type="row.false_positive_rate > 30 ? 'danger' : 'success'" size="small">
                   {{ row.false_positive_rate }}%

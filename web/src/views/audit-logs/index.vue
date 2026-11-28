@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { listAuditLogs, type AuditLogItem } from "@/api/aegis";
 import { formatDateTime, shortId } from "@/utils/format";
 import { showError } from "@/utils/error";
+import { formatAuditResource } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisAuditLogs" });
 
@@ -112,7 +113,12 @@ onMounted(loadData);
           style="width: 165px"
           @change="handleSearch"
         >
-          <el-option v-for="rt in resourceOptions" :key="rt" :label="rt" :value="rt" />
+          <el-option
+            v-for="rt in resourceOptions"
+            :key="rt"
+            :label="formatAuditResource(rt, t)"
+            :value="rt"
+          />
         </el-select>
         <el-input
           v-model="query.action"
@@ -159,7 +165,7 @@ onMounted(loadData);
             <template #default="{ row }">
               <div class="p-3 bg-[var(--el-fill-color-lighter)] rounded">
                 <div class="text-xs font-medium mb-1 text-slate-500">
-                  {{ t("aegis.auditLogs.detail") }} (Request ID: {{ row.request_id || "—" }})
+                  {{ t("aegis.auditLogs.detail") }} ({{ t("aegis.auditLogs.requestId") }}: {{ row.request_id || "—" }})
                 </div>
                 <pre class="text-xs overflow-auto m-0 aegis-mono-id">{{ prettyJSON(row.detail) }}</pre>
               </div>
@@ -176,7 +182,11 @@ onMounted(loadData);
               <el-tag size="small" type="info" effect="plain">{{ row.action }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="resource_type" :label="t('aegis.auditLogs.resourceType')" width="135" />
+          <el-table-column :label="t('aegis.auditLogs.resourceType')" width="135">
+            <template #default="{ row }">
+              <span>{{ formatAuditResource(row.resource_type, t) }}</span>
+            </template>
+          </el-table-column>
           <el-table-column :label="t('aegis.auditLogs.resourceId')" width="125">
             <template #default="{ row }">
               <el-tooltip v-if="row.resource_id" :content="row.resource_id" placement="top">

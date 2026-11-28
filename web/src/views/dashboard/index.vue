@@ -12,6 +12,7 @@ import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
 import { formatDateTime } from "@/utils/format";
 import { extractErrorMessage, showError, showSuccess } from "@/utils/error";
+import { formatRuleMode, formatSeverity } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisDashboard" });
 
@@ -123,7 +124,7 @@ function renderCharts() {
           center: ["50%", "44%"],
           label: { show: false },
           data: overview.value.by_rule_mode.map(m => ({
-            name: m.rule_mode,
+            name: formatRuleMode(m.rule_mode, t),
             value: m.count
           }))
         }
@@ -157,12 +158,12 @@ async function quickHandle(alarmId: string, status: "confirmed" | "false_positiv
   try {
     await handleAlarm(alarmId, {
       handle_status: status,
-      handle_note: "Dashboard quick action"
+      handle_note: t("aegis.dashboard.quickHandleNote")
     });
     showSuccess(t("aegis.common.actionSuccess"));
     await loadData(true);
   } catch (err: any) {
-    showError(err, "Action failed");
+    showError(err);
   } finally {
     handlingAlarmId.value = "";
   }
@@ -282,7 +283,7 @@ onBeforeUnmount(() => {
           {{ overview.kpis.nodes_online }}/{{ overview.kpis.nodes_total }}
         </div>
         <div class="text-xs text-zinc-400 mt-1">
-          Tasks: {{ overview.kpis.running_tasks }}
+          {{ t("aegis.dashboard.runningTasksLabel") }}: {{ overview.kpis.running_tasks }}
         </div>
       </el-card>
     </div>
@@ -338,7 +339,7 @@ onBeforeUnmount(() => {
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 font-medium truncate">
                   <el-tag :type="alert.severity === 'critical' ? 'danger' : 'warning'" size="small">
-                    {{ alert.severity }}
+                    {{ formatSeverity(alert.severity, t) }}
                   </el-tag>
                   <span class="truncate">{{ alert.title }}</span>
                 </div>

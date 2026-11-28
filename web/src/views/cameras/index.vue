@@ -19,6 +19,7 @@ import {
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
 import { isCancelError, showError, showSuccess } from "@/utils/error";
+import { formatCameraStatus, formatZoneType } from "@/utils/aegisLabels";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 import Plus from "~icons/ep/plus";
 import EditPen from "~icons/ep/edit-pen";
@@ -208,7 +209,7 @@ async function submitZone() {
     zoneDialogVisible.value = false;
     await loadZones();
   } catch (err: any) {
-    showError(err, "Failed to save zone");
+    showError(err);
   } finally {
     savingZone.value = false;
   }
@@ -227,7 +228,7 @@ async function onDeleteZone(node: ZoneTreeNode) {
     await loadAll();
   } catch (err: any) {
     if (isCancelError(err)) return;
-    showError(err, "Cannot delete non-empty zone");
+    showError(err, t("aegis.errors.zoneNotEmpty"));
   }
 }
 
@@ -293,7 +294,7 @@ async function submitCamera() {
     dialogVisible.value = false;
     await loadAll();
   } catch (err: any) {
-    showError(err, "Failed to save camera");
+    showError(err);
   } finally {
     savingCamera.value = false;
   }
@@ -311,7 +312,7 @@ async function onDeleteCamera(id: string) {
     await loadAll();
   } catch (err: any) {
     if (isCancelError(err)) return;
-    showError(err, "Failed to delete camera");
+    showError(err);
   }
 }
 
@@ -334,7 +335,7 @@ async function runBatchEnable(enabled: boolean) {
     });
     await loadAll();
   } catch (err: any) {
-    showError(err, "Batch update failed");
+    showError(err);
   }
 }
 
@@ -356,7 +357,7 @@ async function submitMoveZone() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    showError(err, "Batch move failed");
+    showError(err);
   } finally {
     savingMove.value = false;
   }
@@ -372,13 +373,13 @@ async function submitImportCSV() {
     };
     ElNotification({
       title: t("aegis.cameras.importPartialSummary"),
-      message: `Created: ${importResult.value.created_count}${importResult.value.errors.length ? ` · Errors: ${importResult.value.errors.length}` : ""}`,
+      message: `${t("aegis.common.createdCount")}: ${importResult.value.created_count}${importResult.value.errors.length ? ` · ${t("aegis.common.errorCount")}: ${importResult.value.errors.length}` : ""}`,
       type: importResult.value.errors.length ? "warning" : "success",
       duration: 4500
     });
     await loadAll();
   } catch (err: any) {
-    showError(err, "CSV import failed");
+    showError(err);
   } finally {
     importingCsv.value = false;
   }
@@ -492,8 +493,8 @@ onMounted(loadAll);
             :placeholder="t('aegis.common.status')"
             style="width: 125px"
           >
-            <el-option label="online" value="online" />
-            <el-option label="offline" value="offline" />
+            <el-option :label="formatCameraStatus('online', t)" value="online" />
+            <el-option :label="formatCameraStatus('offline', t)" value="offline" />
           </el-select>
 
           <div class="aegis-filter-bar__end">
@@ -568,7 +569,7 @@ onMounted(loadAll);
             <el-table-column :label="t('aegis.common.status')" width="92">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'online' ? 'success' : 'info'" size="small">
-                  {{ row.status }}
+                  {{ formatCameraStatus(row.status, t) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -617,7 +618,7 @@ onMounted(loadAll);
     <el-dialog v-model="zoneDialogVisible" :title="editingZoneId ? t('aegis.common.edit') : t('aegis.cameras.addZone')" width="460px">
       <el-form label-width="110px" size="small">
         <el-form-item :label="t('aegis.cameras.zone')">
-          <el-select v-model="zoneForm.parent_id" clearable class="w-full" placeholder="Root (Factory)">
+          <el-select v-model="zoneForm.parent_id" clearable class="w-full" :placeholder="t('aegis.cameras.rootZone')">
             <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
           </el-select>
         </el-form-item>
@@ -629,10 +630,10 @@ onMounted(loadAll);
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.zoneType')">
           <el-select v-model="zoneForm.zone_type" class="w-full">
-            <el-option label="factory" value="factory" />
-            <el-option label="workshop" value="workshop" />
-            <el-option label="line" value="line" />
-            <el-option label="workstation" value="workstation" />
+            <el-option :label="formatZoneType('factory', t)" value="factory" />
+            <el-option :label="formatZoneType('workshop', t)" value="workshop" />
+            <el-option :label="formatZoneType('line', t)" value="line" />
+            <el-option :label="formatZoneType('workstation', t)" value="workstation" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -657,7 +658,7 @@ onMounted(loadAll);
           <el-input v-model="form.workstation_code" placeholder="WS-01" />
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.tags')">
-          <el-input v-model="form.tags_text" placeholder="safety, sop" />
+          <el-input v-model="form.tags_text" :placeholder="t('aegis.cameras.tagsPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.location')">
           <el-input v-model="form.location" />
@@ -666,7 +667,7 @@ onMounted(loadAll);
           <el-input v-model="form.rtsp_url" placeholder="rtsp://..." />
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.subStreamUrl')">
-          <el-input v-model="form.sub_stream_url" placeholder="rtsp://... (optional)" />
+          <el-input v-model="form.sub_stream_url" :placeholder="t('aegis.cameras.subStreamPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.codecHint')">
           <el-select v-model="form.codec_hint" class="w-full">
@@ -686,7 +687,7 @@ onMounted(loadAll);
 
     <!-- Batch Move Zone Dialog -->
     <el-dialog v-model="moveDialogVisible" :title="t('aegis.cameras.batchMoveZone')" width="420px">
-      <el-select v-model="moveTargetZoneId" clearable class="w-full" placeholder="Unassigned">
+      <el-select v-model="moveTargetZoneId" clearable class="w-full" :placeholder="t('aegis.common.unassigned')">
         <el-option v-for="z in flatZones" :key="z.id" :label="z.label" :value="z.id" />
       </el-select>
       <template #footer>
@@ -710,7 +711,7 @@ onMounted(loadAll);
         :type="importResult.errors.length ? 'warning' : 'success'"
         show-icon
         :closable="false"
-        :title="`Created: ${importResult.created_count}${importResult.errors.length ? ` · Errors: ${importResult.errors.length}` : ''}`"
+        :title="`${t('aegis.common.createdCount')}: ${importResult.created_count}${importResult.errors.length ? ` · ${t('aegis.common.errorCount')}: ${importResult.errors.length}` : ''}`"
         class="mt-3"
       >
         <template v-if="importResult.errors.length" #default>

@@ -11,6 +11,7 @@ import {
 } from "@/api/aegis";
 import { formatDateTime, shortId } from "@/utils/format";
 import { showError, showSuccess } from "@/utils/error";
+import { formatNodeStatus, formatTaskState } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisNodes" });
 
@@ -70,10 +71,10 @@ async function toggleDrain(node: AgentNodeItem) {
   try {
     const next = node.status === "draining" ? "online" : "draining";
     await updateNodeStatus(node.node_id, next);
-    showSuccess(`${node.node_id} -> ${next}`);
+    showSuccess(`${node.node_id} → ${formatNodeStatus(next, t)}`);
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to update node status");
+    showError(err);
   }
 }
 
@@ -83,7 +84,7 @@ async function onReschedule(taskId: string) {
     showSuccess(t("aegis.nodes.rescheduleSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to reschedule task");
+    showError(err);
   }
 }
 
@@ -233,7 +234,7 @@ onMounted(loadData);
               <el-table-column :label="t('aegis.common.status')" width="102">
                 <template #default="{ row }">
                   <el-tag size="small" :type="nodeStatusType(row.status)">
-                    {{ row.status }}
+                    {{ formatNodeStatus(row.status, t) }}
                   </el-tag>
                 </template>
               </el-table-column>
@@ -274,39 +275,43 @@ onMounted(loadData);
         <el-tab-pane :label="`${t('aegis.nodes.tasksTab')} (${tasks.length})`" name="tasks">
           <div class="aegis-table-wrap aegis-table-wrap--fill">
             <el-table v-loading="loading" :data="pagedTasks" height="100%" border stripe>
-              <el-table-column label="Task ID" width="140">
+              <el-table-column :label="t('aegis.nodes.taskId')" width="140">
                 <template #default="{ row }">
                   <el-tooltip :content="row.id" placement="top">
                     <span class="aegis-mono-id">{{ shortId(row.id, 12) }}</span>
                   </el-tooltip>
                 </template>
               </el-table-column>
-              <el-table-column prop="runtime_key" label="Runtime Key" min-width="140" show-overflow-tooltip>
+              <el-table-column prop="runtime_key" :label="t('aegis.nodes.runtimeKey')" min-width="140" show-overflow-tooltip>
                 <template #default="{ row }">
                   <span class="aegis-mono-id">{{ row.runtime_key }}</span>
                 </template>
               </el-table-column>
-              <el-table-column prop="assigned_node_id" label="Node" min-width="140" show-overflow-tooltip>
+              <el-table-column prop="assigned_node_id" :label="t('aegis.nodes.assignedNode')" min-width="140" show-overflow-tooltip>
                 <template #default="{ row }">
                   <span class="aegis-mono-id">{{ row.assigned_node_id || "—" }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="Desired" width="102">
+              <el-table-column :label="t('aegis.nodes.desiredState')" width="102">
                 <template #default="{ row }">
-                  <el-tag size="small" type="info" effect="plain">{{ row.desired_state }}</el-tag>
+                  <el-tag size="small" type="info" effect="plain">
+                    {{ formatTaskState(row.desired_state, t) }}
+                  </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="Actual" width="108">
+              <el-table-column :label="t('aegis.nodes.actualState')" width="108">
                 <template #default="{ row }">
-                  <el-tag size="small" :type="taskStateType(row.actual_state)">{{ row.actual_state }}</el-tag>
+                  <el-tag size="small" :type="taskStateType(row.actual_state)">
+                    {{ formatTaskState(row.actual_state, t) }}
+                  </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="Lease Expires" width="166">
+              <el-table-column :label="t('aegis.nodes.leaseExpires')" width="166">
                 <template #default="{ row }">
                   <span class="aegis-tabular">{{ formatDateTime(row.lease_expires_at) }}</span>
                 </template>
               </el-table-column>
-              <el-table-column label="Last Frame" width="166">
+              <el-table-column :label="t('aegis.nodes.lastFrame')" width="166">
                 <template #default="{ row }">
                   <span class="aegis-tabular">{{ formatDateTime(row.last_frame_at) }}</span>
                 </template>

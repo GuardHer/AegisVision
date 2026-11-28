@@ -28,6 +28,16 @@ import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import RoiEditor from "@/components/aegis/RoiEditor.vue";
 import { useRenderIcon } from "@/components/ReIcon/src/hooks";
 import { isCancelError, showError, showSuccess } from "@/utils/error";
+import {
+  formatBehaviorLabel,
+  formatBehaviorLabelWithCode,
+  formatRoiType,
+  formatRuleMode,
+  formatScheduleMode,
+  formatSeverity,
+  formatTriggerMode,
+  formatViolationType
+} from "@/utils/aegisLabels";
 import Back from "~icons/ep/back";
 
 defineOptions({ name: "AegisCameraConfig" });
@@ -224,7 +234,7 @@ function toggleFreezeFrame() {
   }
   const video = editorContainerRef.value?.querySelector("video") as HTMLVideoElement | null;
   if (!video || video.readyState < 2 || video.videoWidth === 0) {
-    ElMessage.warning("Video stream not ready yet");
+    ElMessage.warning(t("aegis.errors.streamNotReady"));
     return;
   }
   const c = document.createElement("canvas");
@@ -238,7 +248,7 @@ function toggleFreezeFrame() {
 
 async function savePolygonROI() {
   if (!draftRoiName.value.trim() || draftPoints.value.length < 3) {
-    ElMessage.warning("Provide ROI name and at least 3 vertices");
+    ElMessage.warning(t("aegis.errors.roiVerticesRequired"));
     return;
   }
   savingRoi.value = true;
@@ -254,7 +264,7 @@ async function savePolygonROI() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    showError(err, "Failed to save ROI");
+    showError(err);
   } finally {
     savingRoi.value = false;
   }
@@ -264,7 +274,7 @@ async function saveFullFrameROI() {
   savingRoi.value = true;
   try {
     await createROI(cameraId, {
-      name: draftRoiName.value.trim() || "Full Frame",
+      name: draftRoiName.value.trim() || t("aegis.cameras.defaultFullFrameName"),
       roi_type: "full_frame",
       points: [],
       color: draftRoiColor.value
@@ -273,7 +283,7 @@ async function saveFullFrameROI() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    showError(err, "Failed to save ROI");
+    showError(err);
   } finally {
     savingRoi.value = false;
   }
@@ -291,7 +301,7 @@ async function removeROI(id: string) {
     await loadAll();
   } catch (err: any) {
     if (isCancelError(err)) return;
-    showError(err, "Failed to delete ROI");
+    showError(err);
   }
 }
 
@@ -496,7 +506,7 @@ async function saveRule() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadAll();
   } catch (err: any) {
-    showError(err, "Failed to save rule");
+    showError(err);
   } finally {
     savingRule.value = false;
   }
@@ -514,7 +524,7 @@ async function removeRule(id: string) {
     await loadAll();
   } catch (err: any) {
     if (isCancelError(err)) return;
-    showError(err, "Failed to delete rule");
+    showError(err);
   }
 }
 
@@ -626,7 +636,7 @@ onBeforeUnmount(() => {
           </div>
 
           <div class="aegis-filter-bar !mb-0">
-            <el-input v-model="draftRoiName" placeholder="ROI Name" style="width: 185px" size="small" />
+            <el-input v-model="draftRoiName" :placeholder="t('aegis.cameras.roiNamePlaceholder')" style="width: 195px" size="small" />
             <el-color-picker v-model="draftRoiColor" size="small" />
             <el-button type="primary" size="small" :loading="savingRoi" @click="savePolygonROI">
               {{ t("aegis.cameras.addPolygonRoi") }} ({{ draftPoints.length }})
@@ -647,7 +657,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="aegis-table-wrap">
             <el-table :data="rois" size="small" max-height="380" border stripe>
-              <el-table-column prop="name" label="ROI" min-width="115" show-overflow-tooltip />
+              <el-table-column prop="name" :label="t('aegis.cameras.roi')" min-width="115" show-overflow-tooltip />
               <el-table-column :label="t('aegis.cameras.roiColor')" width="64" align="center">
                 <template #default="{ row }">
                   <span
@@ -656,9 +666,9 @@ onBeforeUnmount(() => {
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="roi_type" label="Type" width="96">
+              <el-table-column prop="roi_type" :label="t('aegis.cameras.roiType')" width="104">
                 <template #default="{ row }">
-                  <el-tag size="small" type="info" effect="plain">{{ row.roi_type }}</el-tag>
+                  <el-tag size="small" type="info" effect="plain">{{ formatRoiType(row.roi_type, t) }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column :label="t('aegis.common.actions')" width="78" fixed="right">
@@ -707,22 +717,23 @@ onBeforeUnmount(() => {
           <el-table-column prop="rule_mode" :label="t('aegis.alarms.ruleMode')" width="142">
             <template #default="{ row }">
               <el-tag :type="row.rule_mode === 'sop_sequence' ? 'warning' : 'info'" size="small">
-                {{ row.rule_mode }}
+                {{ formatRuleMode(row.rule_mode, t) }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column :label="t('aegis.cameras.targetLabels')" min-width="165">
+          <el-table-column :label="t('aegis.cameras.targetLabels')" min-width="180">
             <template #default="{ row }">
               <div class="flex flex-wrap gap-1">
-                <el-tag
+                <el-tooltip
                   v-for="lbl in summarizeRuleLabels(row)"
                   :key="lbl"
-                  size="small"
-                  type="primary"
-                  effect="plain"
+                  :content="formatBehaviorLabelWithCode(lbl, t)"
+                  placement="top"
                 >
-                  {{ lbl }}
-                </el-tag>
+                  <el-tag size="small" type="primary" effect="plain">
+                    {{ formatBehaviorLabel(lbl, t) }}
+                  </el-tag>
+                </el-tooltip>
                 <span v-if="summarizeRuleLabels(row).length === 0" class="text-xs text-zinc-400">—</span>
               </div>
             </template>
@@ -732,7 +743,11 @@ onBeforeUnmount(() => {
               {{ row.schedule_id ? scheduleNameMap.get(row.schedule_id) || row.schedule_id : t("aegis.cameras.alwaysArmed") }}
             </template>
           </el-table-column>
-          <el-table-column prop="schedule_mode" :label="t('aegis.cameras.scheduleMode')" width="96" />
+          <el-table-column :label="t('aegis.cameras.scheduleMode')" width="102">
+            <template #default="{ row }">
+              {{ formatScheduleMode(row.schedule_mode, t) }}
+            </template>
+          </el-table-column>
           <el-table-column :label="t('aegis.cameras.recordVideo')" width="110">
             <template #default="{ row }">
               <el-tag :type="row.record_video ? 'success' : 'info'" size="small" effect="plain">
@@ -794,10 +809,10 @@ onBeforeUnmount(() => {
         </el-form-item>
         <el-form-item :label="t('aegis.alarms.ruleMode')">
           <el-select v-model="ruleForm.rule_mode" class="w-full">
-            <el-option label="anomaly_detect (EHS Safety)" value="anomaly_detect" />
-            <el-option label="count_threshold" value="count_threshold" />
-            <el-option label="absence_detect" value="absence_detect" />
-            <el-option label="sop_sequence (Workstation SOP)" value="sop_sequence" />
+            <el-option :label="formatRuleMode('anomaly_detect', t)" value="anomaly_detect" />
+            <el-option :label="formatRuleMode('count_threshold', t)" value="count_threshold" />
+            <el-option :label="formatRuleMode('absence_detect', t)" value="absence_detect" />
+            <el-option :label="formatRuleMode('sop_sequence', t)" value="sop_sequence" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.armingSchedule')">
@@ -828,24 +843,24 @@ onBeforeUnmount(() => {
               <el-option
                 v-for="lbl in selectedVersionLabels"
                 :key="lbl"
-                :label="lbl"
+                :label="formatBehaviorLabelWithCode(lbl, t)"
                 :value="lbl"
               />
             </el-select>
           </el-form-item>
-          <el-form-item label="Confidence / Frames">
+          <el-form-item :label="t('aegis.cameras.confidenceAndFrames')">
             <div class="flex gap-2">
               <el-input-number v-model="ruleForm.min_confidence" :min="0.1" :max="1" :step="0.05" />
               <el-input-number v-model="ruleForm.consecutive_frames" :min="1" :max="30" />
             </div>
           </el-form-item>
-          <el-form-item v-if="ruleForm.rule_mode === 'count_threshold' || ruleForm.rule_mode === 'absence_detect'" label="Min / Max Count">
+          <el-form-item v-if="ruleForm.rule_mode === 'count_threshold' || ruleForm.rule_mode === 'absence_detect'" :label="t('aegis.cameras.minMaxCount')">
             <div class="flex gap-2">
               <el-input-number v-model="ruleForm.min_count" :min="0" />
               <el-input-number v-if="ruleForm.rule_mode === 'count_threshold'" v-model="ruleForm.max_count" :min="1" />
             </div>
           </el-form-item>
-          <el-form-item label="Duration / Cooldown (s)">
+          <el-form-item :label="t('aegis.cameras.durationAndCooldown')">
             <div class="flex gap-2">
               <el-input-number v-model="ruleForm.duration_seconds" :min="0" />
               <el-input-number v-model="ruleForm.cooldown_seconds" :min="0" />
@@ -857,8 +872,8 @@ onBeforeUnmount(() => {
         <template v-else>
           <el-form-item :label="t('aegis.cameras.triggerMode')">
             <el-radio-group v-model="ruleForm.trigger_mode">
-              <el-radio value="first_step">first_step</el-radio>
-              <el-radio value="zone_entry">zone_entry</el-radio>
+              <el-radio value="first_step">{{ formatTriggerMode("first_step", t) }}</el-radio>
+              <el-radio value="zone_entry">{{ formatTriggerMode("zone_entry", t) }}</el-radio>
             </el-radio-group>
           </el-form-item>
           <el-form-item v-if="ruleForm.trigger_mode === 'zone_entry'" :label="t('aegis.cameras.entryLabels')">
@@ -876,7 +891,7 @@ onBeforeUnmount(() => {
                 <el-option
                   v-for="lbl in selectedVersionLabels"
                   :key="lbl"
-                  :label="lbl"
+                  :label="formatBehaviorLabelWithCode(lbl, t)"
                   :value="lbl"
                 />
               </el-select>
@@ -891,9 +906,9 @@ onBeforeUnmount(() => {
           </el-form-item>
           <el-form-item :label="t('aegis.cameras.violationTypes')">
             <el-checkbox-group v-model="ruleForm.violation_types">
-              <el-checkbox value="missing_step">missing_step</el-checkbox>
-              <el-checkbox value="out_of_order">out_of_order</el-checkbox>
-              <el-checkbox value="step_timeout">step_timeout</el-checkbox>
+              <el-checkbox value="missing_step">{{ formatViolationType("missing_step", t) }}</el-checkbox>
+              <el-checkbox value="out_of_order">{{ formatViolationType("out_of_order", t) }}</el-checkbox>
+              <el-checkbox value="step_timeout">{{ formatViolationType("step_timeout", t) }}</el-checkbox>
             </el-checkbox-group>
           </el-form-item>
 
@@ -908,9 +923,9 @@ onBeforeUnmount(() => {
                   <span class="font-medium text-xs">#{{ idx + 1 }} ({{ step.step_id }})</span>
                   <div class="flex items-center gap-1">
                     <el-switch v-model="step.required" :active-text="t('aegis.cameras.stepRequired')" />
-                    <el-button size="small" link :disabled="idx === 0" aria-label="Move step up" @click="moveSOPStep(idx, -1)">↑</el-button>
-                    <el-button size="small" link :disabled="idx === ruleForm.steps.length - 1" aria-label="Move step down" @click="moveSOPStep(idx, 1)">↓</el-button>
-                    <el-button size="small" link type="danger" :disabled="ruleForm.steps.length <= 1" aria-label="Remove step" @click="removeSOPStep(idx)">×</el-button>
+                    <el-button size="small" link :disabled="idx === 0" :aria-label="t('aegis.cameras.moveStepUp')" @click="moveSOPStep(idx, -1)">↑</el-button>
+                    <el-button size="small" link :disabled="idx === ruleForm.steps.length - 1" :aria-label="t('aegis.cameras.moveStepDown')" @click="moveSOPStep(idx, 1)">↓</el-button>
+                    <el-button size="small" link type="danger" :disabled="ruleForm.steps.length <= 1" :aria-label="t('aegis.cameras.removeStep')" @click="removeSOPStep(idx)">×</el-button>
                   </div>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
@@ -927,7 +942,7 @@ onBeforeUnmount(() => {
                     <el-option
                       v-for="lbl in selectedVersionLabels"
                       :key="lbl"
-                      :label="lbl"
+                      :label="formatBehaviorLabelWithCode(lbl, t)"
                       :value="lbl"
                     />
                   </el-select>
@@ -947,9 +962,9 @@ onBeforeUnmount(() => {
 
         <el-form-item :label="t('aegis.alarms.severity')">
           <el-select v-model="ruleForm.severity" class="w-40">
-            <el-option label="critical" value="critical" />
-            <el-option label="warning" value="warning" />
-            <el-option label="info" value="info" />
+            <el-option :label="formatSeverity('critical', t)" value="critical" />
+            <el-option :label="formatSeverity('warning', t)" value="warning" />
+            <el-option :label="formatSeverity('info', t)" value="info" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('aegis.cameras.recordVideo')">

@@ -13,6 +13,11 @@ import {
   type AlgorithmVersionItem
 } from "@/api/aegis";
 import { isCancelError, showError, showSuccess } from "@/utils/error";
+import {
+  formatBehaviorLabel,
+  formatBehaviorLabelWithCode,
+  formatVersionStatus
+} from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisAlgorithms" });
 
@@ -92,7 +97,7 @@ async function submitAlgo() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to create algorithm");
+    showError(err);
   } finally {
     savingAlgo.value = false;
   }
@@ -110,7 +115,7 @@ async function removeAlgo(id: string) {
     await loadData();
   } catch (err: any) {
     if (!isCancelError(err)) {
-      showError(err, "Failed to delete algorithm");
+      showError(err);
     }
   }
 }
@@ -129,7 +134,7 @@ async function submitVersion() {
   try {
     defaultParams = JSON.parse(verForm.default_params || "{}");
   } catch {
-    ElMessage.error("Invalid JSON in default_params");
+    ElMessage.error(t("aegis.errors.invalidJson"));
     return;
   }
   savingVer.value = true;
@@ -144,7 +149,7 @@ async function submitVersion() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to create algorithm version");
+    showError(err);
   } finally {
     savingVer.value = false;
   }
@@ -162,7 +167,7 @@ async function toggleVersionStatus(v: AlgorithmVersionItem) {
     showSuccess(t("aegis.common.actionSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to update version status");
+    showError(err);
   }
 }
 
@@ -225,7 +230,7 @@ onMounted(loadData);
                     <el-table-column :label="t('aegis.common.status')" width="106">
                       <template #default="{ row: ver }">
                         <el-tag size="small" :type="versionStatusType(ver.status)">
-                          {{ ver.status }}
+                          {{ formatVersionStatus(ver.status, t) }}
                         </el-tag>
                       </template>
                     </el-table-column>
@@ -257,7 +262,7 @@ onMounted(loadData);
                     <el-table-column :label="t('aegis.common.actions')" width="116" fixed="right">
                       <template #default="{ row: ver }">
                         <el-button link type="primary" @click="toggleVersionStatus(ver)">
-                          {{ ver.status === "active" ? "Deprecate" : "Activate" }}
+                          {{ ver.status === "active" ? t("aegis.algorithms.deprecate") : t("aegis.algorithms.activate") }}
                         </el-button>
                       </template>
                     </el-table-column>
@@ -272,23 +277,24 @@ onMounted(loadData);
             </template>
           </el-table-column>
           <el-table-column prop="name" :label="t('aegis.algorithms.name')" min-width="155" show-overflow-tooltip />
-          <el-table-column :label="t('aegis.algorithms.labels')" min-width="200">
+          <el-table-column :label="t('aegis.algorithms.labels')" min-width="230">
             <template #default="{ row }">
               <div class="flex flex-wrap gap-1">
-                <el-tag
+                <el-tooltip
                   v-for="label in (row.supported_labels ?? []).slice(0, 5)"
                   :key="label"
-                  size="small"
-                  type="info"
-                  effect="plain"
+                  :content="formatBehaviorLabelWithCode(label, t)"
+                  placement="top"
                 >
-                  {{ label }}
-                </el-tag>
+                  <el-tag size="small" type="info" effect="plain">
+                    {{ formatBehaviorLabel(label, t) }}
+                  </el-tag>
+                </el-tooltip>
                 <span v-if="!row.supported_labels?.length" class="text-xs text-zinc-400">—</span>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="description" label="Description" min-width="180" show-overflow-tooltip />
+          <el-table-column prop="description" :label="t('aegis.common.description')" min-width="180" show-overflow-tooltip />
           <el-table-column :label="t('aegis.common.actions')" width="165" fixed="right">
             <template #default="{ row }">
               <el-button link type="primary" @click="openAddVersion(row.id)">
@@ -323,9 +329,12 @@ onMounted(loadData);
           <el-input v-model="algoForm.name" />
         </el-form-item>
         <el-form-item :label="t('aegis.algorithms.labels')">
-          <el-input v-model="algoForm.supported_labels" />
+          <div class="w-full space-y-1">
+            <el-input v-model="algoForm.supported_labels" />
+            <div class="text-xs text-slate-400">{{ t("aegis.algorithms.labelsHint") }}</div>
+          </div>
         </el-form-item>
-        <el-form-item label="Description">
+        <el-form-item :label="t('aegis.common.description')">
           <el-input v-model="algoForm.description" type="textarea" />
         </el-form-item>
       </el-form>
@@ -348,9 +357,9 @@ onMounted(loadData);
         </el-form-item>
         <el-form-item :label="t('aegis.common.status')">
           <el-select v-model="verForm.status" class="w-full">
-            <el-option label="active" value="active" />
-            <el-option label="draft" value="draft" />
-            <el-option label="deprecated" value="deprecated" />
+            <el-option :label="formatVersionStatus('active', t)" value="active" />
+            <el-option :label="formatVersionStatus('draft', t)" value="draft" />
+            <el-option :label="formatVersionStatus('deprecated', t)" value="deprecated" />
           </el-select>
         </el-form-item>
       </el-form>

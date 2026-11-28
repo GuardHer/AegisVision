@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ElMessage } from "element-plus";
 import {
   extractAsyncErrorMessage,
   extractErrorMessage,
   isCancelError,
+  localizeBackendMessage,
+  setErrorTranslator,
   showAsyncError,
   showError
 } from "../error";
@@ -19,6 +21,11 @@ vi.mock("element-plus", () => ({
 describe("error utilities", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setErrorTranslator(null);
+  });
+
+  afterEach(() => {
+    setErrorTranslator(null);
   });
 
   it("extracts backend envelope message from Axios error response", () => {
@@ -109,6 +116,41 @@ describe("error utilities", () => {
       expect.objectContaining({
         message: "no matching alarms"
       })
+    );
+  });
+
+  it("localizes HTTP status, network errors, and backend error messages via registered translator", () => {
+    const zhMap: Record<string, string> = {
+      "aegis.errors.http502": "服务网关暂不可用 (502)",
+      "aegis.errors.networkError": "无法连接服务器",
+      "aegis.errors.permissionDenied": "当前账号权限不足",
+      "aegis.errors.resourceExists": "记录已存在",
+      "login.invalidCredentials": "账号或密码错误"
+    };
+    setErrorTranslator(key => zhMap[key] ?? key);
+
+    expect(
+      extractErrorMessage({
+        message: "Request failed with status code 502",
+        response: { status: 502, data: "<html>502</html>" }
+      })
+    ).toBe("服务网关暂不可用 (502)");
+
+    expect(
+      extractErrorMessage({ code: "ERR_NETWORK", message: "Network Error" })
+    ).toBe("无法连接服务器");
+
+    expect(
+      extractErrorMessage({
+        response: { status: 403, data: { message: "permission denied" } }
+      })
+    ).toBe("当前账号权限不足");
+
+    expect(localizeBackendMessage("invalid username or password")).toBe(
+      "账号或密码错误"
+    );
+    expect(localizeBackendMessage("resource already exists")).toBe(
+      "记录已存在"
     );
   });
 });

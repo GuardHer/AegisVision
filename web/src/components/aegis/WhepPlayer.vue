@@ -428,7 +428,7 @@ function connectHLS(hlsUrl: string, token: string, expiresInSec: number) {
       }
       lastError.value = code
         ? `LL-HLS HTTP ${code}`
-        : data.details || "LL-HLS playback failed";
+        : data.details || t("aegis.errors.hlsPlaybackFailed");
       setStatus("error");
       scheduleReconnect();
     });
@@ -447,7 +447,7 @@ function connectHLS(hlsUrl: string, token: string, expiresInSec: number) {
     return;
   }
 
-  throw new Error("LL-HLS (MSE) not supported in this browser");
+  throw new Error(t("aegis.errors.hlsUnsupported"));
 }
 
 async function connect() {
@@ -468,18 +468,18 @@ async function connect() {
         data?.hls_url ||
         (data?.stream_path ? `/hls/${data.stream_path}/index.m3u8` : "");
       if (!hlsUrl) {
-        throw new Error("missing hls_url");
+        throw new Error(t("aegis.errors.hlsPlaybackFailed"));
       }
       connectHLS(hlsUrl, data?.token || "", data?.expires_in || 60);
     } else {
       const whepUrl = data?.whep_url;
       if (!whepUrl) {
-        throw new Error("missing whep_url");
+        throw new Error(t("aegis.errors.streamHandshakeFailed"));
       }
       await connectWebRTC(whepUrl);
     }
   } catch (err: any) {
-    lastError.value = extractErrorMessage(err, "Stream handshake failed");
+    lastError.value = extractErrorMessage(err, t("aegis.errors.streamHandshakeFailed"));
     setStatus("error");
     scheduleReconnect();
   }

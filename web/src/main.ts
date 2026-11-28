@@ -1,7 +1,9 @@
 import App from "./App.vue";
 import router from "./router";
 import { setupStore } from "@/store";
-import { useI18n } from "@/plugins/i18n";
+import { i18n, useI18n } from "@/plugins/i18n";
+import { setErrorTranslator } from "@/utils/error";
+import { setLabelTranslator } from "@/utils/aegisLabels";
 import { getPlatformConfig } from "./config";
 import { MotionPlugin } from "@vueuse/motion";
 // import { useEcharts } from "@/plugins/echarts";
@@ -59,6 +61,9 @@ getPlatformConfig(app).then(async config => {
   await router.isReady();
   injectResponsiveStorage(app, config);
   app.use(MotionPlugin).use(useI18n).use(useElementPlus).use(Table);
+  const translateGlobal = (key: string) => String((i18n.global as any).t(key));
+  setErrorTranslator(translateGlobal);
+  setLabelTranslator(translateGlobal);
   // .use(PureDescriptions)
   // .use(useEcharts);
   app.mount("#app");

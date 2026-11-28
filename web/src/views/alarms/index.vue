@@ -23,6 +23,17 @@ import { useUserStoreHook } from "@/store/modules/user";
 import { canHandleAlarms } from "@/utils/permissions";
 import { formatDateTime, formatDurationMs } from "@/utils/format";
 import { showAsyncError, showError, showSuccess } from "@/utils/error";
+import {
+  formatChannelType,
+  formatDeliveryStatus,
+  formatFpReason,
+  formatHandleStatus,
+  formatRuleMode,
+  formatSeverity,
+  formatSopStepStatus,
+  formatVideoStatus,
+  formatViolationType
+} from "@/utils/aegisLabels";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
 defineOptions({ name: "AegisAlarms" });
@@ -228,7 +239,7 @@ async function openDetail(row: AlarmItem) {
     deliveries.value = delRes?.data ?? [];
   } catch (err: any) {
     deliveries.value = [];
-    showError(err, "Failed to load deliveries");
+    showError(err);
   } finally {
     loadingDeliveries.value = false;
   }
@@ -247,7 +258,7 @@ async function submitHandle() {
       handle_note: handleForm.handle_note
     });
     if (res && res.code !== 0) {
-      throw new Error(res.message || "Failed to handle alarm");
+      throw new Error(res.message || t("aegis.errors.operationFailed"));
     }
     showSuccess(t("aegis.common.saveSuccess"));
     if (res?.data) {
@@ -255,7 +266,7 @@ async function submitHandle() {
     }
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to handle alarm");
+    showError(err);
   } finally {
     savingHandle.value = false;
   }
@@ -284,7 +295,7 @@ async function submitBatchHandle() {
     });
     await loadData();
   } catch (err: any) {
-    showError(err, "Batch handle failed");
+    showError(err);
   } finally {
     savingBatch.value = false;
   }
@@ -313,7 +324,7 @@ async function triggerExport(format: "csv" | "zip") {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     showSuccess(t("aegis.common.exportSuccess"));
   } catch (err: any) {
-    await showAsyncError(err, "Export failed");
+    await showAsyncError(err);
   } finally {
     exporting.value = false;
   }
@@ -329,7 +340,7 @@ async function onRetryDelivery(deliveryId: string) {
       deliveries.value = delRes?.data ?? [];
     }
   } catch (err: any) {
-    showError(err, "Retry failed");
+    showError(err);
   } finally {
     retryingDeliveryId.value = "";
   }
@@ -420,10 +431,10 @@ onMounted(async () => {
           style="width: 155px"
           @change="searchNow"
         >
-          <el-option label="anomaly_detect" value="anomaly_detect" />
-          <el-option label="count_threshold" value="count_threshold" />
-          <el-option label="absence_detect" value="absence_detect" />
-          <el-option label="sop_sequence" value="sop_sequence" />
+          <el-option :label="formatRuleMode('anomaly_detect', t)" value="anomaly_detect" />
+          <el-option :label="formatRuleMode('count_threshold', t)" value="count_threshold" />
+          <el-option :label="formatRuleMode('absence_detect', t)" value="absence_detect" />
+          <el-option :label="formatRuleMode('sop_sequence', t)" value="sop_sequence" />
         </el-select>
         <el-select
           v-model="query.severity"
@@ -432,9 +443,9 @@ onMounted(async () => {
           style="width: 120px"
           @change="searchNow"
         >
-          <el-option label="critical" value="critical" />
-          <el-option label="warning" value="warning" />
-          <el-option label="info" value="info" />
+          <el-option :label="formatSeverity('critical', t)" value="critical" />
+          <el-option :label="formatSeverity('warning', t)" value="warning" />
+          <el-option :label="formatSeverity('info', t)" value="info" />
         </el-select>
         <el-select
           v-model="query.handle_status"
@@ -443,10 +454,10 @@ onMounted(async () => {
           style="width: 140px"
           @change="searchNow"
         >
-          <el-option label="unhandled" value="unhandled" />
-          <el-option label="confirmed" value="confirmed" />
-          <el-option label="false_positive" value="false_positive" />
-          <el-option label="ignored" value="ignored" />
+          <el-option :label="formatHandleStatus('unhandled', t)" value="unhandled" />
+          <el-option :label="formatHandleStatus('confirmed', t)" value="confirmed" />
+          <el-option :label="formatHandleStatus('false_positive', t)" value="false_positive" />
+          <el-option :label="formatHandleStatus('ignored', t)" value="ignored" />
         </el-select>
         <el-input
           v-model="query.keyword"
@@ -513,14 +524,14 @@ onMounted(async () => {
                 :type="row.rule_mode === 'sop_sequence' ? 'warning' : 'info'"
                 effect="plain"
               >
-                {{ row.rule_mode }}
+                {{ formatRuleMode(row.rule_mode, t) }}
               </el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="severity" :label="t('aegis.alarms.severity')" width="96">
             <template #default="{ row }">
               <el-tag :type="severityTagType(row.severity)" size="small">
-                {{ row.severity }}
+                {{ formatSeverity(row.severity, t) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -528,10 +539,10 @@ onMounted(async () => {
             <template #default="{ row }">
               <div class="flex flex-col items-start gap-0.5">
                 <el-tag :type="handleStatusTagType(row.handle_status)" size="small">
-                  {{ row.handle_status }}
+                  {{ formatHandleStatus(row.handle_status, t) }}
                 </el-tag>
                 <span v-if="row.false_positive_reason" class="text-[11px] text-zinc-400">
-                  {{ row.false_positive_reason }}
+                  {{ formatFpReason(row.false_positive_reason, t) }}
                 </span>
               </div>
             </template>
@@ -539,7 +550,7 @@ onMounted(async () => {
           <el-table-column :label="t('aegis.alarms.videoStatus')" width="110">
             <template #default="{ row }">
               <el-tag :type="videoStatusTagType(row.video_status)" size="small" effect="plain">
-                {{ row.video_status || "none" }}
+                {{ formatVideoStatus(row.video_status, t) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -603,7 +614,7 @@ onMounted(async () => {
           <div class="flex items-center justify-between gap-2">
             <div class="font-semibold text-base">{{ selectedAlarm.title }}</div>
             <el-tag :type="severityTagType(selectedAlarm.severity)" size="small">
-              {{ selectedAlarm.severity }}
+              {{ formatSeverity(selectedAlarm.severity, t) }}
             </el-tag>
           </div>
 
@@ -615,19 +626,19 @@ onMounted(async () => {
               {{ resolveZoneName(selectedAlarm) || "—" }}
             </el-descriptions-item>
             <el-descriptions-item :label="t('aegis.alarms.ruleMode')">
-              {{ selectedAlarm.rule_mode }}
+              {{ formatRuleMode(selectedAlarm.rule_mode, t) }}
             </el-descriptions-item>
             <el-descriptions-item :label="t('aegis.alarms.triggeredAt')">
               <span class="aegis-tabular">{{ formatDateTime(selectedAlarm.triggered_at) }}</span>
             </el-descriptions-item>
             <el-descriptions-item :label="t('aegis.alarms.handleStatus')">
               <el-tag :type="handleStatusTagType(selectedAlarm.handle_status)" size="small">
-                {{ selectedAlarm.handle_status }}
+                {{ formatHandleStatus(selectedAlarm.handle_status, t) }}
               </el-tag>
             </el-descriptions-item>
             <el-descriptions-item :label="t('aegis.alarms.videoStatus')">
               <el-tag :type="videoStatusTagType(selectedAlarm.video_status)" size="small" effect="plain">
-                {{ selectedAlarm.video_status || "none" }}
+                {{ formatVideoStatus(selectedAlarm.video_status, t) }}
               </el-tag>
             </el-descriptions-item>
           </el-descriptions>
@@ -705,7 +716,7 @@ onMounted(async () => {
               <span class="font-medium text-sm">{{ t("aegis.alarms.sopTimeline") }}</span>
               <div class="flex items-center gap-2 text-xs">
                 <el-tag size="small" type="danger">
-                  {{ selectedAlarm.sop_trace.violation_type }}
+                  {{ formatViolationType(selectedAlarm.sop_trace.violation_type, t) }}
                 </el-tag>
                 <span class="text-zinc-500 aegis-tabular">
                   {{ formatDurationMs(selectedAlarm.sop_trace.duration_ms) }}
@@ -745,7 +756,7 @@ onMounted(async () => {
                           : 'info'
                     "
                   >
-                    {{ step.status }}
+                    {{ formatSopStepStatus(step.status, t) }}
                   </el-tag>
                 </div>
               </el-timeline-item>
@@ -785,20 +796,24 @@ onMounted(async () => {
                 <template #empty>
                   <el-empty :image-size="48" :description="t('aegis.alarms.noDeliveries')" />
                 </template>
-                <el-table-column prop="channel_type" label="Type" width="100" />
-                <el-table-column :label="t('aegis.common.status')" width="100">
+                <el-table-column :label="t('aegis.alarms.channelType')" width="120">
+                  <template #default="{ row }">
+                    {{ formatChannelType(row.channel_type, t) }}
+                  </template>
+                </el-table-column>
+                <el-table-column :label="t('aegis.common.status')" width="106">
                   <template #default="{ row }">
                     <el-tag
                       size="small"
                       :type="row.status === 'success' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'"
                     >
-                      {{ row.status }}
+                      {{ formatDeliveryStatus(row.status, t) }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="attempts" label="Attempts" width="85" />
-                <el-table-column prop="last_status_code" label="HTTP" width="75" />
-                <el-table-column prop="last_error" label="Error" min-width="140" show-overflow-tooltip />
+                <el-table-column prop="attempts" :label="t('aegis.alarms.attempts')" width="88" />
+                <el-table-column prop="last_status_code" :label="t('aegis.alarms.httpStatus')" width="82" />
+                <el-table-column prop="last_error" :label="t('aegis.alarms.errorDetail')" min-width="140" show-overflow-tooltip />
                 <el-table-column v-if="allowHandle" :label="t('aegis.common.actions')" width="100" fixed="right">
                   <template #default="{ row }">
                     <el-button

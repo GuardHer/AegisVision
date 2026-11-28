@@ -13,6 +13,7 @@ import { stringify } from "qs";
 import { ElNotification } from "element-plus";
 import { getToken, formatToken } from "@/utils/auth";
 import { useUserStoreHook } from "@/store/modules/user";
+import { localizeBackendMessage, translateErrorKey } from "@/utils/error";
 
 // 相关配置请参考：www.axios-js.com/zh-cn/docs/#axios-request-config-1
 const defaultConfig: AxiosRequestConfig = {
@@ -180,8 +181,13 @@ class PureHttp {
         ) {
           PureHttp.isHandlingUnauthorized = true;
           ElNotification({
-            title: "Session Expired",
-            message: $error.message || "Authentication expired, please sign in again.",
+            title: translateErrorKey("aegis.errors.sessionExpiredTitle", "Session Expired"),
+            message:
+              ($error.message && localizeBackendMessage($error.message)) ||
+              translateErrorKey(
+                "aegis.errors.sessionExpiredMessage",
+                "Authentication expired, please sign in again."
+              ),
             type: "warning",
             duration: 4500
           });

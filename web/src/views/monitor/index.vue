@@ -32,6 +32,7 @@ import { playDutyAlertChime } from "@/utils/alertSound";
 import { computeContainedVideoRect } from "@/utils/videoRect";
 import { formatDateTime } from "@/utils/format";
 import { extractErrorMessage, isCancelError, showError, showSuccess } from "@/utils/error";
+import { formatRuleMode, formatSeverity } from "@/utils/aegisLabels";
 import WhepPlayer from "@/components/aegis/WhepPlayer.vue";
 import CanvasOverlay from "@/components/aegis/CanvasOverlay.vue";
 
@@ -186,7 +187,7 @@ const combinedTree = computed<TreeItem[]>(() => {
   if (unassigned.length > 0) {
     roots.push({
       id: "zone:unassigned",
-      label: `Unassigned (${unassigned.length})`,
+      label: `${t("aegis.common.unassigned")} (${unassigned.length})`,
       isCamera: false,
       children: unassigned.map(cam => ({
         id: `cam:${cam.id}`,
@@ -417,7 +418,7 @@ async function submitPreset() {
     const res = await listMonitorPresets();
     presets.value = res?.data ?? [];
   } catch (err: any) {
-    showError(err, "Failed to save preset");
+    showError(err);
   } finally {
     savingPreset.value = false;
   }
@@ -437,7 +438,7 @@ async function removePreset(id: string) {
     showSuccess(t("aegis.common.deleteSuccess"));
   } catch (err: any) {
     if (isCancelError(err)) return;
-    showError(err, "Failed to delete preset");
+    showError(err);
   }
 }
 
@@ -489,12 +490,12 @@ async function quickHandleAlert(
   try {
     await handleAlarm(alert.alarm_id, {
       handle_status: status,
-      handle_note: "Duty monitor quick handle"
+      handle_note: t("aegis.monitor.quickHandleNote")
     });
     alert.handled = true;
     showSuccess(t("aegis.common.actionSuccess"));
   } catch (err: any) {
-    showError(err, "Action failed");
+    showError(err);
   }
 }
 
@@ -559,7 +560,7 @@ function connectWS() {
           }
           ElNotification({
             title: msg.title,
-            message: `${msg.camera_name} · ${msg.rule_mode}`,
+            message: `${msg.camera_name} · ${formatRuleMode(msg.rule_mode, t)}`,
             type: "error",
             duration: 5000
           });
@@ -810,7 +811,7 @@ onBeforeUnmount(() => {
                     <el-tag size="small" type="info">{{ p.grid_size }}G</el-tag>
                   </div>
                   <div class="flex items-center justify-between text-zinc-400">
-                    <span>{{ p.is_shared ? "Shared" : "Private" }}</span>
+                    <span>{{ p.is_shared ? t("aegis.monitor.shared") : t("aegis.monitor.private") }}</span>
                     <el-button
                       v-if="!p.is_shared || isAdmin"
                       link
@@ -932,8 +933,8 @@ onBeforeUnmount(() => {
           <span class="font-semibold text-sm">{{ t("aegis.monitor.realtimeAlarms") }}</span>
           <el-select v-model="alertSeverityFilter" size="small" class="w-28">
             <el-option :label="t('aegis.monitor.allSeverities')" value="all" />
-            <el-option label="critical" value="critical" />
-            <el-option label="warning" value="warning" />
+            <el-option :label="formatSeverity('critical', t)" value="critical" />
+            <el-option :label="formatSeverity('warning', t)" value="warning" />
           </el-select>
         </div>
 
@@ -952,10 +953,10 @@ onBeforeUnmount(() => {
               <div class="flex items-center justify-between font-medium gap-1">
                 <span class="truncate">{{ alert.title }}</span>
                 <el-tag size="small" :type="alert.severity === 'critical' ? 'danger' : 'warning'">
-                  {{ alert.severity }}
+                  {{ formatSeverity(alert.severity, t) }}
                 </el-tag>
               </div>
-              <div class="text-zinc-500 truncate">{{ alert.camera_name }} · {{ alert.rule_mode }}</div>
+              <div class="text-zinc-500 truncate">{{ alert.camera_name }} · {{ formatRuleMode(alert.rule_mode, t) }}</div>
               <img
                 :src="evidenceImageURL(alert.alarm_id)"
                 :alt="alert.title"
@@ -973,7 +974,7 @@ onBeforeUnmount(() => {
                     {{ t("aegis.alarms.falsePositive") }}
                   </el-button>
                 </div>
-                <el-tag v-else-if="alert.handled" size="small" type="success">OK</el-tag>
+                <el-tag v-else-if="alert.handled" size="small" type="success">{{ t("aegis.monitor.handledOk") }}</el-tag>
               </div>
             </div>
             <el-empty

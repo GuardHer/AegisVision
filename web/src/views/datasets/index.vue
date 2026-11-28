@@ -11,6 +11,7 @@ import {
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
 import { showAsyncError, showError, showSuccess } from "@/utils/error";
+import { formatFpReason } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisDatasets" });
 
@@ -39,8 +40,7 @@ const reasonOptions = [
 ];
 
 function reasonLabel(code: string): string {
-  const found = reasonOptions.find(o => o.value === code);
-  return found ? t(found.labelKey) : code || "—";
+  return formatFpReason(code, t);
 }
 
 function buildFilterParams() {
@@ -93,7 +93,7 @@ async function handleExportZip() {
     setTimeout(() => URL.revokeObjectURL(url), 10000);
     showSuccess(t("aegis.datasets.exportSuccess"));
   } catch (err: any) {
-    await showAsyncError(err, "Failed to export training dataset");
+    await showAsyncError(err);
   } finally {
     exporting.value = false;
   }

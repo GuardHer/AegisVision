@@ -118,6 +118,181 @@ aegis:
     validationRequired: 请填写必填项
     invalidDateFormat: 日期格式应为 YYYY-MM-DD
     passwordMinLength: 密码长度不能少于 8 位
+    description: 描述
+    type: 类型
+    unassigned: 未分配区域
+    custom: 自定义
+    createdCount: 成功导入
+    errorCount: 失败条数
+  enums:
+    ruleMode:
+      anomaly_detect: 异常行为检测
+      count_threshold: 人数阈值检测
+      absence_detect: 离岗脱岗检测
+      sop_sequence: SOP 流程检测
+    severity:
+      critical: 严重
+      warning: 警告
+      info: 提示
+    handleStatus:
+      unhandled: 待处理
+      confirmed: 已确认违规
+      false_positive: 已标误报
+      ignored: 已忽略归档
+    videoStatus:
+      none: 未录制
+      pending: 等待录制
+      recording: 录制中
+      ready: 已就绪
+      failed: 录制失败
+    violationType:
+      missing_step: 漏做步骤
+      out_of_order: 顺序错误
+      step_timeout: 步骤超时
+    sopStepStatus:
+      pending: 待执行
+      active: 进行中
+      completed: 已完成
+      skipped: 已跳过
+      violated: 违规
+    triggerMode:
+      first_step: 首步动作触发
+      zone_entry: 人员进区触发
+    cameraStatus:
+      online: 在线
+      offline: 离线
+    zoneType:
+      factory: 厂区
+      workshop: 车间
+      line: 产线
+      workstation: 工位
+    roiType:
+      polygon: 多边形区域
+      full_frame: 全画面
+    scheduleMode:
+      auto: 自动调度
+      pinned: 指定节点
+    versionStatus:
+      draft: 草稿
+      active: 运行中
+      deprecated: 已停用
+    nodeStatus:
+      online: 在线
+      offline: 离线
+      draining: 排水维护中
+    taskState:
+      running: 运行中
+      starting: 启动中
+      pending: 待调度
+      stopped: 已停止
+      failed: 异常失败
+      error: 异常错误
+    deliveryStatus:
+      pending: 待投递
+      retrying: 重试中
+      success: 投递成功
+      failed: 投递失败
+    userRole:
+      admin: 系统管理员
+      operator: 值班操作员
+      viewer: 只读观察员
+    healthStatus:
+      healthy: 正常
+      degraded: 异常降级
+      not_configured: 未配置
+    healthComponent:
+      postgresql: PostgreSQL 数据库
+      redis: Redis 缓存与总线
+      rabbitmq: RabbitMQ 消息队列
+      storage: 对象存储 (MinIO/S3)
+      mediamtx: MediaMTX 流媒体服务
+    auditResource:
+      user: 用户账号
+      zone: 厂区区域
+      camera: 摄像头点位
+      rule: 检测规则
+      schedule: 布防排班
+      algorithm: 算法模型
+      node: 算力节点
+      alarm: 告警记录
+      alarm_channel: 联动通道
+      system_settings: 系统设置
+    weekday:
+      d1: 周一
+      d2: 周二
+      d3: 周三
+      d4: 周四
+      d5: 周五
+      d6: 周六
+      d7: 周日
+  labels:
+    person: 人员
+    no_helmet: 未佩戴安全帽
+    helmet: 佩戴安全帽
+    no_vest: 未穿反光衣
+    vest: 穿着反光衣
+    no_gloves: 未戴防护手套
+    gloves: 佩戴防护手套
+    no_goggles: 未戴护目镜
+    goggles: 佩戴护目镜
+    no_mask: 未戴口罩
+    mask: 佩戴口罩
+    smoking: 违规抽烟
+    cigarette: 香烟
+    phone: 违规玩手机
+    call: 打电话
+    fall: 人员跌倒
+    fighting: 人员打架
+    climb: 违规攀爬
+    climbing: 违规攀爬
+    sleep: 睡岗打盹
+    sleeping: 睡岗打盹
+    leave_post: 人员离岗
+    intrusion: 区域闯入
+    fire: 明火火情
+    flame: 明火火情
+    smoke: 烟雾报警
+    forklift: 叉车
+    vehicle: 车辆
+    wear_esd_strap: 佩戴防静电手环
+    esd_strap: 防静电手环
+    scan_barcode: 扫描条码
+    barcode: 条码
+    assemble: 装配作业
+    inspect: 质检复核
+    pack: 包装封装
+    label_check: 标签核验
+  errors:
+    operationFailed: 操作失败，请稍后重试
+    networkError: 无法连接服务器，请检查网络或后端服务状态
+    timeoutError: 请求超时，请检查网络或稍后重试
+    http400: 请求参数有误 (400)
+    http401: 登录状态已失效，请重新登录 (401)
+    http403: 当前账号无权限执行该操作 (403)
+    http404: 请求的资源不存在或已被删除 (404)
+    http409: 数据冲突或记录已存在 (409)
+    http422: 提交的数据校验未通过 (422)
+    http429: 请求过于频繁，请稍后再试 (429)
+    http500: 服务器内部错误，请稍后重试 (500)
+    http502: 服务网关暂不可用，请检查后端服务 (502)
+    http503: 服务暂时不可用，请稍后重试 (503)
+    http504: 网关响应超时，请稍后重试 (504)
+    sessionExpiredTitle: 会话已过期
+    sessionExpiredMessage: 登录凭据已失效或被注销，请重新登录
+    resourceExists: 记录已存在，请勿重复创建
+    resourceNotFound: 目标记录不存在或已被删除
+    resourceInUse: 关联资源不存在或正在被使用，无法操作
+    permissionDenied: 当前账号权限不足，无法执行该操作
+    constraintFailed: 数据约束校验失败，请检查输入参数
+    internalServerError: 服务器内部错误，请查看服务端日志
+    zoneNotEmpty: 该区域下仍存在子区域或点位，无法删除
+    scheduleReferenced: 该排班模板正在被规则引用，无法删除
+    invalidJson: 默认参数不是合法的 JSON 格式
+    roiVerticesRequired: 请填写 ROI 名称并至少在画面中点击 3 个顶点
+    streamNotReady: 视频画面尚未就绪，请等待出图后再试
+    streamHandshakeFailed: 视频流握手连接失败
+    hlsPlaybackFailed: LL-HLS 视频流播放失败
+    hlsUnsupported: 当前浏览器不支持 LL-HLS 视频播放
   dashboard:
     title: 工厂安全与 SOP 运营态势总览
     todayAlarms: 今日告警总数
@@ -136,6 +311,8 @@ aegis:
     recentAlerts: 最近高危待处告警
     viewAll: 查看全部
     noRecentAlerts: 暂无未处理高危告警
+    runningTasksLabel: 运行中任务
+    quickHandleNote: 态势总览快速处置
   monitor:
     grid1: 单屏
     grid4: 4 宫格
@@ -174,6 +351,10 @@ aegis:
     snapshotSaved: 画面抓拍已保存
     snapshotNotReady: 视频尚未出图，暂时无法抓拍
     noPresets: 暂无已保存的轮巡方案
+    shared: 全厂共享
+    private: 个人私有
+    quickHandleNote: 值班大屏快速处置
+    handledOk: 已处置
   player:
     live: 实时
     connecting: 正在建立低延迟视频流…
@@ -238,6 +419,10 @@ aegis:
     batchHandledCount: 已批量处置所选告警
     retryEnqueued: 已加入联动重发队列
     noDeliveries: 暂无联动投递记录
+    channelType: 通道类型
+    attempts: 重试次数
+    httpStatus: 状态码
+    errorDetail: 错误信息
   cameras:
     name: 名称
     zone: 所属区域
@@ -299,6 +484,18 @@ aegis:
     nameAndRtspRequired: 请填写点位名称和主码流 RTSP 地址
     zoneNameRequired: 请填写区域名称
     ruleFieldsRequired: 请填写规则名称并选择 ROI 与算法版本
+    rootZone: 顶级区域（厂区）
+    subStreamPlaceholder: rtsp://...（选填，用于多宫格流畅预览）
+    tagsPlaceholder: 安全, 工位（逗号分隔）
+    roiNamePlaceholder: 请输入区域名称（如 1号工位）
+    roiType: 区域形态
+    confidenceAndFrames: 置信度 / 连续帧数
+    minMaxCount: 最小 / 最大人数
+    durationAndCooldown: 持续时长 / 冷却 (秒)
+    defaultFullFrameName: 全画面区域
+    moveStepUp: 上移步骤
+    moveStepDown: 下移步骤
+    removeStep: 移除步骤
   schedules:
     title: 布防排班模板管理
     name: 模板名称
@@ -310,6 +507,9 @@ aegis:
     includeDates: 临时加班布防日期
     addDate: 添加日期
     ruleCount: 关联规则数
+    overnight: 跨夜班
+    allDay: 全天 00:00-24:00
+    namePlaceholder: 例如：白班 08:00-20:00
   analytics:
     title: 工厂安全与 SOP 统计分析报表
     today: 今日
@@ -329,6 +529,16 @@ aegis:
     zoneChart: 各车间安全与 SOP 告警对比
     topSopSteps: SOP 高频违规步骤排行
     algoPrecision: 算法版本误报率对比
+    safetyShort: 安全告警
+    sopShort: SOP 违规
+    compliantShort: 合规周期
+    violatedShort: 违规周期
+    confirmedShort: 确认违规
+    fpShort: 误报数
+    totalCol: 总告警
+    confirmedCol: 确认数
+    fpCol: 误报数
+    fpRateCol: 误报率
   algorithms:
     key: 算法标识
     name: 算法名称
@@ -342,6 +552,9 @@ aegis:
     confirmed30d: 确认违规
     fp30d: 误报数
     fpRate30d: 近30日误报率
+    deprecate: 停用版本
+    activate: 启用版本
+    labelsHint: 多个行为标签用逗号分隔，例如 person,no_helmet,smoking（内置标签自动显示中文名）
   datasets:
     title: 误报样本回流与训练集导出
     exportZip: 导出训练样本包 (ZIP)
@@ -374,6 +587,13 @@ aegis:
     failedTasksBanner: 检测到异常推理任务，请展开或悬停查看错误详情
     errorMessage: 异常信息
     rescheduleSuccess: 已提交重新调度请求
+    taskId: 任务 ID
+    runtimeKey: Runtime 键
+    assignedNode: 调度节点
+    desiredState: 期望状态
+    actualState: 实际状态
+    leaseExpires: 租约到期时间
+    lastFrame: 最近帧时间
   channels:
     name: 通道名称
     type: 通道类型
@@ -399,6 +619,10 @@ aegis:
     testSuccessTitle: 通道连通测试成功
     testFailedTitle: 通道连通测试失败
     nameAndUrlRequired: 请填写通道名称及目标地址
+    autoRouteTag: 自动路由
+    manualRuleTag: 仅规则手动绑定
+    zonesUnit: 个区域
+    modesUnit: 种模式
   users:
     username: 账号
     displayName: 显示名称

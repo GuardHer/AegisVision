@@ -14,6 +14,7 @@ import {
   type ZoneTreeNode
 } from "@/api/aegis";
 import { isCancelError, showError, showSuccess } from "@/utils/error";
+import { formatRuleMode, formatSeverity } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisChannels" });
 
@@ -79,9 +80,15 @@ function routingSummary(row: AlarmChannelItem): string {
   const rr = row.routing_rules;
   if (!rr?.auto_route) return "";
   const parts: string[] = [];
-  if (rr.severities?.length) parts.push(rr.severities.join("/"));
-  if (rr.zone_ids?.length) parts.push(`${rr.zone_ids.length} zones`);
-  if (rr.rule_modes?.length) parts.push(`${rr.rule_modes.length} modes`);
+  if (rr.severities?.length) {
+    parts.push(rr.severities.map(s => formatSeverity(s, t)).join("/"));
+  }
+  if (rr.zone_ids?.length) {
+    parts.push(`${rr.zone_ids.length} ${t("aegis.channels.zonesUnit")}`);
+  }
+  if (rr.rule_modes?.length) {
+    parts.push(`${rr.rule_modes.length} ${t("aegis.channels.modesUnit")}`);
+  }
   return parts.join(" · ");
 }
 
@@ -217,7 +224,7 @@ async function submit() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to save channel");
+    showError(err);
   } finally {
     saving.value = false;
   }
@@ -237,7 +244,7 @@ async function onTest(id: string) {
       duration: 4000
     });
   } catch (err: any) {
-    showError(err, "Channel test failed");
+    showError(err);
   } finally {
     testingId.value = "";
   }
@@ -248,7 +255,7 @@ async function onReset(id: string) {
     await resetChannel(id);
     showSuccess(t("aegis.channels.resetQueued"));
   } catch (err: any) {
-    showError(err, "Channel reset failed");
+    showError(err);
   }
 }
 
@@ -264,7 +271,7 @@ async function onDelete(id: string) {
     await loadData();
   } catch (err: any) {
     if (!isCancelError(err)) {
-      showError(err, "Failed to delete channel");
+      showError(err);
     }
   }
 }
@@ -322,12 +329,12 @@ onMounted(loadData);
           <el-table-column :label="t('aegis.channels.routing')" min-width="165">
             <template #default="{ row }">
               <div v-if="row.routing_rules?.auto_route" class="flex flex-col items-start gap-0.5">
-                <el-tag size="small" type="success">Auto-Route</el-tag>
+                <el-tag size="small" type="success">{{ t("aegis.channels.autoRouteTag") }}</el-tag>
                 <span v-if="routingSummary(row)" class="text-[11px] text-slate-400">
                   {{ routingSummary(row) }}
                 </span>
               </div>
-              <span v-else class="text-xs text-slate-400">Manual Rule</span>
+              <span v-else class="text-xs text-slate-400">{{ t("aegis.channels.manualRuleTag") }}</span>
             </template>
           </el-table-column>
           <el-table-column :label="t('aegis.common.enabled')" width="90">
@@ -447,9 +454,9 @@ onMounted(loadData);
         <template v-if="form.auto_route">
           <el-form-item :label="t('aegis.channels.severities')">
             <el-select v-model="form.severities" multiple class="w-full">
-              <el-option label="critical" value="critical" />
-              <el-option label="warning" value="warning" />
-              <el-option label="info" value="info" />
+              <el-option :label="formatSeverity('critical', t)" value="critical" />
+              <el-option :label="formatSeverity('warning', t)" value="warning" />
+              <el-option :label="formatSeverity('info', t)" value="info" />
             </el-select>
           </el-form-item>
           <el-form-item :label="t('aegis.channels.zones')">
@@ -465,10 +472,10 @@ onMounted(loadData);
           </el-form-item>
           <el-form-item :label="t('aegis.channels.ruleModes')">
             <el-select v-model="form.rule_modes" multiple class="w-full">
-              <el-option label="anomaly_detect" value="anomaly_detect" />
-              <el-option label="count_threshold" value="count_threshold" />
-              <el-option label="absence_detect" value="absence_detect" />
-              <el-option label="sop_sequence" value="sop_sequence" />
+              <el-option :label="formatRuleMode('anomaly_detect', t)" value="anomaly_detect" />
+              <el-option :label="formatRuleMode('count_threshold', t)" value="count_threshold" />
+              <el-option :label="formatRuleMode('absence_detect', t)" value="absence_detect" />
+              <el-option :label="formatRuleMode('sop_sequence', t)" value="sop_sequence" />
             </el-select>
           </el-form-item>
         </template>

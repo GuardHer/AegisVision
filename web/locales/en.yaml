@@ -118,6 +118,181 @@ aegis:
     validationRequired: Please fill in all required fields
     invalidDateFormat: Date format must be YYYY-MM-DD
     passwordMinLength: Password must be at least 8 characters
+    description: Description
+    type: Type
+    unassigned: Unassigned
+    custom: Custom
+    createdCount: Created
+    errorCount: Errors
+  enums:
+    ruleMode:
+      anomaly_detect: Anomaly Detection
+      count_threshold: Count Threshold
+      absence_detect: Absence Detection
+      sop_sequence: SOP Sequence
+    severity:
+      critical: Critical
+      warning: Warning
+      info: Info
+    handleStatus:
+      unhandled: Unhandled
+      confirmed: Confirmed Violation
+      false_positive: False Positive
+      ignored: Ignored
+    videoStatus:
+      none: None
+      pending: Pending
+      recording: Recording
+      ready: Ready
+      failed: Failed
+    violationType:
+      missing_step: Missing Step
+      out_of_order: Out of Order
+      step_timeout: Step Timeout
+    sopStepStatus:
+      pending: Pending
+      active: Active
+      completed: Completed
+      skipped: Skipped
+      violated: Violated
+    triggerMode:
+      first_step: First Step Trigger
+      zone_entry: Zone Entry Trigger
+    cameraStatus:
+      online: Online
+      offline: Offline
+    zoneType:
+      factory: Factory
+      workshop: Workshop
+      line: Production Line
+      workstation: Workstation
+    roiType:
+      polygon: Polygon ROI
+      full_frame: Full Frame
+    scheduleMode:
+      auto: Auto Schedule
+      pinned: Pinned Node
+    versionStatus:
+      draft: Draft
+      active: Active
+      deprecated: Deprecated
+    nodeStatus:
+      online: Online
+      offline: Offline
+      draining: Draining
+    taskState:
+      running: Running
+      starting: Starting
+      pending: Pending
+      stopped: Stopped
+      failed: Failed
+      error: Error
+    deliveryStatus:
+      pending: Pending
+      retrying: Retrying
+      success: Delivered
+      failed: Failed
+    userRole:
+      admin: Administrator
+      operator: Operator
+      viewer: Viewer
+    healthStatus:
+      healthy: Healthy
+      degraded: Degraded
+      not_configured: Not Configured
+    healthComponent:
+      postgresql: PostgreSQL Database
+      redis: Redis Cache & Bus
+      rabbitmq: RabbitMQ Broker
+      storage: Object Storage (MinIO/S3)
+      mediamtx: MediaMTX Media Server
+    auditResource:
+      user: User
+      zone: Spatial Zone
+      camera: Camera
+      rule: Detection Rule
+      schedule: Arming Schedule
+      algorithm: Algorithm
+      node: Compute Node
+      alarm: Alarm
+      alarm_channel: Notification Channel
+      system_settings: System Settings
+    weekday:
+      d1: Mon
+      d2: Tue
+      d3: Wed
+      d4: Thu
+      d5: Fri
+      d6: Sat
+      d7: Sun
+  labels:
+    person: Person
+    no_helmet: No Helmet
+    helmet: Helmet
+    no_vest: No Safety Vest
+    vest: Safety Vest
+    no_gloves: No Gloves
+    gloves: Safety Gloves
+    no_goggles: No Goggles
+    goggles: Safety Goggles
+    no_mask: No Mask
+    mask: Face Mask
+    smoking: Smoking
+    cigarette: Cigarette
+    phone: Phone Usage
+    call: Phone Call
+    fall: Fall Down
+    fighting: Fighting
+    climb: Climbing
+    climbing: Climbing
+    sleep: Sleeping on Duty
+    sleeping: Sleeping on Duty
+    leave_post: Absent from Post
+    intrusion: Intrusion
+    fire: Fire
+    flame: Flame
+    smoke: Smoke
+    forklift: Forklift
+    vehicle: Vehicle
+    wear_esd_strap: Wear ESD Strap
+    esd_strap: ESD Strap
+    scan_barcode: Scan Barcode
+    barcode: Barcode
+    assemble: Assembly
+    inspect: Quality Inspection
+    pack: Packaging
+    label_check: Label Verification
+  errors:
+    operationFailed: Operation failed, please try again
+    networkError: Unable to reach server, please check network or backend service
+    timeoutError: Request timed out, please retry
+    http400: Invalid request parameters (400)
+    http401: Session expired, please sign in again (401)
+    http403: Permission denied (403)
+    http404: Requested resource not found (404)
+    http409: Resource conflict or already exists (409)
+    http422: Validation failed (422)
+    http429: Too many requests, please retry later (429)
+    http500: Internal server error (500)
+    http502: Service gateway unavailable (502)
+    http503: Service temporarily unavailable (503)
+    http504: Gateway timeout (504)
+    sessionExpiredTitle: Session Expired
+    sessionExpiredMessage: Your session has expired or been revoked; please sign in again
+    resourceExists: Resource already exists
+    resourceNotFound: Requested resource not found
+    resourceInUse: Referenced resource does not exist or is still in use
+    permissionDenied: Permission denied
+    constraintFailed: Constraint validation failed
+    internalServerError: Internal server error
+    zoneNotEmpty: Cannot delete a zone that still contains sub-zones or cameras
+    scheduleReferenced: Cannot delete a schedule referenced by active rules
+    invalidJson: Default params must be valid JSON
+    roiVerticesRequired: Please provide an ROI name and click at least 3 vertices
+    streamNotReady: Video stream is not ready yet
+    streamHandshakeFailed: Stream handshake failed
+    hlsPlaybackFailed: LL-HLS playback failed
+    hlsUnsupported: LL-HLS (MSE) is not supported in this browser
   dashboard:
     title: Factory Safety & SOP Operations Overview
     todayAlarms: Today Alarms
@@ -136,6 +311,8 @@ aegis:
     recentAlerts: Recent High-Severity Alerts
     viewAll: View All
     noRecentAlerts: No unhandled high-severity alerts
+    runningTasksLabel: Running Tasks
+    quickHandleNote: Dashboard quick action
   monitor:
     grid1: 1-Grid
     grid4: 4-Grid
@@ -174,6 +351,10 @@ aegis:
     snapshotSaved: Snapshot saved
     snapshotNotReady: Video stream is not ready for snapshot yet
     noPresets: No saved tour presets yet
+    shared: Shared
+    private: Private
+    quickHandleNote: Duty monitor quick handle
+    handledOk: Handled
   player:
     live: LIVE
     connecting: Connecting low-latency stream…
@@ -238,6 +419,10 @@ aegis:
     batchHandledCount: Selected alarms handled successfully
     retryEnqueued: Delivery retry enqueued
     noDeliveries: No delivery logs recorded
+    channelType: Channel Type
+    attempts: Attempts
+    httpStatus: HTTP
+    errorDetail: Error Detail
   cameras:
     name: Name
     zone: Zone
@@ -299,6 +484,18 @@ aegis:
     nameAndRtspRequired: Please provide camera name and main RTSP URL
     zoneNameRequired: Please enter a zone name
     ruleFieldsRequired: Please enter rule name and select ROI and algorithm version
+    rootZone: Root (Factory)
+    subStreamPlaceholder: rtsp://... (optional, for smooth multi-grid)
+    tagsPlaceholder: safety, sop (comma-separated)
+    roiNamePlaceholder: ROI Name (e.g. Station 1)
+    roiType: ROI Type
+    confidenceAndFrames: Confidence / Frames
+    minMaxCount: Min / Max Count
+    durationAndCooldown: Duration / Cooldown (s)
+    defaultFullFrameName: Full Frame
+    moveStepUp: Move Up
+    moveStepDown: Move Down
+    removeStep: Remove Step
   schedules:
     title: Arming Schedule Templates
     name: Template Name
@@ -310,6 +507,9 @@ aegis:
     includeDates: Extra Overtime Dates
     addDate: Add Date
     ruleCount: Linked Rules
+    overnight: Overnight
+    allDay: All Day 00:00-24:00
+    namePlaceholder: e.g. Day Shift 08:00-20:00
   analytics:
     title: Factory Safety & SOP Analytics Center
     today: Today
@@ -329,6 +529,16 @@ aegis:
     zoneChart: Zone Safety & SOP Breakdown
     topSopSteps: Top SOP Violated Steps
     algoPrecision: Algorithm Version False Positive Rate
+    safetyShort: Safety
+    sopShort: SOP
+    compliantShort: Compliant
+    violatedShort: Violated
+    confirmedShort: Confirmed
+    fpShort: FP
+    totalCol: Total
+    confirmedCol: Confirmed
+    fpCol: FP
+    fpRateCol: FP Rate
   algorithms:
     key: Algorithm Key
     name: Name
@@ -342,6 +552,9 @@ aegis:
     confirmed30d: Confirmed
     fp30d: False Positives
     fpRate30d: 30d FP Rate
+    deprecate: Deprecate
+    activate: Activate
+    labelsHint: Comma-separated behavior labels, e.g. person,no_helmet,smoking
   datasets:
     title: False-Positive Sample Library & Training Export
     exportZip: Export Training ZIP
@@ -374,6 +587,13 @@ aegis:
     failedTasksBanner: Failed inference tasks detected; inspect error details below
     errorMessage: Error Detail
     rescheduleSuccess: Task reschedule requested
+    taskId: Task ID
+    runtimeKey: Runtime Key
+    assignedNode: Assigned Node
+    desiredState: Desired State
+    actualState: Actual State
+    leaseExpires: Lease Expires
+    lastFrame: Last Frame
   channels:
     name: Channel Name
     type: Type
@@ -399,6 +619,10 @@ aegis:
     testSuccessTitle: Channel Test Passed
     testFailedTitle: Channel Test Failed
     nameAndUrlRequired: Please enter channel name and target URL
+    autoRouteTag: Auto-Route
+    manualRuleTag: Manual Rule
+    zonesUnit: zones
+    modesUnit: modes
   users:
     username: Username
     displayName: Display Name

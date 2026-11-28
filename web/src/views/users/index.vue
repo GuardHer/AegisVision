@@ -16,6 +16,7 @@ import {
 } from "@/api/aegis";
 import { formatDateTime } from "@/utils/format";
 import { isCancelError, showError, showSuccess } from "@/utils/error";
+import { formatUserRole } from "@/utils/aegisLabels";
 
 defineOptions({ name: "AegisUsers" });
 
@@ -105,7 +106,7 @@ async function openScopeDialog(row: UserItem) {
       zoneTreeRef.value.setCheckedKeys(scopeCheckedIds.value);
     }
   } catch (err: any) {
-    showError(err, "Failed to load workshop scope");
+    showError(err);
   }
 }
 
@@ -125,7 +126,7 @@ async function submitScope() {
     showSuccess(t("aegis.users.scopeSaved"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to update workshop scope");
+    showError(err);
   } finally {
     savingScope.value = false;
   }
@@ -159,7 +160,7 @@ async function submit() {
     showSuccess(t("aegis.common.saveSuccess"));
     await loadData();
   } catch (err: any) {
-    showError(err, "Failed to save user");
+    showError(err);
   } finally {
     saving.value = false;
   }
@@ -182,7 +183,7 @@ async function onResetPassword(row: UserItem) {
     }
   } catch (err: any) {
     if (!isCancelError(err)) {
-      showError(err, "Failed to reset password");
+      showError(err);
     }
   }
 }
@@ -199,7 +200,7 @@ async function onDelete(id: string) {
     await loadData();
   } catch (err: any) {
     if (!isCancelError(err)) {
-      showError(err, "Failed to delete user");
+      showError(err);
     }
   }
 }
@@ -247,10 +248,10 @@ onMounted(loadData);
             </template>
           </el-table-column>
           <el-table-column prop="display_name" :label="t('aegis.users.displayName')" min-width="145" show-overflow-tooltip />
-          <el-table-column :label="t('aegis.users.role')" width="108">
+          <el-table-column :label="t('aegis.users.role')" width="116">
             <template #default="{ row }">
               <el-tag size="small" :type="roleTagType(row.role)">
-                {{ row.role }}
+                {{ formatUserRole(row.role, t) }}
               </el-tag>
             </template>
           </el-table-column>
@@ -326,9 +327,9 @@ onMounted(loadData);
         </el-form-item>
         <el-form-item :label="t('aegis.users.role')">
           <el-select v-model="form.role" class="w-full">
-            <el-option label="admin" value="admin" />
-            <el-option label="operator" value="operator" />
-            <el-option label="viewer" value="viewer" />
+            <el-option :label="formatUserRole('admin', t)" value="admin" />
+            <el-option :label="formatUserRole('operator', t)" value="operator" />
+            <el-option :label="formatUserRole('viewer', t)" value="viewer" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('aegis.common.enabled')">
