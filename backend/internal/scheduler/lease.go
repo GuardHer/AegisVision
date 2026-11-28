@@ -32,12 +32,13 @@ type AgentCommandEnvelope struct {
 	IssuedAt    time.Time            `json:"issued_at"`
 }
 
-// CommandROI represents a normalized ROI passed to Agent/Runtime.
+// CommandROI represents a normalized ROI passed to Agent/Runtime, including per-ROI target behavior labels.
 type CommandROI struct {
-	ROIID   string          `json:"roi_id"`
-	Name    string          `json:"name"`
-	ROIType string          `json:"roi_type"`
-	Points  json.RawMessage `json:"points"`
+	ROIID        string          `json:"roi_id"`
+	Name         string          `json:"name"`
+	ROIType      string          `json:"roi_type"`
+	Points       json.RawMessage `json:"points"`
+	TargetLabels []string        `json:"target_labels,omitempty"`
 }
 
 // AssignTaskPayload mirrors agent.proto AssignTaskCommand for MQ transport.
@@ -85,10 +86,11 @@ func buildCommandROIs(rois []ROIInfo) []CommandROI {
 			pts = json.RawMessage(`[]`)
 		}
 		out = append(out, CommandROI{
-			ROIID:   r.ID.String(),
-			Name:    r.Name,
-			ROIType: r.ROIType,
-			Points:  pts,
+			ROIID:        r.ID.String(),
+			Name:         r.Name,
+			ROIType:      r.ROIType,
+			Points:       pts,
+			TargetLabels: append([]string(nil), r.TargetLabels...),
 		})
 	}
 	return out

@@ -459,10 +459,11 @@ func agentROIsToRuntime(rois []*agentv1.ROI) []*runtimev1.RuntimeROI {
 			pts = append(pts, &runtimev1.RuntimePoint{X: pt.GetX(), Y: pt.GetY()})
 		}
 		out = append(out, &runtimev1.RuntimeROI{
-			RoiId:   r.GetRoiId(),
-			Name:    r.GetName(),
-			RoiType: r.GetRoiType(),
-			Points:  pts,
+			RoiId:        r.GetRoiId(),
+			Name:         r.GetName(),
+			RoiType:      r.GetRoiType(),
+			Points:       pts,
+			TargetLabels: append([]string(nil), r.GetTargetLabels()...),
 		})
 	}
 	return out

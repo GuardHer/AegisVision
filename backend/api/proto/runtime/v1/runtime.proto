@@ -25,6 +25,7 @@ message RuntimeROI {
   string name = 2;
   string roi_type = 3;
   repeated RuntimePoint points = 4;
+  repeated string target_labels = 5;
 }
 
 message RuntimeDetection {

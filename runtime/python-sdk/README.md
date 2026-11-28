@@ -86,7 +86,11 @@ if __name__ == "__main__":
 ## 四、给算法工程师的关键契约要点
 
 - **坐标一律归一化至 `[0.0, 1.0]`**：原点在画面左上角，建议直接使用 `Detection.from_xyxy_pixels(...)` / `Detection.from_xywh_pixels(...)` 自动换算。
-- **ROI 辅助方法**：`ROI.to_pixel_points(w, h)` 可直接转像素多边形，`ROI.contains_point(x, y)` 可做归一化落点判定。
+- **按区域定制行为（`ROI.target_labels` / `TaskContext.required_labels`）**：
+  - 同一路摄像头绑定同一算法版本的多个 ROI 会自动去重合并为 1 个任务下发，每个 `ROI.target_labels` 会携带该区域规则要求检测的行为标签；
+  - 单模型多类别算法可直接忽略 `target_labels` 全量上报，由平台规则引擎按 ROI 过滤；
+  - 多子模型按需推理算法可通过 `task_ctx.required_labels` 跳过本路摄像头未配置的子模型，或用 `task_ctx.rois_for_label("smoking")` 仅对目标区域裁剪送入二阶段分类器。
+- **ROI 辅助方法**：`ROI.to_pixel_points(w, h)` 可直接转像素多边形，`ROI.contains_point(x, y)` 可做归一化落点判定，`ROI.wants_label(label)` 可判断区域是否关注该标签。
 - **线程安全**：同一 Runtime 进程会并发跑多路摄像头，请按 `task_ctx.task_id` 隔离跟踪器与历史缓存，并在 `on_task_stop` 中及时清理。
 - **安装与测试**：
   ```bash

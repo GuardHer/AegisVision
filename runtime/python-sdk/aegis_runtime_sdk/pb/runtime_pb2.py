@@ -24,42 +24,42 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rruntime.proto\x12\x10\x61\x65gis.runtime.v1\"$\n\x0cRuntimePoint\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\"l\n\nRuntimeROI\x12\x0e\n\x06roi_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08roi_type\x18\x03 \x01(\t\x12.\n\x06points\x18\x04 \x03(\x0b\x32\x1e.aegis.runtime.v1.RuntimePoint\"\xe5\x01\n\x10RuntimeDetection\x12\x0c\n\x04\x62\x62ox\x18\x01 \x03(\x02\x12\r\n\x05label\x18\x02 \x01(\t\x12\x12\n\nconfidence\x18\x03 \x01(\x02\x12\x10\n\x08track_id\x18\x04 \x01(\t\x12\x13\n\x0bis_abnormal\x18\x05 \x01(\x08\x12\x46\n\nattributes\x18\x06 \x03(\x0b\x32\x32.aegis.runtime.v1.RuntimeDetection.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x0f\n\rHealthRequest\"[\n\x0eHealthResponse\x12\r\n\x05ready\x18\x01 \x01(\x08\x12\x13\n\x0bruntime_key\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x14\n\x0c\x61\x63tive_tasks\x18\x04 \x01(\x05\"\x94\x02\n\x18RuntimeAssignTaskRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x11\n\tcamera_id\x18\x02 \x01(\t\x12\x1c\n\x14\x61lgorithm_version_id\x18\x03 \x01(\t\x12\x12\n\nstream_url\x18\x04 \x01(\t\x12\x17\n\x0fstream_protocol\x18\x05 \x01(\t\x12*\n\x04rois\x18\x06 \x03(\x0b\x32\x1c.aegis.runtime.v1.RuntimeROI\x12\x18\n\x10\x61lgo_params_json\x18\x07 \x01(\t\x12\x10\n\x08lease_id\x18\x08 \x01(\t\x12\x19\n\x11lease_ttl_seconds\x18\t \x01(\x05\x12\x16\n\x0e\x63onfig_version\x18\n \x01(\x03\"\x89\x01\n\x18RuntimeUpdateTaskRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12*\n\x04rois\x18\x02 \x03(\x0b\x32\x1c.aegis.runtime.v1.RuntimeROI\x12\x18\n\x10\x61lgo_params_json\x18\x03 \x01(\t\x12\x16\n\x0e\x63onfig_version\x18\x04 \x01(\x03\";\n\x18RuntimeRevokeTaskRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"v\n\x18RuntimeRenewLeaseRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x10\n\x08lease_id\x18\x02 \x01(\t\x12\x19\n\x11lease_ttl_seconds\x18\x03 \x01(\x05\x12\x1c\n\x14refreshed_stream_url\x18\x04 \x01(\t\";\n\x10RuntimeTaskReply\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x15\n\rerror_message\x18\x02 \x01(\t\"+\n\x14StreamResultsRequest\x12\x13\n\x0bruntime_key\x18\x01 \x01(\t\"\xf7\x01\n\rRuntimeResult\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x11\n\tcamera_id\x18\x02 \x01(\t\x12\x1c\n\x14\x61lgorithm_version_id\x18\x03 \x01(\t\x12\x14\n\x0ctimestamp_ms\x18\x04 \x01(\x03\x12\x13\n\x0b\x66rame_width\x18\x05 \x01(\x05\x12\x14\n\x0c\x66rame_height\x18\x06 \x01(\x05\x12\x14\n\x0cis_heartbeat\x18\x07 \x01(\x08\x12\x36\n\ndetections\x18\x08 \x03(\x0b\x32\".aegis.runtime.v1.RuntimeDetection\x12\x15\n\rsnapshot_jpeg\x18\t \x01(\x0c\x32\xb3\x04\n\x10\x41lgorithmRuntime\x12K\n\x06Health\x12\x1f.aegis.runtime.v1.HealthRequest\x1a .aegis.runtime.v1.HealthResponse\x12\\\n\nAssignTask\x12*.aegis.runtime.v1.RuntimeAssignTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n\nUpdateTask\x12*.aegis.runtime.v1.RuntimeUpdateTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n\nRevokeTask\x12*.aegis.runtime.v1.RuntimeRevokeTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n\nRenewLease\x12*.aegis.runtime.v1.RuntimeRenewLeaseRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12Z\n\rStreamResults\x12&.aegis.runtime.v1.StreamResultsRequest\x1a\x1f.aegis.runtime.v1.RuntimeResult0\x01\x42\x45ZCgithub.com/GuardHer/AegisVision/backend/gen/go/runtime/v1;runtimev1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\rruntime.proto\x12\x10\x61\x65gis.runtime.v1\"$\n\x0cRuntimePoint\x12\t\n\x01x\x18\x01 \x01(\x02\x12\t\n\x01y\x18\x02 \x01(\x02\"\x83\x01\n\nRuntimeROI\x12\x0e\n\x06roi_id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x10\n\x08roi_type\x18\x03 \x01(\t\x12.\n\x06points\x18\x04 \x03(\x0b\x32\x1e.aegis.runtime.v1.RuntimePoint\x12\x15\n\rtarget_labels\x18\x05 \x03(\t\"\xe5\x01\n\x10RuntimeDetection\x12\x0c\n\x04\x62\x62ox\x18\x01 \x03(\x02\x12\r\n\x05label\x18\x02 \x01(\t\x12\x12\n\nconfidence\x18\x03 \x01(\x02\x12\x10\n\x08track_id\x18\x04 \x01(\t\x12\x13\n\x0bis_abnormal\x18\x05 \x01(\x08\x12\x46\n\nattributes\x18\x06 \x03(\x0b\x32\x32.aegis.runtime.v1.RuntimeDetection.AttributesEntry\x1a\x31\n\x0f\x41ttributesEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x0f\n\rHealthRequest\"[\n\x0eHealthResponse\x12\r\n\x05ready\x18\x01 \x01(\x08\x12\x13\n\x0bruntime_key\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\x12\x14\n\x0c\x61\x63tive_tasks\x18\x04 \x01(\x05\"\x94\x02\n\x18RuntimeAssignTaskRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x11\n\tcamera_id\x18\x02 \x01(\t\x12\x1c\n\x14\x61lgorithm_version_id\x18\x03 \x01(\t\x12\x12\n\nstream_url\x18\x04 \x01(\t\x12\x17\n\x0fstream_protocol\x18\x05 \x01(\t\x12*\n\x04rois\x18\x06 \x03(\x0b\x32\x1c.aegis.runtime.v1.RuntimeROI\x12\x18\n\x10\x61lgo_params_json\x18\x07 \x01(\t\x12\x10\n\x08lease_id\x18\x08 \x01(\t\x12\x19\n\x11lease_ttl_seconds\x18\t \x01(\x05\x12\x16\n\x0e\x63onfig_version\x18\n \x01(\x03\"\x89\x01\n\x18RuntimeUpdateTaskRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12*\n\x04rois\x18\x02 \x03(\x0b\x32\x1c.aegis.runtime.v1.RuntimeROI\x12\x18\n\x10\x61lgo_params_json\x18\x03 \x01(\t\x12\x16\n\x0e\x63onfig_version\x18\x04 \x01(\x03\";\n\x18RuntimeRevokeTaskRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x0e\n\x06reason\x18\x02 \x01(\t\"v\n\x18RuntimeRenewLeaseRequest\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x10\n\x08lease_id\x18\x02 \x01(\t\x12\x19\n\x11lease_ttl_seconds\x18\x03 \x01(\x05\x12\x1c\n\x14refreshed_stream_url\x18\x04 \x01(\t\";\n\x10RuntimeTaskReply\x12\x10\n\x08\x61\x63\x63\x65pted\x18\x01 \x01(\x08\x12\x15\n\rerror_message\x18\x02 \x01(\t\"+\n\x14StreamResultsRequest\x12\x13\n\x0bruntime_key\x18\x01 \x01(\t\"\xf7\x01\n\rRuntimeResult\x12\x0f\n\x07task_id\x18\x01 \x01(\t\x12\x11\n\tcamera_id\x18\x02 \x01(\t\x12\x1c\n\x14\x61lgorithm_version_id\x18\x03 \x01(\t\x12\x14\n\x0ctimestamp_ms\x18\x04 \x01(\x03\x12\x13\n\x0b\x66rame_width\x18\x05 \x01(\x05\x12\x14\n\x0c\x66rame_height\x18\x06 \x01(\x05\x12\x14\n\x0cis_heartbeat\x18\x07 \x01(\x08\x12\x36\n\ndetections\x18\x08 \x03(\x0b\x32\".aegis.runtime.v1.RuntimeDetection\x12\x15\n\rsnapshot_jpeg\x18\t \x01(\x0c\x32\xb3\x04\n\x10\x41lgorithmRuntime\x12K\n\x06Health\x12\x1f.aegis.runtime.v1.HealthRequest\x1a .aegis.runtime.v1.HealthResponse\x12\\\n\nAssignTask\x12*.aegis.runtime.v1.RuntimeAssignTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n\nUpdateTask\x12*.aegis.runtime.v1.RuntimeUpdateTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n\nRevokeTask\x12*.aegis.runtime.v1.RuntimeRevokeTaskRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12\\\n\nRenewLease\x12*.aegis.runtime.v1.RuntimeRenewLeaseRequest\x1a\".aegis.runtime.v1.RuntimeTaskReply\x12Z\n\rStreamResults\x12&.aegis.runtime.v1.StreamResultsRequest\x1a\x1f.aegis.runtime.v1.RuntimeResult0\x01\x42\x31Z/aegisvision/backend/gen/go/runtime/v1;runtimev1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'runtime_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'ZCgithub.com/GuardHer/AegisVision/backend/gen/go/runtime/v1;runtimev1'
+  _globals['DESCRIPTOR']._serialized_options = b'Z/aegisvision/backend/gen/go/runtime/v1;runtimev1'
   _globals['_RUNTIMEDETECTION_ATTRIBUTESENTRY']._loaded_options = None
   _globals['_RUNTIMEDETECTION_ATTRIBUTESENTRY']._serialized_options = b'8\001'
   _globals['_RUNTIMEPOINT']._serialized_start=35
   _globals['_RUNTIMEPOINT']._serialized_end=71
-  _globals['_RUNTIMEROI']._serialized_start=73
-  _globals['_RUNTIMEROI']._serialized_end=181
-  _globals['_RUNTIMEDETECTION']._serialized_start=184
-  _globals['_RUNTIMEDETECTION']._serialized_end=413
-  _globals['_RUNTIMEDETECTION_ATTRIBUTESENTRY']._serialized_start=364
-  _globals['_RUNTIMEDETECTION_ATTRIBUTESENTRY']._serialized_end=413
-  _globals['_HEALTHREQUEST']._serialized_start=415
-  _globals['_HEALTHREQUEST']._serialized_end=430
-  _globals['_HEALTHRESPONSE']._serialized_start=432
-  _globals['_HEALTHRESPONSE']._serialized_end=523
-  _globals['_RUNTIMEASSIGNTASKREQUEST']._serialized_start=526
-  _globals['_RUNTIMEASSIGNTASKREQUEST']._serialized_end=802
-  _globals['_RUNTIMEUPDATETASKREQUEST']._serialized_start=805
-  _globals['_RUNTIMEUPDATETASKREQUEST']._serialized_end=942
-  _globals['_RUNTIMEREVOKETASKREQUEST']._serialized_start=944
-  _globals['_RUNTIMEREVOKETASKREQUEST']._serialized_end=1003
-  _globals['_RUNTIMERENEWLEASEREQUEST']._serialized_start=1005
-  _globals['_RUNTIMERENEWLEASEREQUEST']._serialized_end=1123
-  _globals['_RUNTIMETASKREPLY']._serialized_start=1125
-  _globals['_RUNTIMETASKREPLY']._serialized_end=1184
-  _globals['_STREAMRESULTSREQUEST']._serialized_start=1186
-  _globals['_STREAMRESULTSREQUEST']._serialized_end=1229
-  _globals['_RUNTIMERESULT']._serialized_start=1232
-  _globals['_RUNTIMERESULT']._serialized_end=1479
-  _globals['_ALGORITHMRUNTIME']._serialized_start=1482
-  _globals['_ALGORITHMRUNTIME']._serialized_end=2045
+  _globals['_RUNTIMEROI']._serialized_start=74
+  _globals['_RUNTIMEROI']._serialized_end=205
+  _globals['_RUNTIMEDETECTION']._serialized_start=208
+  _globals['_RUNTIMEDETECTION']._serialized_end=437
+  _globals['_RUNTIMEDETECTION_ATTRIBUTESENTRY']._serialized_start=388
+  _globals['_RUNTIMEDETECTION_ATTRIBUTESENTRY']._serialized_end=437
+  _globals['_HEALTHREQUEST']._serialized_start=439
+  _globals['_HEALTHREQUEST']._serialized_end=454
+  _globals['_HEALTHRESPONSE']._serialized_start=456
+  _globals['_HEALTHRESPONSE']._serialized_end=547
+  _globals['_RUNTIMEASSIGNTASKREQUEST']._serialized_start=550
+  _globals['_RUNTIMEASSIGNTASKREQUEST']._serialized_end=826
+  _globals['_RUNTIMEUPDATETASKREQUEST']._serialized_start=829
+  _globals['_RUNTIMEUPDATETASKREQUEST']._serialized_end=966
+  _globals['_RUNTIMEREVOKETASKREQUEST']._serialized_start=968
+  _globals['_RUNTIMEREVOKETASKREQUEST']._serialized_end=1027
+  _globals['_RUNTIMERENEWLEASEREQUEST']._serialized_start=1029
+  _globals['_RUNTIMERENEWLEASEREQUEST']._serialized_end=1147
+  _globals['_RUNTIMETASKREPLY']._serialized_start=1149
+  _globals['_RUNTIMETASKREPLY']._serialized_end=1208
+  _globals['_STREAMRESULTSREQUEST']._serialized_start=1210
+  _globals['_STREAMRESULTSREQUEST']._serialized_end=1253
+  _globals['_RUNTIMERESULT']._serialized_start=1256
+  _globals['_RUNTIMERESULT']._serialized_end=1503
+  _globals['_ALGORITHMRUNTIME']._serialized_start=1506
+  _globals['_ALGORITHMRUNTIME']._serialized_end=2069
 # @@protoc_insertion_point(module_scope)

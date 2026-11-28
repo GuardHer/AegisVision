@@ -30,14 +30,18 @@ def test_point_and_roi_geometry_helpers():
             Point(0.8, 0.8),
             Point(0.2, 0.8),
         ],
+        target_labels=("no_helmet", "smoking"),
     )
     assert poly.is_full_frame() is False
+    assert poly.wants_label("smoking") is True
+    assert poly.wants_label("fall") is False
     assert poly.to_pixel_points(1000, 500) == [(200, 100), (800, 100), (800, 400), (200, 400)]
     assert poly.contains_point(0.5, 0.5) is True
     assert poly.contains_point(0.1, 0.1) is False
 
     full = ROI(roi_id="roi-full", name="Full", roi_type="full_frame", points=[])
     assert full.is_full_frame() is True
+    assert full.wants_label("anything") is True
     assert full.to_pixel_points(640, 360) == [(0, 0), (640, 0), (640, 360), (0, 360)]
     assert full.contains_point(0.99, 0.99) is True
 
@@ -101,19 +105,25 @@ def test_frame_encode_and_task_context_helpers():
     assert out.has_abnormal is True
 
     stop_ev = threading.Event()
+    roi_a = ROI(roi_id="r-a", name="A", roi_type="full_frame", target_labels=("no_helmet",))
+    roi_b = ROI(roi_id="r-b", name="B", roi_type="full_frame", target_labels=("smoking", "person"))
     ctx = TaskContext(
         task_id="t-1",
         camera_id="c-1",
         algorithm_version_id="v-1",
         stream_url="rtsp://127.0.0.1:8554/cam1",
         stream_protocol="rtsp",
-        rois=[],
+        rois=[roi_a, roi_b],
         algo_params={"target_fps": 10, "min_confidence": 0.65},
         lease_id="lease-1",
         lease_ttl_seconds=30,
         config_version=1,
         stop_event=stop_ev,
     )
+    assert ctx.required_labels == frozenset({"no_helmet", "smoking", "person"})
+    assert [r.roi_id for r in ctx.rois_for_label("smoking")] == ["r-b"]
+    assert [r.roi_id for r in ctx.rois_for_label("no_helmet")] == ["r-a"]
+    assert ctx.rois_for_label("fall") == []
     assert ctx.target_fps == 10.0
     assert ctx.confidence_threshold == 0.65
     assert ctx.get_param("missing", "fallback") == "fallback"

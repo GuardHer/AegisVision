@@ -66,6 +66,7 @@ class SampleFrameAlgo(FrameAlgorithm):
         self.healthy = True
         self.updated_versions: list[int] = []
         self.updated_urls: list[str] = []
+        self.last_required_labels: frozenset[str] = frozenset()
         self.stopped_tasks: list[str] = []
 
     def metadata(self) -> AlgorithmMetadata:
@@ -84,9 +85,13 @@ class SampleFrameAlgo(FrameAlgorithm):
     def health_check(self) -> bool:
         return self.healthy
 
+    def on_task_start(self, task_ctx: TaskContext) -> None:
+        self.last_required_labels = task_ctx.required_labels
+
     def on_task_update(self, task_ctx: TaskContext) -> None:
         self.updated_versions.append(task_ctx.config_version)
         self.updated_urls.append(task_ctx.stream_url)
+        self.last_required_labels = task_ctx.required_labels
 
     def on_task_stop(self, task_ctx: TaskContext) -> None:
         self.stopped_tasks.append(task_ctx.task_id)
@@ -150,7 +155,7 @@ def test_frame_algorithm_auto_snapshot_url_refresh_update_and_unload():
         h = stub.Health(runtime_pb2.HealthRequest())
         assert h.ready is True and h.version == "2.0.0"
 
-        # 分配第一个任务
+        # 分配第一个任务（包含两个不同目标行为的 ROI）
         r1 = stub.AssignTask(
             runtime_pb2.RuntimeAssignTaskRequest(
                 task_id="task-f1",
@@ -158,6 +163,20 @@ def test_frame_algorithm_auto_snapshot_url_refresh_update_and_unload():
                 algorithm_version_id="ver-1",
                 stream_url="rtsp://127.0.0.1:8554/cam1?token=old",
                 stream_protocol="rtsp",
+                rois=[
+                    runtime_pb2.RuntimeROI(
+                        roi_id="roi-1",
+                        name="Safety",
+                        roi_type="full_frame",
+                        target_labels=["no_helmet"],
+                    ),
+                    runtime_pb2.RuntimeROI(
+                        roi_id="roi-2",
+                        name="Smoking",
+                        roi_type="full_frame",
+                        target_labels=["smoking"],
+                    ),
+                ],
                 algo_params_json='{"target_fps": 20}',
                 lease_id="lease-1",
                 lease_ttl_seconds=10,
@@ -165,6 +184,7 @@ def test_frame_algorithm_auto_snapshot_url_refresh_update_and_unload():
             )
         )
         assert r1.accepted is True
+        assert algo.last_required_labels == frozenset({"no_helmet", "smoking"})
         assert len(sources) == 1
         assert sources[0].opened_urls == ["rtsp://127.0.0.1:8554/cam1?token=old"]
 
@@ -195,16 +215,25 @@ def test_frame_algorithm_auto_snapshot_url_refresh_update_and_unload():
         assert got.detections[0].label == "no_helmet"
         assert got.snapshot_jpeg == b"fake-jpeg-q80"
 
-        # 验证 UpdateTask 热更新回调
+        # 验证 UpdateTask 热更新回调（含 ROI target_labels 更新）
         upd = stub.UpdateTask(
             runtime_pb2.RuntimeUpdateTaskRequest(
                 task_id="task-f1",
+                rois=[
+                    runtime_pb2.RuntimeROI(
+                        roi_id="roi-1",
+                        name="Safety",
+                        roi_type="full_frame",
+                        target_labels=["fall", "no_helmet"],
+                    ),
+                ],
                 algo_params_json='{"target_fps": 15, "min_confidence": 0.7}',
                 config_version=2,
             )
         )
         assert upd.accepted is True
         assert 2 in algo.updated_versions
+        assert algo.last_required_labels == frozenset({"fall", "no_helmet"})
 
         # 验证 RenewLease 携带新流地址时同时通知 FrameSource 与 Algorithm
         ren = stub.RenewLease(

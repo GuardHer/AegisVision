@@ -282,10 +282,11 @@ type routedCommandEnvelope struct {
 		StreamURL          string `json:"stream_url"`
 		StreamProtocol     string `json:"stream_protocol"`
 		ROIs               []struct {
-			ROIID   string          `json:"roi_id"`
-			Name    string          `json:"name"`
-			ROIType string          `json:"roi_type"`
-			Points  json.RawMessage `json:"points"`
+			ROIID        string          `json:"roi_id"`
+			Name         string          `json:"name"`
+			ROIType      string          `json:"roi_type"`
+			Points       json.RawMessage `json:"points"`
+			TargetLabels []string        `json:"target_labels"`
 		} `json:"rois"`
 		AlgoParamsJSON  string `json:"algo_params_json"`
 		LeaseID         string `json:"lease_id"`
@@ -295,10 +296,11 @@ type routedCommandEnvelope struct {
 	UpdateTask *struct {
 		TaskID string `json:"task_id"`
 		ROIs   []struct {
-			ROIID   string          `json:"roi_id"`
-			Name    string          `json:"name"`
-			ROIType string          `json:"roi_type"`
-			Points  json.RawMessage `json:"points"`
+			ROIID        string          `json:"roi_id"`
+			Name         string          `json:"name"`
+			ROIType      string          `json:"roi_type"`
+			Points       json.RawMessage `json:"points"`
+			TargetLabels []string        `json:"target_labels"`
 		} `json:"rois"`
 		AlgoParamsJSON string `json:"algo_params_json"`
 		ConfigVersion  int64  `json:"config_version"`
@@ -331,7 +333,7 @@ func (g *Gateway) HandleRoutedCommand(_ context.Context, raw []byte) error {
 		}
 		pbROIs := make([]*agentv1.ROI, 0, len(env.AssignTask.ROIs))
 		for _, r := range env.AssignTask.ROIs {
-			pbROIs = append(pbROIs, toProtoROI(r.ROIID, r.Name, r.ROIType, r.Points))
+			pbROIs = append(pbROIs, toProtoROI(r.ROIID, r.Name, r.ROIType, r.Points, r.TargetLabels))
 		}
 		down = &agentv1.PlatformDownstream{
 			Payload: &agentv1.PlatformDownstream_AssignTask{
@@ -357,7 +359,7 @@ func (g *Gateway) HandleRoutedCommand(_ context.Context, raw []byte) error {
 		}
 		pbROIs := make([]*agentv1.ROI, 0, len(env.UpdateTask.ROIs))
 		for _, r := range env.UpdateTask.ROIs {
-			pbROIs = append(pbROIs, toProtoROI(r.ROIID, r.Name, r.ROIType, r.Points))
+			pbROIs = append(pbROIs, toProtoROI(r.ROIID, r.Name, r.ROIType, r.Points, r.TargetLabels))
 		}
 		down = &agentv1.PlatformDownstream{
 			Payload: &agentv1.PlatformDownstream_UpdateTask{
@@ -417,7 +419,7 @@ func (g *Gateway) HandleRoutedCommand(_ context.Context, raw []byte) error {
 	}
 }
 
-func toProtoROI(id, name, roiType string, rawPoints json.RawMessage) *agentv1.ROI {
+func toProtoROI(id, name, roiType string, rawPoints json.RawMessage, targetLabels []string) *agentv1.ROI {
 	var pts []struct {
 		X float32 `json:"x"`
 		Y float32 `json:"y"`
@@ -428,9 +430,10 @@ func toProtoROI(id, name, roiType string, rawPoints json.RawMessage) *agentv1.RO
 		pbPts = append(pbPts, &agentv1.Point{X: pt.X, Y: pt.Y})
 	}
 	return &agentv1.ROI{
-		RoiId:   id,
-		Name:    name,
-		RoiType: roiType,
-		Points:  pbPts,
+		RoiId:        id,
+		Name:         name,
+		RoiType:      roiType,
+		Points:       pbPts,
+		TargetLabels: append([]string(nil), targetLabels...),
 	}
 }

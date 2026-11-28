@@ -79,6 +79,7 @@ type RuntimeROI struct {
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	RoiType       string                 `protobuf:"bytes,3,opt,name=roi_type,json=roiType,proto3" json:"roi_type,omitempty"`
 	Points        []*RuntimePoint        `protobuf:"bytes,4,rep,name=points,proto3" json:"points,omitempty"`
+	TargetLabels  []string               `protobuf:"bytes,5,rep,name=target_labels,json=targetLabels,proto3" json:"target_labels,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,6 +138,13 @@ func (x *RuntimeROI) GetRoiType() string {
 func (x *RuntimeROI) GetPoints() []*RuntimePoint {
 	if x != nil {
 		return x.Points
+	}
+	return nil
+}
+
+func (x *RuntimeROI) GetTargetLabels() []string {
+	if x != nil {
+		return x.TargetLabels
 	}
 	return nil
 }
@@ -844,13 +852,14 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\x18runtime/v1/runtime.proto\x12\x10aegis.runtime.v1\"*\n" +
 	"\fRuntimePoint\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x02 \x01(\x02R\x01y\"\x8a\x01\n" +
+	"\x01y\x18\x02 \x01(\x02R\x01y\"\xaf\x01\n" +
 	"\n" +
 	"RuntimeROI\x12\x15\n" +
 	"\x06roi_id\x18\x01 \x01(\tR\x05roiId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
 	"\broi_type\x18\x03 \x01(\tR\aroiType\x126\n" +
-	"\x06points\x18\x04 \x03(\v2\x1e.aegis.runtime.v1.RuntimePointR\x06points\"\xab\x02\n" +
+	"\x06points\x18\x04 \x03(\v2\x1e.aegis.runtime.v1.RuntimePointR\x06points\x12#\n" +
+	"\rtarget_labels\x18\x05 \x03(\tR\ftargetLabels\"\xab\x02\n" +
 	"\x10RuntimeDetection\x12\x12\n" +
 	"\x04bbox\x18\x01 \x03(\x02R\x04bbox\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x1e\n" +

@@ -158,3 +158,93 @@ func TestPlannerAffinityAndPinnedNode(t *testing.T) {
 		t.Errorf("verPinned pinned node = %q, want gpu-node-2", got)
 	}
 }
+
+func TestPlannerAggregatesPerROITargetLabelsIncludingSOPSubROIs(t *testing.T) {
+	camID := uuid.Must(uuid.NewV7())
+	verID := uuid.Must(uuid.NewV7())
+	roi1ID := uuid.Must(uuid.NewV7())
+	roi2ID := uuid.Must(uuid.NewV7())
+	roiSubID := uuid.Must(uuid.NewV7())
+	now := time.Now().UTC()
+
+	input := scheduler.PlanInput{
+		Now:         now,
+		NodeTimeout: 15 * time.Second,
+		Cameras: map[uuid.UUID]scheduler.CameraInfo{
+			camID: {ID: camID, StreamPath: "cam_multi_roi", Enabled: true},
+		},
+		Versions: map[uuid.UUID]scheduler.VersionInfo{
+			verID: {ID: verID, RuntimeKey: "py-multi-v1", Status: "active"},
+		},
+		ROIs: map[uuid.UUID]scheduler.ROIInfo{
+			roi1ID:   {ID: roi1ID, CameraID: camID, Name: "Safety Zone", ROIType: domain.ROITypePolygon, Enabled: true},
+			roi2ID:   {ID: roi2ID, CameraID: camID, Name: "SOP Station", ROIType: domain.ROITypePolygon, Enabled: true},
+			roiSubID: {ID: roiSubID, CameraID: camID, Name: "Scanner Pad", ROIType: domain.ROITypePolygon, Enabled: true},
+		},
+		Rules: []scheduler.RuleInfo{
+			{
+				ID:                 uuid.Must(uuid.NewV7()),
+				CameraID:           camID,
+				ROIID:              roi1ID,
+				AlgorithmVersionID: verID,
+				RuleMode:           domain.RuleModeAnomalyDetect,
+				Params:             []byte(`{"labels":["smoking","no_helmet","smoking"]}`),
+				ScheduleMode:       "auto",
+				Enabled:            true,
+			},
+			{
+				ID:                 uuid.Must(uuid.NewV7()),
+				CameraID:           camID,
+				ROIID:              roi2ID,
+				AlgorithmVersionID: verID,
+				RuleMode:           domain.RuleModeSOPSequence,
+				Params: []byte(`{
+					"trigger_mode": "zone_entry",
+					"entry_labels": ["person"],
+					"steps": [
+						{"step_id":"s1","name":"ESD","labels":["wear_esd_strap"],"roi_id":""},
+						{"step_id":"s2","name":"Scan","labels":["scan_barcode"],"roi_id":"` + roiSubID.String() + `"}
+					]
+				}`),
+				ScheduleMode: "auto",
+				Enabled:      true,
+			},
+		},
+		Nodes: []scheduler.NodeInfo{
+			{
+				NodeID:          "gpu-node-1",
+				RuntimeKeys:     []string{"py-multi-v1"},
+				MaxTasks:        8,
+				Status:          domain.NodeStatusOnline,
+				LastHeartbeatAt: now,
+			},
+		},
+	}
+
+	desired := scheduler.ComputeDesiredTasks(input)
+	if len(desired) != 1 {
+		t.Fatalf("expected 1 deduplicated task, got %d", len(desired))
+	}
+	byROI := make(map[uuid.UUID]scheduler.ROIInfo, len(desired[0].ROIs))
+	for _, r := range desired[0].ROIs {
+		byROI[r.ID] = r
+	}
+	if len(byROI) != 3 {
+		t.Fatalf("expected 3 ROIs (including SOP step sub-ROI), got %d", len(byROI))
+	}
+
+	assertSlicesEqual := func(name string, got, want []string) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s target_labels = %v, want %v", name, got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("%s target_labels[%d] = %q, want %q", name, i, got[i], want[i])
+			}
+		}
+	}
+	assertSlicesEqual("roi1", byROI[roi1ID].TargetLabels, []string{"no_helmet", "smoking"})
+	assertSlicesEqual("roi2", byROI[roi2ID].TargetLabels, []string{"person", "wear_esd_strap"})
+	assertSlicesEqual("roiSub", byROI[roiSubID].TargetLabels, []string{"scan_barcode"})
+}

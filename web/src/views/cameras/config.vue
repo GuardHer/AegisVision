@@ -44,7 +44,7 @@ const savingRoi = ref(false);
 const savingRule = ref(false);
 const rois = ref<CameraROIItem[]>([]);
 const rules = ref<ROIAlgorithmRuleItem[]>([]);
-const versions = ref<(AlgorithmVersionItem & { algoName: string })[]>([]);
+const versions = ref<(AlgorithmVersionItem & { algoName: string; supportedLabels: string[] })[]>([]);
 const channels = ref<AlarmChannelItem[]>([]);
 const schedules = ref<ArmingScheduleItem[]>([]);
 
@@ -81,7 +81,7 @@ const roiNameMap = computed(() => {
 interface SOPStepForm {
   step_id: string;
   name: string;
-  labels_text: string;
+  labels: string[];
   roi_id: string;
   min_confidence: number;
   hit_point: string;
@@ -102,7 +102,7 @@ const ruleForm = reactive({
     | "absence_detect"
     | "sop_sequence",
   schedule_id: "",
-  labels: "person",
+  labels: ["person"] as string[],
   min_confidence: 0.55,
   consecutive_frames: 3,
   duration_seconds: 10,
@@ -120,19 +120,45 @@ const ruleForm = reactive({
   enabled: true,
   channel_ids: [] as string[],
   trigger_mode: "first_step" as "first_step" | "zone_entry",
-  entry_labels: "person",
+  entry_labels: ["person"] as string[],
   rearm_cooldown_seconds: 30,
   cycle_timeout_seconds: 120,
   violation_types: ["missing_step", "out_of_order", "step_timeout"] as string[],
   steps: [] as SOPStepForm[]
 });
 
+const selectedVersionLabels = computed<string[]>(() => {
+  const ver = versions.value.find(v => v.id === ruleForm.algorithm_version_id);
+  const raw = ver?.supportedLabels ?? [];
+  return Array.from(new Set(raw.map(s => s.trim()).filter(Boolean)));
+});
+
+function summarizeRuleLabels(row: ROIAlgorithmRuleItem): string[] {
+  const p = row.params ?? {};
+  const set = new Set<string>();
+  if (Array.isArray(p.labels)) {
+    for (const l of p.labels) if (typeof l === "string" && l.trim()) set.add(l.trim());
+  }
+  if (Array.isArray(p.steps)) {
+    for (const st of p.steps) {
+      if (Array.isArray(st?.labels)) {
+        for (const l of st.labels) if (typeof l === "string" && l.trim()) set.add(l.trim());
+      }
+    }
+  }
+  return Array.from(set);
+}
+
+function normalizeLabels(list: string[]): string[] {
+  return Array.from(new Set((list ?? []).map(s => String(s).trim()).filter(Boolean)));
+}
+
 function createDefaultSOPSteps(): SOPStepForm[] {
   return [
     {
       step_id: "step_1",
       name: "Step 1",
-      labels_text: "wear_esd_strap",
+      labels: ["wear_esd_strap"],
       roi_id: "",
       min_confidence: 0.6,
       hit_point: "center",
@@ -143,7 +169,7 @@ function createDefaultSOPSteps(): SOPStepForm[] {
     {
       step_id: "step_2",
       name: "Step 2",
-      labels_text: "scan_barcode",
+      labels: ["scan_barcode"],
       roi_id: "",
       min_confidence: 0.6,
       hit_point: "center",
@@ -175,7 +201,11 @@ async function loadAll() {
     const versionGroups = await Promise.all(
       algos.map(async algo => {
         const vRes = await listAlgorithmVersions(algo.id).catch(() => ({ data: [] as AlgorithmVersionItem[] }));
-        return (vRes?.data ?? []).map(v => ({ ...v, algoName: `${algo.name} (${v.version})` }));
+        return (vRes?.data ?? []).map(v => ({
+          ...v,
+          algoName: `${algo.name} (${v.version})`,
+          supportedLabels: Array.isArray(algo.supported_labels) ? algo.supported_labels : []
+        }));
       })
     );
     versions.value = versionGroups.flat();
@@ -267,13 +297,16 @@ async function removeROI(id: string) {
 
 function openCreateRule() {
   editingRuleId.value = null;
+  const firstVer = versions.value[0];
+  const initialLabels =
+    firstVer?.supportedLabels?.length ? [firstVer.supportedLabels[0]] : ["person"];
   Object.assign(ruleForm, {
     roi_id: rois.value[0]?.id ?? "",
-    algorithm_version_id: versions.value[0]?.id ?? "",
+    algorithm_version_id: firstVer?.id ?? "",
     name: "",
     rule_mode: "anomaly_detect",
     schedule_id: "",
-    labels: "person",
+    labels: initialLabels,
     min_confidence: 0.55,
     consecutive_frames: 3,
     duration_seconds: 10,
@@ -291,7 +324,7 @@ function openCreateRule() {
     enabled: true,
     channel_ids: [],
     trigger_mode: "first_step",
-    entry_labels: "person",
+    entry_labels: ["person"],
     rearm_cooldown_seconds: 30,
     cycle_timeout_seconds: 120,
     violation_types: ["missing_step", "out_of_order", "step_timeout"],
@@ -309,7 +342,7 @@ function openEditRule(row: ROIAlgorithmRuleItem) {
     name: row.name,
     rule_mode: row.rule_mode,
     schedule_id: row.schedule_id || "",
-    labels: Array.isArray(p.labels) ? p.labels.join(",") : "person",
+    labels: Array.isArray(p.labels) ? normalizeLabels(p.labels) : [],
     min_confidence: p.min_confidence ?? 0.55,
     consecutive_frames: p.consecutive_frames ?? 3,
     duration_seconds: p.duration_seconds ?? 10,
@@ -327,7 +360,7 @@ function openEditRule(row: ROIAlgorithmRuleItem) {
     enabled: row.enabled,
     channel_ids: [],
     trigger_mode: p.trigger_mode ?? "first_step",
-    entry_labels: Array.isArray(p.entry_labels) ? p.entry_labels.join(",") : "person",
+    entry_labels: Array.isArray(p.entry_labels) ? normalizeLabels(p.entry_labels) : ["person"],
     rearm_cooldown_seconds: p.rearm_cooldown_seconds ?? 30,
     cycle_timeout_seconds: p.cycle_timeout_seconds ?? 120,
     violation_types: Array.isArray(p.violation_types)
@@ -338,7 +371,7 @@ function openEditRule(row: ROIAlgorithmRuleItem) {
         ? p.steps.map((s: any, idx: number) => ({
             step_id: s.step_id || `step_${idx + 1}`,
             name: s.name || `Step ${idx + 1}`,
-            labels_text: Array.isArray(s.labels) ? s.labels.join(",") : "",
+            labels: Array.isArray(s.labels) ? normalizeLabels(s.labels) : [],
             roi_id: s.roi_id || "",
             min_confidence: s.min_confidence ?? 0.6,
             hit_point: s.hit_point || "center",
@@ -356,7 +389,7 @@ function addSOPStep() {
   ruleForm.steps.push({
     step_id: `step_${n}_${Date.now().toString(36).slice(-3)}`,
     name: `Step ${n}`,
-    labels_text: "",
+    labels: [],
     roi_id: "",
     min_confidence: 0.6,
     hit_point: "center",
@@ -394,10 +427,7 @@ async function saveRule() {
 
   if (ruleForm.rule_mode === "sop_sequence") {
     params.trigger_mode = ruleForm.trigger_mode;
-    params.entry_labels = ruleForm.entry_labels
-      .split(",")
-      .map(s => s.trim())
-      .filter(Boolean);
+    params.entry_labels = normalizeLabels(ruleForm.entry_labels);
     params.rearm_mode = "exit_or_cooldown";
     params.rearm_cooldown_seconds = ruleForm.rearm_cooldown_seconds;
     params.cycle_timeout_seconds = ruleForm.cycle_timeout_seconds;
@@ -405,10 +435,7 @@ async function saveRule() {
     params.steps = ruleForm.steps.map(s => ({
       step_id: s.step_id.trim(),
       name: s.name.trim(),
-      labels: s.labels_text
-        .split(",")
-        .map(x => x.trim())
-        .filter(Boolean),
+      labels: normalizeLabels(s.labels),
       roi_id: s.roi_id,
       min_confidence: s.min_confidence,
       hit_point: s.hit_point || "center",
@@ -417,10 +444,7 @@ async function saveRule() {
       required: s.required
     }));
   } else {
-    params.labels = ruleForm.labels
-      .split(",")
-      .map(s => s.trim())
-      .filter(Boolean);
+    params.labels = normalizeLabels(ruleForm.labels);
     params.min_confidence = ruleForm.min_confidence;
     params.consecutive_frames = ruleForm.consecutive_frames;
     params.duration_seconds = ruleForm.duration_seconds;
@@ -687,6 +711,22 @@ onBeforeUnmount(() => {
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column :label="t('aegis.cameras.targetLabels')" min-width="165">
+            <template #default="{ row }">
+              <div class="flex flex-wrap gap-1">
+                <el-tag
+                  v-for="lbl in summarizeRuleLabels(row)"
+                  :key="lbl"
+                  size="small"
+                  type="primary"
+                  effect="plain"
+                >
+                  {{ lbl }}
+                </el-tag>
+                <span v-if="summarizeRuleLabels(row).length === 0" class="text-xs text-zinc-400">—</span>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column :label="t('aegis.cameras.armingSchedule')" min-width="145" show-overflow-tooltip>
             <template #default="{ row }">
               {{ row.schedule_id ? scheduleNameMap.get(row.schedule_id) || row.schedule_id : t("aegis.cameras.alwaysArmed") }}
@@ -773,8 +813,25 @@ onBeforeUnmount(() => {
 
         <!-- Standard 3-Mode Params -->
         <template v-if="ruleForm.rule_mode !== 'sop_sequence'">
-          <el-form-item label="Labels">
-            <el-input v-model="ruleForm.labels" placeholder="person,smoking,fall,fighting" />
+          <el-form-item :label="t('aegis.cameras.targetLabels')">
+            <el-select
+              v-model="ruleForm.labels"
+              multiple
+              filterable
+              allow-create
+              default-first-option
+              clearable
+              class="w-full"
+              :placeholder="t('aegis.cameras.selectOrInputLabels')"
+              data-test="rule-labels-select"
+            >
+              <el-option
+                v-for="lbl in selectedVersionLabels"
+                :key="lbl"
+                :label="lbl"
+                :value="lbl"
+              />
+            </el-select>
           </el-form-item>
           <el-form-item label="Confidence / Frames">
             <div class="flex gap-2">
@@ -806,7 +863,23 @@ onBeforeUnmount(() => {
           </el-form-item>
           <el-form-item v-if="ruleForm.trigger_mode === 'zone_entry'" :label="t('aegis.cameras.entryLabels')">
             <div class="flex gap-2 w-full">
-              <el-input v-model="ruleForm.entry_labels" placeholder="person" />
+              <el-select
+                v-model="ruleForm.entry_labels"
+                multiple
+                filterable
+                allow-create
+                default-first-option
+                clearable
+                class="flex-1"
+                :placeholder="t('aegis.cameras.selectOrInputLabels')"
+              >
+                <el-option
+                  v-for="lbl in selectedVersionLabels"
+                  :key="lbl"
+                  :label="lbl"
+                  :value="lbl"
+                />
+              </el-select>
               <el-input-number v-model="ruleForm.rearm_cooldown_seconds" :min="1" :max="600" />
             </div>
           </el-form-item>
@@ -842,7 +915,22 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                   <el-input v-model="step.name" :placeholder="t('aegis.cameras.stepName')" />
-                  <el-input v-model="step.labels_text" :placeholder="t('aegis.cameras.stepLabels')" />
+                  <el-select
+                    v-model="step.labels"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    clearable
+                    :placeholder="t('aegis.cameras.stepLabels')"
+                  >
+                    <el-option
+                      v-for="lbl in selectedVersionLabels"
+                      :key="lbl"
+                      :label="lbl"
+                      :value="lbl"
+                    />
+                  </el-select>
                 </div>
                 <div class="grid grid-cols-3 gap-2">
                   <el-select v-model="step.roi_id" clearable :placeholder="t('aegis.cameras.stepRoi')">

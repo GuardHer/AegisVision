@@ -69,12 +69,30 @@ class ROI:
             - ``"polygon"``：多边形区域，顶点列表见 :attr:`points`（至少 3 个点，按顺/逆时针排列）；
             - ``"full_frame"``：全画面区域，此时 :attr:`points` 通常为空列表。
         points: 归一化多边形顶点列表（每个元素为 :class:`Point`）。
+        target_labels: 该 ROI 在平台规则中配置需要检测的行为/目标标签元组（已去重排序），例如
+            ``("no_helmet", "smoking")``。
+            - **单模型多类别算法**：可直接忽略本字段，一次前向输出全部检测框交由平台规则引擎过滤；
+            - **多子模型按需推理算法**：可读取本字段或 :attr:`TaskContext.required_labels`，
+              仅对当前区域需要的行为触发对应分类器/姿态/SOP 子模型，大幅节省 GPU 算力。
+            - 若为空元组 ``()``，表示平台未限制具体标签（兼容全类别检测）。
     """
 
     roi_id: str
     name: str
     roi_type: str
     points: list[Point] = field(default_factory=list)
+    target_labels: tuple[str, ...] = ()
+
+    def wants_label(self, label: str) -> bool:
+        """判断当前 ROI 是否关注指定行为/目标标签。
+
+        Args:
+            label: 目标类别标签（如 ``"smoking"``、``"no_helmet"``）。
+
+        Returns:
+            当 :attr:`target_labels` 为空（未限定）或包含 ``label`` 时返回 ``True``。
+        """
+        return len(self.target_labels) == 0 or label in self.target_labels
 
     def is_full_frame(self) -> bool:
         """判断当前 ROI 是否为全画面区域。
@@ -457,6 +475,36 @@ class TaskContext:
             return _clamp01(float(raw))
         except (TypeError, ValueError):
             return 0.5
+
+    @property
+    def required_labels(self) -> frozenset[str]:
+        """汇总当前摄像头任务下所有 ROI 需要检测的行为标签并集（不可变集合）。
+
+        适用场景：当单个 Runtime 内置多个子模型（如安全帽检测 + 抽烟分类 + 姿态跌倒）时，
+        可直接通过 ``if "smoking" in task_ctx.required_labels:`` 判断本路摄像头是否需要运行某子模型，
+        未配置的分支直接跳过，显著节省 GPU 算力。
+
+        Returns:
+            去重后的标签集合；若所有 ROI 均未指定 ``target_labels``，返回空集合。
+        """
+        labels: set[str] = set()
+        for roi in self.rois:
+            labels.update(roi.target_labels)
+        return frozenset(labels)
+
+    def rois_for_label(self, label: str) -> list[ROI]:
+        """返回当前任务中关注指定行为标签 ``label`` 的全部 :class:`ROI` 列表。
+
+        可用于按需裁剪特定区域送入二阶段分类器或工位 SOP 模型：
+        例如 ``for roi in task_ctx.rois_for_label("smoking"): ...``。
+
+        Args:
+            label: 目标行为/类别标签。
+
+        Returns:
+            所有满足 ``roi.wants_label(label)`` 的 ROI 列表。
+        """
+        return [roi for roi in self.rois if roi.wants_label(label)]
 
 
 @dataclass(frozen=True)

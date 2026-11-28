@@ -44,8 +44,8 @@ service AgentGateway {
   - `Heartbeat`：`node_id`、`timestamp_ms`、`running_tasks[]`（含 `task_id`、`runtime_key`、`actual_state`、`error_message`）、`host_metrics`（CPU/内存/GPU 使用率）
   - `TaskAck`：`command_id`、`task_id`、`accepted`、`error_message`
 - **`PlatformDownstream`（oneof）**：
-  - `AssignTaskCommand`：`command_id`、`task_id`、`camera_id`、`algorithm_version_id`、`runtime_key`、`stream_url`（默认授权内部 RTSP，带短期 Token）、`stream_protocol`（`rtsp` / `hls`）、`rois[]`、`algo_params_json`、`lease_id`、`lease_ttl_seconds`、`config_version`
-  - `UpdateTaskCommand`：`command_id`、`task_id`、`rois[]`、`algo_params_json`、`config_version`
+  - `AssignTaskCommand`：`command_id`、`task_id`、`camera_id`、`algorithm_version_id`、`runtime_key`、`stream_url`（默认授权内部 RTSP，带短期 Token）、`stream_protocol`（`rtsp` / `hls`）、`rois[]`（含 `roi_id`、`name`、`roi_type`、`points[]`、`target_labels[]` 按区域聚合的目标行为标签）、`algo_params_json`、`lease_id`、`lease_ttl_seconds`、`config_version`
+  - `UpdateTaskCommand`：`command_id`、`task_id`、`rois[]`（含最新 `target_labels[]`）、`algo_params_json`、`config_version`
   - `RevokeTaskCommand`：`command_id`、`task_id`、`reason`
   - `RenewLeaseCommand`：`task_id`、`lease_id`、`lease_ttl_seconds`、`refreshed_stream_url`（Token 即将过期前平滑刷新授权流地址）
 - **`LiveFrameBatch` / `DetectionFrame`**：

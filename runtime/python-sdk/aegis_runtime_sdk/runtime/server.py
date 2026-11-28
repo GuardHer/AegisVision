@@ -37,6 +37,7 @@ def _parse_rois(pb_rois) -> list[ROI]:
             name=r.name,
             roi_type=r.roi_type,
             points=[Point(x=p.x, y=p.y) for p in r.points],
+            target_labels=tuple(r.target_labels),
         )
         for r in pb_rois
     ]

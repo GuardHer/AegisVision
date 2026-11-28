@@ -292,6 +292,8 @@ aegis:
     stepRequired: Required
     stepDwell: Dwell Frames
     stepMaxWait: Max Wait (s)
+    targetLabels: Target Labels
+    selectOrInputLabels: Select algorithm labels or type custom label and press Enter
     noRoiWarning: No ROI configured for this camera yet. Add a polygon or full-frame ROI above before creating rules.
     importPartialSummary: Batch import finished
     nameAndRtspRequired: Please provide camera name and main RTSP URL

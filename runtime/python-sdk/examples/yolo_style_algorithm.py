@@ -92,6 +92,11 @@ class HelmetDetectorAlgorithm(FrameAlgorithm):
         state["frames"] += 1
         conf_thresh = task_ctx.confidence_threshold
 
+        # 进阶用法：若单 Runtime 含多个子模型，可按 task_ctx.required_labels / roi.target_labels 按需跳过未配置分支
+        required = task_ctx.required_labels
+        if required and "no_helmet" not in required and "helmet" not in required and "person" not in required:
+            return []
+
         # 若底层模型推理非线程安全，通过锁保护前向计算（尽量不要在锁内做耗时的图片编码或 IO）
         with self._infer_lock:
             # 此处替换为真实模型前向推理：raw_boxes = self._session.predict(frame.image, conf=conf_thresh)

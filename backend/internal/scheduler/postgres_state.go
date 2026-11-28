@@ -102,6 +102,8 @@ func (p *PostgresStateStore) LoadSnapshot(ctx context.Context) (Snapshot, error)
 			CameraID:           r.CameraID,
 			ROIID:              r.RoiID,
 			AlgorithmVersionID: r.AlgorithmVersionID,
+			RuleMode:           r.RuleMode,
+			Params:             r.Params,
 			ScheduleMode:       r.ScheduleMode,
 			PinnedNodeID:       r.PinnedNodeID.String,
 			AlgoParamsOverride: r.AlgoParamsOverride,

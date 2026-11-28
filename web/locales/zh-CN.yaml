@@ -292,6 +292,8 @@ aegis:
     stepRequired: 必做步骤
     stepDwell: 确认帧数
     stepMaxWait: 等待超时 (秒)
+    targetLabels: 检测行为标签
+    selectOrInputLabels: 选择算法支持的标签，或输入自定义标签后回车
     noRoiWarning: 当前点位尚未配置 ROI 检测区域，请先在上方画布添加多边形或全画面 ROI 后再创建规则
     importPartialSummary: 批量导入完成
     nameAndRtspRequired: 请填写点位名称和主码流 RTSP 地址

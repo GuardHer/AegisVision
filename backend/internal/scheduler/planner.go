@@ -3,6 +3,7 @@ package scheduler
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,12 +33,13 @@ type VersionInfo struct {
 
 // ROIInfo is the scheduler's read model of a camera ROI.
 type ROIInfo struct {
-	ID       uuid.UUID
-	CameraID uuid.UUID
-	Name     string
-	ROIType  string
-	Points   []byte
-	Enabled  bool
+	ID           uuid.UUID
+	CameraID     uuid.UUID
+	Name         string
+	ROIType      string
+	Points       []byte
+	Enabled      bool
+	TargetLabels []string
 }
 
 // RuleInfo is the scheduler's read model of an ROI × AlgorithmVersion rule.
@@ -46,6 +48,8 @@ type RuleInfo struct {
 	CameraID           uuid.UUID
 	ROIID              uuid.UUID
 	AlgorithmVersionID uuid.UUID
+	RuleMode           string
+	Params             []byte
 	ScheduleMode       string
 	PinnedNodeID       string
 	AlgoParamsOverride []byte
@@ -143,10 +147,28 @@ func ComputeDesiredTasks(in PlanInput) []DesiredTask {
 		cam          CameraInfo
 		ver          VersionInfo
 		roiSet       map[uuid.UUID]ROIInfo
+		roiLabels    map[uuid.UUID]map[string]struct{}
 		mergedParams map[string]any
 		recordVideo  bool
 		scheduleMode string
 		pinnedNodeID string
+	}
+
+	addROILabels := func(g *group, roiID uuid.UUID, labels []string) {
+		if len(labels) == 0 {
+			return
+		}
+		set := g.roiLabels[roiID]
+		if set == nil {
+			set = make(map[string]struct{}, len(labels))
+			g.roiLabels[roiID] = set
+		}
+		for _, raw := range labels {
+			lbl := strings.TrimSpace(raw)
+			if lbl != "" {
+				set[lbl] = struct{}{}
+			}
+		}
 	}
 
 	groups := make(map[TaskKey]*group)
@@ -175,12 +197,35 @@ func ComputeDesiredTasks(in PlanInput) []DesiredTask {
 				cam:          cam,
 				ver:          ver,
 				roiSet:       make(map[uuid.UUID]ROIInfo),
+				roiLabels:    make(map[uuid.UUID]map[string]struct{}),
 				mergedParams: parseJSONMap(ver.DefaultParams),
 				scheduleMode: "auto",
 			}
 			groups[key] = g
 		}
 		g.roiSet[roi.ID] = roi
+
+		// Extract per-ROI target behavior labels from rule params (supporting both standard & SOP rules).
+		if len(r.Params) > 0 {
+			var parsed ruleTargetParams
+			if json.Unmarshal(r.Params, &parsed) == nil {
+				addROILabels(g, roi.ID, parsed.Labels)
+				addROILabels(g, roi.ID, parsed.EntryLabels)
+				for _, step := range parsed.Steps {
+					targetROIID := roi.ID
+					if rawStepROI := strings.TrimSpace(step.ROIID); rawStepROI != "" {
+						if stepUUID, err := uuid.Parse(rawStepROI); err == nil {
+							if stepROI, ok := in.ROIs[stepUUID]; ok && stepROI.Enabled {
+								g.roiSet[stepROI.ID] = stepROI
+								targetROIID = stepROI.ID
+							}
+						}
+					}
+					addROILabels(g, targetROIID, step.Labels)
+				}
+			}
+		}
+
 		for k, v := range parseJSONMap(r.AlgoParamsOverride) {
 			g.mergedParams[k] = v
 		}
@@ -257,7 +302,16 @@ func ComputeDesiredTasks(in PlanInput) []DesiredTask {
 		g := groups[k]
 		rois := make([]ROIInfo, 0, len(g.roiSet))
 		for _, r := range g.roiSet {
-			rois = append(rois, r)
+			roiCopy := r
+			if labelSet := g.roiLabels[r.ID]; len(labelSet) > 0 {
+				lbls := make([]string, 0, len(labelSet))
+				for l := range labelSet {
+					lbls = append(lbls, l)
+				}
+				sort.Strings(lbls)
+				roiCopy.TargetLabels = lbls
+			}
+			rois = append(rois, roiCopy)
 		}
 		sort.Slice(rois, func(i, j int) bool { return rois[i].ID.String() < rois[j].ID.String() })
 
@@ -355,6 +409,15 @@ func ComputeDesiredTasks(in PlanInput) []DesiredTask {
 	}
 
 	return result
+}
+
+type ruleTargetParams struct {
+	Labels      []string `json:"labels"`
+	EntryLabels []string `json:"entry_labels"`
+	Steps       []struct {
+		ROIID  string   `json:"roi_id"`
+		Labels []string `json:"labels"`
+	} `json:"steps"`
 }
 
 func parseJSONMap(raw []byte) map[string]any {
